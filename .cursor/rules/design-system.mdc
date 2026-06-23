@@ -1,0 +1,229 @@
+---
+description: MindShift Flutter design system — tokens, patterns, conventions for every new screen or widget
+alwaysApply: true
+---
+
+# MindShift Design System
+
+Dark-first, premium coaching aesthetic. All tokens live in `lib/core/constants/`. Never hardcode values that exist as tokens.
+
+---
+
+## Color Tokens (`AppColors`)
+
+**Background stack** (use in order of elevation):
+`background #0A0A0F` → `surface #13131A` → `surfaceElevated #1C1C27` → `surfaceHighest #252535`
+
+**Borders:** `border #2A2A3A` (default), `borderSubtle #1E1E2E` (dividers)
+
+**Primary palette:**
+- `primary #9B40FF` — CTAs, active states, progress
+- `primaryContainer #1A9B40FF` — icon badges, chips (10% alpha)
+- `primaryGlow #339B40FF` — glow box shadows (20% alpha)
+
+**Secondary:** `secondary #00E5FF` | `secondaryContainer #1A00E5FF`
+
+**Semantic:** `warning #FFB547` (morning/streaks), `error #FF5E6C`, `success #4CAF7D`
+
+**Text:** `textPrimary #F0EFF8` | `textSecondary #8B8BA0` | `textMuted #4A4A60` | `textDisabled #333345`
+
+**Overlays:** `scrim #CC0A0A0F` (modal barriers), `frostedGlass #E60A0A0F`
+
+**Special:** Future Self screens use warm `futureSelfBackground/Surface/Accent` palette — keep separate.
+
+**Session accent colours:** morning = `warning`, evening = `secondary`
+
+---
+
+## Spacing (`AppSpacing`)
+
+Scale: `xs=4` `sm=8` `md=16` `lg=24` `xl=32` `xxl=48` `xxxl=64`
+
+Key presets: `screenPaddingH=20`, `cardPadding=20`, `sectionGap=28`
+
+Radii: `radiusSm=8` `radiusMd=12` `radiusLg=16` `radiusXl=24` `radiusFull=100`
+
+Component heights: `buttonHeight=52`, `inputHeight=52`, `bottomNavHeight=72`
+
+List bottom padding: always **100px** to clear the floating bottom nav.
+
+---
+
+## Typography (`AppTextStyles`)
+
+- **Display / Headlines:** Space Grotesk, bold
+- **Body / Labels / Buttons:** Inter
+
+| Style | Size | Weight | Use for |
+|-------|------|--------|---------|
+| `headlineLarge` | 24 w700 | Screen titles |
+| `headlineMedium` | 20 w600 | Section headers, pushed screen AppBar |
+| `headlineSmall` | 18 w600 | Card titles, dialog headers |
+| `bodyLarge` | 16 w400 lh1.6 | Primary content |
+| `bodyMedium` | 14 w400 lh1.5 | Secondary content |
+| `bodySmall` | 12 w400 lh1.4 | Captions, helper text (`textSecondary`) |
+| `labelLarge` | 14 w600 | Row labels, interactive |
+| `labelSmall` | 11 w500 ls0.5 | Chips, session buttons (`textMuted`) |
+| `statNumber` | 40 w700 | Big metric numbers |
+
+---
+
+## Core Widgets (`lib/core/widgets/`)
+
+Always use these instead of raw Material widgets:
+
+- **`AppPrimaryButton`** — full-width 52px, primary bg, glow shadow, built-in loading spinner
+- **`AppSecondaryButton`** — outlined variant
+- **`AppTextButton`** — text-only, `primary` colour
+- **`AppCard`** — `surfaceElevated` bg, `radiusLg`, 1px `border`, 20px padding; use `AppGlowCard` for hero/featured cards
+- **`AppTextField`** — styled form field with label
+- **`EmptyState`** — icon circle + title + subtitle + optional CTA; always use for empty lists
+- **`SectionHeader`** — `headlineSmall` + optional action link
+- **`ShimmerBox` / `ShimmerCard` / `ShimmerList`** — skeleton loaders for async content
+- **`ResponsiveLayout(maxWidth: 680)`** — wrap all main-tab scroll views
+
+---
+
+## Screen Structure Conventions
+
+### Main tab screens (Dashboard, Chat, Actions, Journal, Mindset)
+```dart
+Scaffold(
+  backgroundColor: AppColors.background,
+  body: SafeArea(
+    bottom: false,
+    child: ResponsiveLayout(
+      maxWidth: 680,
+      child: Column(children: [
+        // Title row: headlineLarge + AppSpacing.lg top padding
+        // Content
+      ]),
+    ),
+  ),
+)
+```
+
+### Pushed / sub-screens
+- `AppBar` with `backgroundColor: AppColors.background`, `elevation: 0`, `arrow_back_ios_new_rounded`, `headlineMedium` title
+
+### Loading states — in priority order
+1. **Skeleton** (`ShimmerList` / `ShimmerCard`) for profile-dependent screens
+2. **Spinner** + personality copy for AI-driven content
+3. **Button spinner** inside `AppPrimaryButton(isLoading: true)` for form submits
+
+### Error states
+- Use `ErrorState` widget (defined in `lib/core/widgets/`); fallback `Text(AppStrings.errorGeneric)` centered in `textSecondary`
+- AI failures → `SnackBar` floating with `error` colour
+
+---
+
+## Card Patterns
+
+```dart
+// Standard card
+AppCard(child: ...)
+
+// Featured / hero
+AppGlowCard(glowColor: AppColors.primaryGlow, child: ...)
+
+// Icon badge (inside cards)
+Container(
+  width: 36, height: 36,
+  decoration: BoxDecoration(
+    color: AppColors.primaryContainer,
+    borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+  ),
+  child: Icon(icon, size: 18, color: AppColors.primary),
+)
+
+// Accent bar (left edge of list tiles)
+Container(width: 4, height: 40,
+  decoration: BoxDecoration(color: AppColors.primary,
+    borderRadius: BorderRadius.circular(2)))
+```
+
+---
+
+## Modal / Dialog Patterns
+
+### Bottom sheets
+```dart
+showModalBottomSheet(
+  backgroundColor: AppColors.surface,
+  shape: RoundedRectangleBorder(
+    borderRadius: BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXl)),
+  ),
+  isScrollControlled: true,
+  builder: (_) => DraggableScrollableSheet(
+    initialChildSize: 0.6, maxChildSize: 0.95, minChildSize: 0.4,
+    expand: false,
+    builder: (_, ctrl) => SingleChildScrollView(...),
+  ),
+)
+```
+Always include a 40×4 drag handle (`AppColors.border`) at the top of the sheet content.
+
+### Centered dialogs
+```dart
+showDialog(
+  barrierColor: AppColors.scrim,
+  builder: (_) => Dialog(
+    backgroundColor: AppColors.surface,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
+      side: BorderSide(color: accentColor.withValues(alpha: 0.25)),
+    ),
+    insetPadding: EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+    child: Padding(padding: EdgeInsets.all(AppSpacing.lg), ...),
+  ),
+)
+```
+
+---
+
+## Animation Conventions
+
+Use `flutter_animate` for entrance animations. Use `AnimatedContainer` (200–250ms) for state changes.
+
+```dart
+// List item entrance — staggered
+.animate().fadeIn(delay: Duration(milliseconds: i * 50), duration: 300.ms)
+
+// Section entrance
+.animate().fadeIn(duration: 400.ms)
+
+// Hero / onboarding entrance
+.animate().fadeIn(delay: 300.ms, duration: 600.ms).slideY(begin: 0.3)
+
+// Scale bounce (success states, confetti moments)
+ScaleTransition(scale: CurvedAnimation(parent: ctrl, curve: Curves.elasticOut))
+```
+
+Confetti: `ConfettiController(duration: ~1600ms)`, explosive blast, colours `[primary, accent, secondary, white]`, 40–50 particles, gravity 0.2–0.25.
+
+Progress dots (animated): active dot widens to 20px, inactive = 6px, 250ms `AnimatedContainer`.
+
+---
+
+## Navigation
+
+- **`context.go()`** — tab switches, auth redirects, deep links with query params
+- **`context.push()`** — sub-screens (settings, detail views, modals via router)
+- **`context.pop()`** — back from pushed screens
+- Deep link to specific tab: `/mindset?tab=1` (MindsetScreen reads `GoRouterState.uri.queryParameters['tab']`)
+- No custom route transitions — use default Material platform transitions
+
+---
+
+## Copy & Strings
+
+Always use `AppStrings.*` constants. Never hardcode user-facing strings directly in widgets. Add new strings to `lib/core/constants/app_strings.dart`.
+
+---
+
+## Known Gaps to Fix (do not replicate these patterns)
+
+- Some screens use raw `Container` instead of `AppCard` — always use `AppCard`
+- `ErrorState` widget exists but is underused — use it
+- `SectionDivider` is defined but rarely used — use it between major sections
+- Light theme is a stub — build dark-only for now

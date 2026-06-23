@@ -1,0 +1,273 @@
+---
+description: MindShift code architecture — patterns, conventions, and quality standards for portfolio-worthy Flutter code
+alwaysApply: true
+---
+
+# MindShift Architecture
+
+This is a portfolio project. Every file should reflect real engineering judgment — clean separation of concerns, consistent patterns, and proper error handling throughout.
+
+---
+
+## Project Structure
+
+```
+lib/
+  core/
+    ai/           # ClaudeService — all AI calls
+    constants/    # AppColors, AppSpacing, AppTextStyles, AppStrings
+    firebase/     # FirestoreService — all Firestore access
+    router/       # GoRouter config
+    services/     # FCMService, DeepLinkService
+    theme/        # AppTheme
+    utils/        # AppDateUtils, Validators
+    widgets/      # Shared reusable widgets
+  features/       # One folder per feature (screen + sub-widgets)
+  models/         # Pure data classes — no Flutter/Firebase imports
+  providers/      # Riverpod providers only
+  main.dart
+```
+
+**Rule:** Features never import from other features. Cross-feature coordination goes through `providers/`.
+
+---
+
+## State Management (Riverpod)
+
+### Provider types — use the right one
+
+| Use case | Provider type |
+|----------|--------------|
+| Firebase stream (auth, profile) | `StreamProvider` |
+| Mutable list/state (goals, habits, affirmations) | `StateNotifierProvider` |
+| Singleton service (Firestore, Claude, FCM) | `Provider` |
+| Derived / computed value | `Provider` or `select` |
+
+### `StateNotifier` pattern — all mutable feature state follows this exactly
+
+```dart
+class GoalsNotifier extends StateNotifier<List<Goal>> {
+  final Ref _ref;
+
+  GoalsNotifier(this._ref) : super([]);
+
+  // Load from profile stream — called by the provider setup
+  void _loadFromProfile(UserProfile? profile) {
+    if (profile != null) state = profile.goals;
+  }
+
+  Future<void> addGoal(Goal goal) async {
+    final uid = _ref.read(authStateProvider).valueOrNull?.uid;
+    if (uid == null) return;
+
+    // Optimistic update — state first, then persist
+    final updated = [...state, goal];
+    state = updated;
+    await _ref.read(firestoreServiceProvider).updateUserField(uid, {
+      'goals': updated.map((g) => g.toJson()).toList(),
+    });
+  }
+}
+
+final goalsProvider = StateNotifierProvider<GoalsNotifier, List<Goal>>((ref) {
+  final notifier = GoalsNotifier(ref);
+  // Sync on stream changes AND on initial read
+  ref.listen(currentUserProfileProvider, (_, next) {
+    next.whenData((profile) => notifier._loadFromProfile(profile));
+  });
+  ref.read(currentUserProfileProvider).whenData(
+    (profile) => notifier._loadFromProfile(profile),
+  );
+  return notifier;
+});
+```
+
+**Rules:**
+- Always do optimistic update (mutate `state` before `await`)
+- Always guard with `if (uid == null) return`
+- Never call Firestore or ClaudeService directly from a widget — always through a notifier or provider
+- Computed getters (e.g. `List<Goal> get activeGoals`) belong on the notifier, not in the widget
+
+---
+
+## Data Layer (`FirestoreService`)
+
+`FirestoreService` is the single point of Firestore access. No widget or provider touches `FirebaseFirestore.instance` directly.
+
+### Collection strategy
+- `users/{uid}` — entire `UserProfile` document (goals, habits, affirmations, completions, etc. are all fields)
+- `journals/{entryId}` — separate collection (high write volume, large docs)
+- `chat_sessions/{sessionId}` — separate collection
+
+### Persistence pattern for profile sub-lists
+```dart
+// Partial update — prefer updateUserField for sub-lists
+await firestore.updateUserField(uid, {
+  'goals': goals.map((g) => g.toJson()).toList(),
+});
+
+// Full merge — use updateUserProfile for multi-field changes
+await firestore.updateUserProfile(updatedProfile);
+```
+
+---
+
+## Models
+
+All models are **pure Dart** — no Flutter or Firebase imports.
+
+### Required structure for every model
+
+```dart
+class Goal {
+  // 1. All fields final — models are immutable
+  final String id;
+  final String title;
+
+  // 2. const constructor with named params and sensible defaults
+  const Goal({required this.id, required this.title, this.status = 'active'});
+
+  // 3. copyWith — every field optional
+  Goal copyWith({String? id, String? title, String? status}) => Goal(
+    id: id ?? this.id,
+    title: title ?? this.title,
+    status: status ?? this.status,
+  );
+
+  // 4. fromJson — always provide fallbacks, never force-cast
+  factory Goal.fromJson(Map<String, dynamic> json) => Goal(
+    id: json['id'] as String,
+    title: json['title'] as String,
+    status: json['status'] as String? ?? 'active',  // nullable with default
+  );
+
+  // 5. toJson — include all fields
+  Map<String, dynamic> toJson() => {'id': id, 'title': title, 'status': status};
+
+  // 6. Computed getters are fine — they're pure
+  bool get isCompleted => status == 'completed';
+}
+```
+
+**Rules:**
+- No mutable fields (`var`, `late` without `final`)
+- `fromJson` fallbacks for every nullable/optional field — never let a missing Firestore field crash the app
+- Use `(json['field'] as num?)?.toDouble()` for numbers — Firestore may return int or double
+
+---
+
+## AI Calls (`ClaudeService`)
+
+All Claude calls go through `ClaudeService.complete()` which proxies to the `callClaude` Firebase Cloud Function. The API key never touches the client.
+
+```dart
+// Pattern for a new AI method
+Future<List<String>> generateSomething(UserProfile profile) async {
+  final response = await complete(
+    systemPrompt: '...precise system prompt...',
+    userPrompt: '...personalized with profile data...',
+    maxTokens: 300,
+  );
+  try {
+    final jsonStr = response.contains('[')
+        ? response.substring(response.indexOf('['), response.lastIndexOf(']') + 1)
+        : response;
+    return (jsonDecode(jsonStr) as List).map((e) => e as String).toList();
+  } catch (_) {
+    return []; // Never crash on malformed AI output
+  }
+}
+```
+
+**Rules:**
+- All AI methods live in `ClaudeService` — no raw `httpsCallable` calls in features
+- Always handle JSON parse failures with a fallback return value
+- AI calls always happen in a `StateNotifier` or inside a widget's `StatefulWidget` state — never in `build()`
+
+---
+
+## Error Handling
+
+### Async gaps in widgets
+```dart
+// Always check mounted after any await
+Future<void> _submit() async {
+  await someAsyncOperation();
+  if (!mounted) return;       // ← required before any context/ref use
+  context.go('/next');
+}
+```
+
+### Notifiers
+Notifiers swallow errors silently only when there is a reasonable fallback. Otherwise surface to the UI.
+
+```dart
+// Bad — silent failure with no user feedback
+try {
+  await firestore.updateUserField(uid, data);
+} catch (_) {}
+
+// Good — optimistic update already applied; log for debugging
+try {
+  await firestore.updateUserField(uid, data);
+} catch (e) {
+  debugPrint('GoalsNotifier.addGoal failed: $e');
+  // Re-throw or show snackbar if the failure matters to UX
+}
+```
+
+### AI errors in UI
+Show `ErrorState` widget or an inline error banner with a Retry button — never a silent empty list.
+
+---
+
+## Widget Rules
+
+**Widgets are dumb — they render state and dispatch actions:**
+```dart
+// Good
+onPressed: () => ref.read(goalsProvider.notifier).deleteGoal(goal.id),
+
+// Bad — business logic in widget
+onPressed: () async {
+  final uid = FirebaseAuth.instance.currentUser!.uid;
+  await FirebaseFirestore.instance.collection('users').doc(uid).update(...);
+},
+```
+
+**`ConsumerWidget` vs `ConsumerStatefulWidget`:**
+- Use `ConsumerWidget` by default
+- Use `ConsumerStatefulWidget` when you need: `AnimationController`, `TextEditingController`, `FocusNode`, `initState` logic, `_starterTriggered` flags
+
+**BuildContext across async gaps:**
+Always add `if (!mounted) return` after any `await` before accessing `context` or `ref`.
+
+---
+
+## Naming Conventions
+
+| Thing | Convention | Example |
+|-------|-----------|---------|
+| Files | `snake_case.dart` | `goals_provider.dart` |
+| Classes | `PascalCase` | `GoalsNotifier`, `GoalDetailScreen` |
+| Providers | `camelCase + Provider` | `goalsProvider`, `claudeServiceProvider` |
+| Notifier methods | `verbNoun` | `addGoal`, `toggleActive`, `recordSessionCompletion` |
+| Private methods | `_verbNoun` | `_loadFromProfile`, `_persist` |
+| Private widgets | `_PascalCase` | `_GoalTile`, `_SessionButton` |
+| Screen widgets | `PascalCase + Screen` | `GoalDetailScreen` |
+| Tab widgets | `PascalCase + Tab` | `AffirmationsTab` |
+| Dashboard sub-widgets | in `features/dashboard/widgets/` | `AffirmationSessionCard` |
+
+---
+
+## Code Quality Checklist
+
+Before finishing any file:
+- [ ] No hardcoded colors, spacing, or strings — use tokens and `AppStrings`
+- [ ] No direct Firestore/Firebase calls in widgets or models
+- [ ] Every `async` widget method has `if (!mounted) return` after awaits
+- [ ] Every `fromJson` has null-safe fallbacks
+- [ ] No `print()` — use `debugPrint()` with a context prefix
+- [ ] No unused imports
+- [ ] Private widgets extracted when they exceed ~40 lines or are reused
+- [ ] `const` constructors used wherever possible
