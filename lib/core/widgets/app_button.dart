@@ -29,10 +29,10 @@ class AppPrimaryButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           boxShadow: onPressed != null
               ? [
-                  BoxShadow(
+                  const BoxShadow(
                     color: AppColors.primaryGlow,
                     blurRadius: 20,
-                    offset: const Offset(0, 4),
+                    offset: Offset(0, 4),
                   ),
                 ]
               : null,

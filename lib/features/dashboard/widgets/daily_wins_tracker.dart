@@ -15,6 +15,8 @@ import '../../../models/daily_completion.dart';
 import '../../../providers/affirmations_provider.dart';
 import '../../../providers/daily_completion_provider.dart';
 import '../../mindset/affirmations_tab.dart';
+import 'evidence_log_widget.dart';
+import 'gratitude_log_widget.dart';
 import 'plan_day_bottom_sheet.dart';
 
 // ── Win item descriptor ───────────────────────────────────────────────────────
@@ -43,13 +45,15 @@ const _morningWins = [
   _WinItem('affirmationsMorning', 'Affirmations', 'Start Day', Icons.wb_sunny_outlined, sessionOnly: true),
   _WinItem('futureSelfCompleted', 'Future Self', 'Practice', Icons.auto_awesome_rounded),
   _WinItem('journalCompleted', 'Journal', 'Prime Mind', Icons.edit_note_rounded),
-  _WinItem('priorityActionsCompleted', 'Plan Day', 'Select Focus', Icons.check_circle_outline_rounded),
+  _WinItem('dayPlanned', 'Plan Day', 'Select Focus', Icons.check_circle_outline_rounded),
   _WinItem('gratitudeLogged', 'Gratitude', 'Something you\'re grateful for', Icons.favorite_border_rounded, isBonus: true),
 ];
 
 const _eveningWins = [
   _WinItem('affirmationsEvening', 'Affirmations', 'End Day', Icons.nightlight_round, sessionOnly: true),
-  _WinItem('habitsCompleted', 'Habits', 'Daily habits', Icons.repeat_rounded),
+  // Habits live in their own DailyHabitsCard below the tracker. The
+  // `habitsCompleted` flag is auto-derived in HabitsNotifier and still counts
+  // toward the streak / perfect day.
   _WinItem('chatCompleted', 'Coach Chat', 'Check In', Icons.chat_bubble_outline_rounded),
   _WinItem('evidenceLogged', 'Evidence Log', 'Act like your future self', Icons.emoji_events_outlined, isBonus: true),
 ];
@@ -119,6 +123,7 @@ class _DailyWinsTrackerState extends ConsumerState<DailyWinsTracker> {
   bool _getField(DailyCompletion c, String field) {
     return switch (field) {
       'habitsCompleted' => c.habitsCompleted,
+      'dayPlanned' => c.dayPlanned,
       'priorityActionsCompleted' => c.priorityActionsCompleted,
       'affirmationsMorning' => c.affirmationsMorning,
       'affirmationsEvening' => c.affirmationsEvening,
@@ -285,12 +290,32 @@ class _DailyWinsTrackerState extends ConsumerState<DailyWinsTracker> {
         },
       'futureSelfCompleted' => () => context.go('/future-self'),
       'journalCompleted' => () => context.go('/journal/new'),
-      'priorityActionsCompleted' => () =>
+      'dayPlanned' => () =>
           showPlanDaySheet(context, ref, widget.profile),
-      'habitsCompleted' => () => context.go('/actions'),
+      'habitsCompleted' => () => context.go('/actions?tab=habits'),
       'chatCompleted' => () => context.go('/chat'),
-      'gratitudeLogged' => () => context.go('/journal/new'),
-      'evidenceLogged' => () => context.go('/future-self'),
+      'gratitudeLogged' => () => showModalBottomSheet(
+            context: context,
+            backgroundColor: AppColors.surface,
+            isScrollControlled: true,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(AppSpacing.radiusXl),
+              ),
+            ),
+            builder: (_) => GratitudeLogWidget(profile: widget.profile),
+          ),
+      'evidenceLogged' => () => showModalBottomSheet(
+            context: context,
+            backgroundColor: AppColors.surface,
+            isScrollControlled: true,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(AppSpacing.radiusXl),
+              ),
+            ),
+            builder: (_) => EvidenceLogWidget(profile: widget.profile),
+          ),
       _ => () {},
     };
   }
@@ -328,7 +353,7 @@ class _DailyWinsTrackerState extends ConsumerState<DailyWinsTracker> {
     final hasFocusToday = widget.profile.dailyFocusAction.isNotEmpty &&
         widget.profile.dailyFocusActionDate == todayStr;
     final planDayItem = _WinItem(
-      'priorityActionsCompleted',
+      'dayPlanned',
       'Plan Day',
       hasFocusToday ? 'Focus Set' : 'Select Focus',
       Icons.check_circle_outline_rounded,
@@ -338,7 +363,7 @@ class _DailyWinsTrackerState extends ConsumerState<DailyWinsTracker> {
       ..._morningWins
           .where((w) =>
               w.field != 'journalCompleted' &&
-              w.field != 'priorityActionsCompleted')
+              w.field != 'dayPlanned')
           .map((w) => w),
       planDayItem,
       if (morningWithJournal) journalItem,
@@ -462,15 +487,33 @@ class _DailyWinsTrackerState extends ConsumerState<DailyWinsTracker> {
             // ── Tier 2: Hero card ──────────────────────────────────────────
             // Shows the active session's first incomplete item.
             // Hidden when the active session's progress row is expanded.
-            if (showHero) ...[
-              _NextUpCard(
-                item: firstIncomplete,
-                onTap: _navForField(context, firstIncomplete.field),
-                accentColor: heroAccentColor,
-                sessionLabel: heroSessionLabel,
-              ).animate().fadeIn(duration: 300.ms),
-              const SizedBox(height: AppSpacing.md),
-            ],
+            AnimatedSize(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              alignment: Alignment.topCenter,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                transitionBuilder: (child, animation) =>
+                    FadeTransition(opacity: animation, child: child),
+                child: showHero
+                    ? Column(
+                        key: const ValueKey('hero'),
+                        children: [
+                          _NextUpCard(
+                            item: firstIncomplete!,
+                            onTap: _navForField(context, firstIncomplete.field),
+                            accentColor: heroAccentColor,
+                            sessionLabel: heroSessionLabel,
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                        ],
+                      )
+                    : const SizedBox(
+                        key: ValueKey('empty'),
+                        width: double.infinity,
+                      ),
+              ),
+            ),
 
             // ── Tier 3a: Morning session progress row ──────────────────────
             _SessionProgressRow(

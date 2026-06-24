@@ -2,11 +2,13 @@ import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/utils/app_date_utils.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
 import '../../models/goal.dart';
@@ -16,9 +18,9 @@ import '../../providers/claude_provider.dart';
 import 'goal_form_modal.dart';
 
 class GoalDetailScreen extends ConsumerStatefulWidget {
-  final Goal goal;
+  final String goalId;
 
-  const GoalDetailScreen({super.key, required this.goal});
+  const GoalDetailScreen({super.key, required this.goalId});
 
   @override
   ConsumerState<GoalDetailScreen> createState() => _GoalDetailScreenState();
@@ -43,16 +45,20 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
   }
 
   Future<void> _completeGoal() async {
-    await ref.read(goalsProvider.notifier).completeGoal(widget.goal.id);
+    await ref.read(goalsProvider.notifier).completeGoal(widget.goalId);
     _confettiCtrl.play();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Goal completed! You\'re unstoppable.')),
+        const SnackBar(content: Text(AppStrings.goalCompletedToast)),
       );
     }
   }
 
-  Future<void> _saveMilestoneAsGoal(int idx, Map<String, dynamic> milestone) async {
+  Future<void> _saveMilestoneAsGoal(
+    int idx,
+    Map<String, dynamic> milestone,
+    Goal goal,
+  ) async {
     final title = milestone['title'] as String? ?? '';
     if (title.isEmpty) return;
 
@@ -60,9 +66,9 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
       id: const Uuid().v4(),
       title: title,
       description: milestone['description'] as String? ?? '',
-      category: widget.goal.category,
+      category: goal.category,
       targetDate: DateTime.now().add(const Duration(days: 30)),
-      parentGoalId: widget.goal.id,
+      parentGoalId: goal.id,
       createdAt: DateTime.now(),
     );
 
@@ -71,7 +77,7 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
       if (mounted) {
         setState(() => _savedMilestones.add(idx));
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Milestone saved as a sub-goal!')),
+          const SnackBar(content: Text(AppStrings.goalMilestoneSavedToast)),
         );
       }
     } catch (_) {
@@ -83,7 +89,7 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
     }
   }
 
-  Future<void> _generateBreakdown() async {
+  Future<void> _generateBreakdown(Goal goal) async {
     setState(() => _isGeneratingBreakdown = true);
     try {
       final profile = ref.read(currentUserProfileProvider).valueOrNull;
@@ -91,7 +97,8 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
 
       final breakdown = await ref
           .read(claudeServiceProvider)
-          .generateGoalBreakdown(widget.goal.title, profile);
+          .generateGoalBreakdown(goal.title, profile);
+      if (!mounted) return;
       setState(() => _breakdown = breakdown);
     } catch (_) {
       if (mounted) {
@@ -107,34 +114,40 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final goals = ref.watch(goalsProvider);
-    final goal = goals.firstWhere(
-      (g) => g.id == widget.goal.id,
-      orElse: () => widget.goal,
-    );
+    final matches = goals.where((g) => g.id == widget.goalId);
+    final goal = matches.isEmpty ? null : matches.first;
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Stack(
-        children: [
-          CustomScrollView(
-            slivers: [
-              SliverAppBar(
-                backgroundColor: AppColors.background,
-                pinned: true,
-                expandedHeight: 0,
-                leading: IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                  onPressed: () => Navigator.pop(context),
+      appBar: AppBar(
+        backgroundColor: AppColors.background,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () => context.pop(),
+        ),
+        title: Text(AppStrings.goalDetailTitle, style: AppTextStyles.headlineMedium),
+        actions: goal == null
+            ? null
+            : [
+                IconButton(
+                  icon: const Icon(Icons.edit_rounded),
+                  onPressed: () =>
+                      GoalFormModal.show(context, ref, existing: goal),
                 ),
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.edit_rounded),
-                    onPressed: () => GoalFormModal.show(context, ref, existing: goal),
-                  ),
-                ],
+              ],
+      ),
+      body: goal == null
+          ? Center(
+              child: Text(
+                AppStrings.goalNotFound,
+                style: AppTextStyles.bodyMedium
+                    .copyWith(color: AppColors.textSecondary),
               ),
-              SliverToBoxAdapter(
-                child: Padding(
+            )
+          : Stack(
+              children: [
+                SingleChildScrollView(
                   padding: const EdgeInsets.all(AppSpacing.screenPaddingH),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -142,23 +155,28 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
                       _GoalHeader(goal: goal),
                       const SizedBox(height: AppSpacing.xl),
                       if (goal.description.isNotEmpty) ...[
-                        Text('Description', style: AppTextStyles.labelLarge),
+                        Text(AppStrings.goalDetailDescription,
+                            style: AppTextStyles.labelLarge),
                         const SizedBox(height: AppSpacing.sm),
                         Text(
                           goal.description,
-                          style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+                          style: AppTextStyles.bodyMedium
+                              .copyWith(color: AppColors.textSecondary),
                         ),
                         const SizedBox(height: AppSpacing.lg),
                       ],
                       if (goal.identityBecomes.isNotEmpty) ...[
-                        Text('Identity', style: AppTextStyles.labelLarge),
+                        Text(AppStrings.goalDetailIdentity,
+                            style: AppTextStyles.labelLarge),
                         const SizedBox(height: AppSpacing.sm),
                         AppCard(
                           backgroundColor: AppColors.primaryContainer,
-                          borderColor: AppColors.primary.withValues(alpha: 0.3),
+                          borderColor:
+                              AppColors.primary.withValues(alpha: 0.3),
                           child: Row(
                             children: [
-                              const Icon(Icons.person_rounded, color: AppColors.primary, size: 20),
+                              const Icon(Icons.person_rounded,
+                                  color: AppColors.primary, size: 20),
                               const SizedBox(width: AppSpacing.sm),
                               Expanded(
                                 child: Text(
@@ -175,26 +193,40 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
                         const SizedBox(height: AppSpacing.lg),
                       ],
                       if (goal.actionSteps.isNotEmpty) ...[
-                        Text('Action Steps', style: AppTextStyles.labelLarge),
+                        Text(AppStrings.goalDetailActionSteps,
+                            style: AppTextStyles.labelLarge),
                         const SizedBox(height: AppSpacing.sm),
-                        ...goal.actionSteps.map((step) => Padding(
-                              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                        ...goal.actionSteps.map(
+                          (step) => GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => ref
+                                .read(goalsProvider.notifier)
+                                .toggleActionStep(goal.id, step.id),
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.only(bottom: AppSpacing.sm),
                               child: Row(
                                 children: [
-                                  Icon(
-                                    step.isCompleted
-                                        ? Icons.check_circle_rounded
-                                        : Icons.circle_outlined,
-                                    color: step.isCompleted
-                                        ? AppColors.primary
-                                        : AppColors.textMuted,
-                                    size: 20,
+                                  AnimatedSwitcher(
+                                    duration:
+                                        const Duration(milliseconds: 200),
+                                    child: Icon(
+                                      step.isCompleted
+                                          ? Icons.check_circle_rounded
+                                          : Icons.circle_outlined,
+                                      key: ValueKey(step.isCompleted),
+                                      color: step.isCompleted
+                                          ? AppColors.primary
+                                          : AppColors.textMuted,
+                                      size: 20,
+                                    ),
                                   ),
                                   const SizedBox(width: AppSpacing.sm),
                                   Expanded(
                                     child: Text(
                                       step.description,
-                                      style: AppTextStyles.bodyMedium.copyWith(
+                                      style:
+                                          AppTextStyles.bodyMedium.copyWith(
                                         decoration: step.isCompleted
                                             ? TextDecoration.lineThrough
                                             : null,
@@ -206,30 +238,36 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
                                   ),
                                 ],
                               ),
-                            )),
+                            ),
+                          ),
+                        ),
                         const SizedBox(height: AppSpacing.lg),
                       ],
                       AppSecondaryButton(
                         label: AppStrings.breakdownWithAI,
                         isLoading: _isGeneratingBreakdown,
-                        onPressed: _generateBreakdown,
+                        onPressed: () => _generateBreakdown(goal),
                         icon: Icons.auto_awesome_rounded,
                       ),
                       if (_breakdown.isNotEmpty) ...[
                         const SizedBox(height: AppSpacing.lg),
-                        Text('Breakdown', style: AppTextStyles.labelLarge),
+                        Text(AppStrings.goalDetailBreakdown,
+                            style: AppTextStyles.labelLarge),
                         const SizedBox(height: AppSpacing.sm),
                         ..._breakdown.asMap().entries.map(
                           (e) {
                             final isSaved = _savedMilestones.contains(e.key);
                             return Padding(
-                              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                              padding:
+                                  const EdgeInsets.only(bottom: AppSpacing.sm),
                               child: AppCard(
                                 child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
                                   children: [
                                     Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Container(
                                           width: 32,
@@ -242,31 +280,41 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
                                           ),
                                           child: Center(
                                             child: isSaved
-                                                ? const Icon(Icons.check_rounded,
+                                                ? const Icon(
+                                                    Icons.check_rounded,
                                                     size: 16,
                                                     color: AppColors.primary)
                                                 : Text(
                                                     '${e.key + 1}',
-                                                    style: AppTextStyles.labelLarge
-                                                        .copyWith(color: AppColors.primary),
+                                                    style: AppTextStyles
+                                                        .labelLarge
+                                                        .copyWith(
+                                                            color: AppColors
+                                                                .primary),
                                                   ),
                                           ),
                                         ),
                                         const SizedBox(width: AppSpacing.md),
                                         Expanded(
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                e.value['title'] as String? ?? '',
-                                                style: AppTextStyles.labelLarge,
+                                                e.value['title'] as String? ??
+                                                    '',
+                                                style:
+                                                    AppTextStyles.labelLarge,
                                               ),
-                                              if ((e.value['description'] as String?)
+                                              if ((e.value['description']
+                                                          as String?)
                                                       ?.isNotEmpty ==
                                                   true)
                                                 Text(
-                                                  e.value['description'] as String,
-                                                  style: AppTextStyles.bodySmall
+                                                  e.value['description']
+                                                      as String,
+                                                  style: AppTextStyles
+                                                      .bodySmall
                                                       .copyWith(
                                                           color: AppColors
                                                               .textSecondary),
@@ -279,40 +327,23 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
                                     const SizedBox(height: AppSpacing.sm),
                                     Align(
                                       alignment: Alignment.centerRight,
-                                      child: TextButton.icon(
+                                      child: AppTextButton(
+                                        label: isSaved
+                                            ? AppStrings.goalMilestoneAdded
+                                            : AppStrings.goalAddAsSubGoal,
+                                        color: isSaved
+                                            ? AppColors.textMuted
+                                            : AppColors.primary,
                                         onPressed: isSaved
                                             ? null
                                             : () => _saveMilestoneAsGoal(
-                                                e.key, e.value),
-                                        icon: Icon(
-                                          isSaved
-                                              ? Icons.check_rounded
-                                              : Icons.add_rounded,
-                                          size: 14,
-                                          color: isSaved
-                                              ? AppColors.textMuted
-                                              : AppColors.primary,
-                                        ),
-                                        label: Text(
-                                          isSaved ? 'Added' : 'Add as Sub-Goal',
-                                          style: AppTextStyles.labelSmall
-                                              .copyWith(
-                                                  color: isSaved
-                                                      ? AppColors.textMuted
-                                                      : AppColors.primary),
-                                        ),
-                                        style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: AppSpacing.sm,
-                                              vertical: 2),
-                                        ),
+                                                e.key, e.value, goal),
                                       ),
                                     ),
                                   ],
                                 ),
                               ).animate().fadeIn(
-                                  delay: Duration(
-                                      milliseconds: e.key * 80)),
+                                  delay: Duration(milliseconds: e.key * 80)),
                             );
                           },
                         ),
@@ -320,7 +351,7 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
                       const SizedBox(height: AppSpacing.xl),
                       if (goal.status == 'active')
                         AppPrimaryButton(
-                          label: 'Mark as Complete',
+                          label: AppStrings.goalMarkComplete,
                           onPressed: _completeGoal,
                           icon: Icons.check_circle_rounded,
                         ),
@@ -328,20 +359,21 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
                     ],
                   ),
                 ),
-              ),
-            ],
-          ),
-          Align(
-            alignment: Alignment.topCenter,
-            child: ConfettiWidget(
-              confettiController: _confettiCtrl,
-              blastDirectionality: BlastDirectionality.explosive,
-              colors: [AppColors.primary, AppColors.secondary, AppColors.warning],
-              numberOfParticles: 30,
+                Align(
+                  alignment: Alignment.topCenter,
+                  child: ConfettiWidget(
+                    confettiController: _confettiCtrl,
+                    blastDirectionality: BlastDirectionality.explosive,
+                    colors: const [
+                      AppColors.primary,
+                      AppColors.secondary,
+                      AppColors.warning
+                    ],
+                    numberOfParticles: 30,
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -381,7 +413,7 @@ class _GoalHeader extends StatelessWidget {
             ),
             const Spacer(),
             Text(
-              'Target: ${goal.targetDate.month}/${goal.targetDate.day}/${goal.targetDate.year}',
+              '${AppStrings.goalTargetPrefix} ${AppDateUtils.formatDate(goal.targetDate)}',
               style: AppTextStyles.labelSmall,
             ),
           ],

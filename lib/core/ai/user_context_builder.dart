@@ -1,4 +1,6 @@
 import '../../models/user_profile.dart';
+import '../../models/deep_dive.dart';
+import '../utils/manifestation_scoring.dart';
 
 /// Builds structured, reusable context blocks from a [UserProfile].
 ///
@@ -98,7 +100,7 @@ Mental Toughness Score: ${p.mentalToughnessScore.toStringAsFixed(0)}/100 ($tough
     );
 
     if (p.gratitudeLog.isNotEmpty) {
-      final items = p.gratitudeLog
+      final items = p.gratitudeLog.reversed
           .take(3)
           .map((e) => '  • ${e.content}')
           .join('\n');
@@ -106,7 +108,7 @@ Mental Toughness Score: ${p.mentalToughnessScore.toStringAsFixed(0)}/100 ($tough
     }
 
     if (p.evidenceLog.isNotEmpty) {
-      final items = p.evidenceLog
+      final items = p.evidenceLog.reversed
           .take(3)
           .map((e) => '  • ${e.content}')
           .join('\n');
@@ -135,14 +137,35 @@ Mental Toughness Score: ${p.mentalToughnessScore.toStringAsFixed(0)}/100 ($tough
   // ─── Manifestation block ──────────────────────────────────────────────────
 
   /// All 4 manifestation alignment scores, overall, and mastery level.
+  /// Scores are COMPUTED from real activity (not self-rated). Includes a
+  /// ramp-up note while the user is still in their first 10 days so the coach
+  /// does not misread low early scores as a problem.
   static String manifestationBlock(UserProfile p) {
-    final m = p.manifestationAlignment;
-    return '''Manifestation Alignment:
-  Subconscious: ${m.subconscious.toStringAsFixed(0)}/100
-  Thought: ${m.thought.toStringAsFixed(0)}/100
-  Action: ${m.action.toStringAsFixed(0)}/100
-  Results: ${m.results.toStringAsFixed(0)}/100
-  Overall: ${m.overall.toStringAsFixed(0)}/100 (${m.masteryLevel})''';
+    final m = ManifestationScoring.calculate(p);
+    final buffer = StringBuffer()
+      ..writeln('Manifestation Alignment (computed from real activity):')
+      ..writeln('  Subconscious: ${m.subconscious.toStringAsFixed(0)}/100 '
+          '(fed by morning + evening affirmations and future-self visualization)')
+      ..writeln('  Thought: ${m.thought.toStringAsFixed(0)}/100 '
+          '(fed by journaling and coaching conversations)')
+      ..writeln('  Action: ${m.action.toStringAsFixed(0)}/100 '
+          '(fed by habits and priority actions)')
+      ..writeln('  Results: ${m.results.toStringAsFixed(0)}/100 '
+          '(average progress across active goals)')
+      ..write('  Overall: ${m.overall.toStringAsFixed(0)}/100 (${m.masteryLevel})');
+
+    if (ManifestationScoring.isRampingUp(p)) {
+      final day = ManifestationScoring.daysSinceSignup(p) + 1;
+      buffer.write(
+        '\n\nRAMP-UP NOTE: This user is on day $day of their first 10 days. '
+        'The scores above are based on very little history and will look low '
+        'no matter how engaged they are. Do NOT interpret low early scores as '
+        'a lack of effort, and do NOT point out that their scores are low. '
+        'Focus on encouragement and building the habit, not on the numbers.',
+      );
+    }
+
+    return buffer.toString();
   }
 
   // ─── Affirmations block ───────────────────────────────────────────────────
@@ -216,5 +239,191 @@ ${delta('Discipline', cur.discipline, base.discipline)}
 ${delta('Abundance Thinking', cur.abundanceThinking, base.abundanceThinking)}
 ${delta('Resilience', cur.resilience, base.resilience)}
 ${delta('Decisiveness', cur.decisiveness, base.decisiveness)}''';
+  }
+
+  // ─── Deep Dive block ──────────────────────────────────────────────────────
+
+  /// The user's psychological self-portrait from the Deep Dive modules:
+  /// core wound, core desire, self-sabotage patterns, and per-module insights.
+  /// This is the most intimate context the coach has — use it to understand the
+  /// "why" beneath surface behavior. Returns empty string if nothing completed.
+  static String deepDiveBlock(UserProfile p) {
+    final d = p.deepDive;
+    final parts = <String>[];
+
+    if (d.coreWound.isNotEmpty) parts.add('Core Wound: "${d.coreWound}"');
+    if (d.coreDesire.isNotEmpty) parts.add('Core Desire: "${d.coreDesire}"');
+    if (d.selfSabotagePatterns.isNotEmpty) {
+      parts.add(
+        'Self-Sabotage Patterns: ${d.selfSabotagePatterns.join('; ')}',
+      );
+    }
+    if (d.aiSummary.isNotEmpty) parts.add('Deep Dive Summary: "${d.aiSummary}"');
+
+    const moduleLabels = {
+      'mindset_patterns': 'Mindset Patterns',
+      'motivation_style': 'Motivation Style',
+      'fear_inventory': 'Fear Inventory',
+      'identity_assessment': 'Identity Assessment',
+      'social_influence': 'Social Influence',
+    };
+    final insights = <String>[];
+    for (final id in kDeepDiveModuleIds) {
+      final insight = d.moduleInsight(id);
+      if (insight != null && insight.isNotEmpty) {
+        insights.add('  • ${moduleLabels[id]}: "$insight"');
+      }
+    }
+    if (insights.isNotEmpty) {
+      parts.add('Deep Dive Insights:\n${insights.join('\n')}');
+    }
+
+    if (parts.isEmpty) return '';
+    return 'PSYCHOLOGICAL DEEP DIVE (handle with care — this is the user\'s '
+        'inner world):\n${parts.join('\n')}';
+  }
+
+  // ─── Coach memory block ───────────────────────────────────────────────────
+
+  /// Persistent cross-session coaching memory: long-term summary, last session,
+  /// open commitments, recurring patterns, and key moments.
+  /// Lets the coach pick up exactly where it left off. Empty string if no memory.
+  static String coachMemoryBlock(UserProfile p) {
+    final m = p.coachMemory;
+    if (m.isEmpty) return '';
+
+    final parts = <String>[];
+    if (m.longTermSummary.isNotEmpty) {
+      parts.add('What you know about them: ${m.longTermSummary}');
+    }
+    if (m.lastSessionSummary.isNotEmpty) {
+      final when = m.lastSessionAt != null
+          ? ' (${_daysAgoLabel(m.lastSessionAt!)})'
+          : '';
+      parts.add('Last session$when: ${m.lastSessionSummary}');
+    }
+    final open = m.openCommitments.where((c) => !c.fulfilled).toList();
+    if (open.isNotEmpty) {
+      final lines = open.take(5).map((c) => '  • ${c.text}').join('\n');
+      parts.add('Open commitments they made:\n$lines');
+    }
+    if (m.recurringPatterns.isNotEmpty) {
+      parts.add(
+        'Recurring patterns you\'ve noticed: ${m.recurringPatterns.take(5).join('; ')}',
+      );
+    }
+    if (m.keyMoments.isNotEmpty) {
+      final lines = m.keyMoments.take(3).map((k) => '  • $k').join('\n');
+      parts.add('Key moments worth remembering:\n$lines');
+    }
+
+    return 'COACHING MEMORY (you remember this from before — reference it '
+        'naturally, do not recite it like a file):\n${parts.join('\n')}';
+  }
+
+  // ─── Behavioral / accountability block ────────────────────────────────────
+
+  /// A recent wins/losses snapshot the coach can hold accountable against:
+  /// streak, habit momentum, stalled habits, and stalled goals.
+  static String behavioralBlock(UserProfile p) {
+    final parts = <String>[];
+    final now = DateTime.now();
+
+    parts.add(
+      'Current streak: ${p.currentStreak} days | Perfect days: ${p.perfectDayCount}',
+    );
+
+    final active = p.habits.where((h) => h.state == 'active').toList();
+    if (active.isNotEmpty) {
+      final onTrack = active.where((h) => h.isCompletedToday).length;
+      parts.add(
+        'Habits done today: $onTrack of ${active.length}',
+      );
+
+      final stalled = active.where((h) {
+        final last = h.lastCompletedDate;
+        if (last == null) return true;
+        return now.difference(last).inDays >= 3;
+      }).map((h) => h.name).toList();
+      if (stalled.isNotEmpty) {
+        parts.add(
+          'Stalled habits (3+ days untouched): ${stalled.take(4).join(', ')}',
+        );
+      }
+    }
+
+    final stalledGoals = p.goals
+        .where((g) => g.status == 'active' && g.progressPercent < 100)
+        .where((g) => now.difference(g.createdAt).inDays >= 14 && g.progressPercent < 25)
+        .map((g) => g.title)
+        .toList();
+    if (stalledGoals.isNotEmpty) {
+      parts.add(
+        'Goals losing momentum (older, low progress): ${stalledGoals.take(3).join(', ')}',
+      );
+    }
+
+    return 'RECENT BEHAVIOR (use like a coach who remembers, not a database):\n'
+        '${parts.join('\n')}';
+  }
+
+  // ─── Routine timing block ─────────────────────────────────────────────────
+
+  /// Typical completion times for the timing-sensitive subconscious-layer
+  /// routines over the last 14 days. Factual only: the coach decides whether
+  /// the timing fits the most-programmable windows. Empty string if no data.
+  static String routineTimingBlock(UserProfile p) {
+    const tracked = <String, String>{
+      'affirmationsMorning': 'Morning affirmations',
+      'affirmationsEvening': 'Evening affirmations',
+      'futureSelfCompleted': 'Future self visualization',
+      'identityRead': 'Identity statement reading',
+    };
+
+    final recent = [...p.dailyCompletions]
+      ..sort((a, b) => b.date.compareTo(a.date));
+    final window = recent.take(14).toList();
+
+    final lines = <String>[];
+    for (final entry in tracked.entries) {
+      final times = <DateTime>[];
+      for (final c in window) {
+        final iso = c.completionTimes[entry.key];
+        if (iso == null) continue;
+        final dt = DateTime.tryParse(iso);
+        if (dt != null) times.add(dt.toLocal());
+      }
+      if (times.length < 2) continue;
+      final avgMinutes = times
+              .map((t) => t.hour * 60 + t.minute)
+              .reduce((a, b) => a + b) ~/
+          times.length;
+      lines.add(
+        '  ${entry.value}: usually around ${_formatClock(avgMinutes)} '
+        '(${times.length} of last ${window.length} days)',
+      );
+    }
+
+    if (lines.isEmpty) return '';
+    return 'ROUTINE TIMING (when they typically do key practices):\n'
+        '${lines.join('\n')}';
+  }
+
+  static String _formatClock(int minutesSinceMidnight) {
+    final h24 = (minutesSinceMidnight ~/ 60) % 24;
+    final m = minutesSinceMidnight % 60;
+    final period = h24 < 12 ? 'AM' : 'PM';
+    final h12 = h24 % 12 == 0 ? 12 : h24 % 12;
+    final mm = m.toString().padLeft(2, '0');
+    return '$h12:$mm $period';
+  }
+
+  static String _daysAgoLabel(DateTime when) {
+    final days = DateTime.now().difference(when).inDays;
+    if (days <= 0) return 'today';
+    if (days == 1) return 'yesterday';
+    if (days < 7) return '$days days ago';
+    if (days < 14) return 'last week';
+    return '${(days / 7).floor()} weeks ago';
   }
 }

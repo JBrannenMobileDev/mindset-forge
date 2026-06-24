@@ -11,6 +11,7 @@ import '../../core/widgets/app_button.dart';
 import '../../core/utils/app_date_utils.dart';
 import '../../models/journal_entry.dart';
 import '../../models/journal_summary.dart';
+import '../../models/user_profile.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/claude_provider.dart';
 import '../../providers/journal_provider.dart';
@@ -57,7 +58,10 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
   }
 
   Future<void> _generatePrompt() async {
-    setState(() => _isGeneratingPrompt = true);
+    setState(() {
+      _isGeneratingPrompt = true;
+      _step = 2;
+    });
     try {
       final profile = ref.read(currentUserProfileProvider).valueOrNull;
       if (profile == null) return;
@@ -72,14 +76,12 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
       setState(() {
         _prompt = result;
         _isGeneratingPrompt = false;
-        _step = 2;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _prompt = 'What is on your mind today? Write freely.';
         _isGeneratingPrompt = false;
-        _step = 2;
       });
     }
   }
@@ -181,7 +183,7 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
               prompt: _prompt,
               isGenerating: _isGeneratingPrompt,
               controller: _contentCtrl,
-              onChanged: (_) {},
+              onChanged: (_) => setState(() {}),
               onNext: () => setState(() => _step = 3),
             ),
           _ => _TagsStep(
@@ -434,8 +436,8 @@ class _WritingStep extends StatelessWidget {
   }
 }
 
-class _TagsStep extends StatelessWidget {
-  final dynamic profile;
+class _TagsStep extends StatefulWidget {
+  final UserProfile? profile;
   final List<String> selectedBeliefs;
   final List<String> selectedFears;
   final String mode;
@@ -464,18 +466,25 @@ class _TagsStep extends StatelessWidget {
   });
 
   @override
+  State<_TagsStep> createState() => _TagsStepState();
+}
+
+class _TagsStepState extends State<_TagsStep> {
+  bool _showBeliefInfo = false;
+
+  @override
   Widget build(BuildContext context) {
-    if (isSaved) {
+    if (widget.isSaved) {
       return _SavedView(
-        content: content,
-        onDone: onDone,
-        onDiscuss: () => onDiscuss(content),
+        content: widget.content,
+        onDone: widget.onDone,
+        onDiscuss: () => widget.onDiscuss(widget.content),
       );
     }
 
-    final beliefs = (profile?.limitingBeliefs as List<String>?) ?? [];
-    final fears = (profile?.fearsDrift as List<String>?) ?? [];
-    final isGrow = mode == 'grow';
+    final beliefs = widget.profile?.limitingBeliefs ?? [];
+    final fears = widget.profile?.fearsDrift ?? [];
+    final isGrow = widget.mode == 'grow';
 
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.screenPaddingH),
@@ -485,9 +494,76 @@ class _TagsStep extends StatelessWidget {
           children: [
             Text(AppStrings.limitingBeliefsShifted, style: AppTextStyles.headlineMedium),
             const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Did you shift any limiting beliefs in this entry? (optional)',
-              style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+            // Subtitle + tappable "What's this?" toggle
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Did you shift any limiting beliefs in this entry? (optional)',
+                    style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                GestureDetector(
+                  onTap: () => setState(() => _showBeliefInfo = !_showBeliefInfo),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _showBeliefInfo
+                          ? AppColors.primaryContainer
+                          : AppColors.surfaceElevated,
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+                      border: Border.all(
+                        color: _showBeliefInfo
+                            ? AppColors.primary.withValues(alpha: 0.4)
+                            : AppColors.border,
+                      ),
+                    ),
+                    child: Text(
+                      'What\'s this?',
+                      style: AppTextStyles.labelSmall.copyWith(
+                        color: _showBeliefInfo
+                            ? AppColors.primary
+                            : AppColors.textMuted,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            // Expandable explanation callout
+            AnimatedSize(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              alignment: Alignment.topCenter,
+              child: _showBeliefInfo
+                  ? Container(
+                      margin: const EdgeInsets.only(top: AppSpacing.sm),
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryContainer,
+                        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                        border: Border.all(
+                          color: AppColors.primary.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Text(
+                        'Limiting beliefs are the stories you tell yourself that hold '
+                        'you back — things like "I\'m not good enough" or "I\'ll never '
+                        'have enough." Your coach helped you identify yours during '
+                        'onboarding. Tap any that felt challenged or shifted by what '
+                        'you wrote today.',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.primary,
+                          height: 1.5,
+                        ),
+                      ),
+                    )
+                  : const SizedBox(width: double.infinity),
             ),
             const SizedBox(height: AppSpacing.lg),
             if (beliefs.isNotEmpty)
@@ -495,12 +571,12 @@ class _TagsStep extends StatelessWidget {
                 spacing: AppSpacing.sm,
                 runSpacing: AppSpacing.sm,
                 children: beliefs.map((b) {
-                  final selected = selectedBeliefs.contains(b);
+                  final selected = widget.selectedBeliefs.contains(b);
                   return _TagChip(
                     label: b,
                     selected: selected,
                     color: AppColors.primary,
-                    onTap: () => onToggleBelief(b),
+                    onTap: () => widget.onToggleBelief(b),
                   );
                 }).toList(),
               )
@@ -531,12 +607,12 @@ class _TagsStep extends StatelessWidget {
                 spacing: AppSpacing.sm,
                 runSpacing: AppSpacing.sm,
                 children: fears.map((f) {
-                  final selected = selectedFears.contains(f);
+                  final selected = widget.selectedFears.contains(f);
                   return _TagChip(
                     label: f,
                     selected: selected,
                     color: AppColors.warning,
-                    onTap: () => onToggleFear(f),
+                    onTap: () => widget.onToggleFear(f),
                   );
                 }).toList(),
               ),
@@ -545,8 +621,8 @@ class _TagsStep extends StatelessWidget {
             const SizedBox(height: AppSpacing.xxl),
             AppPrimaryButton(
               label: AppStrings.saveEntry,
-              onPressed: onSave,
-              isLoading: isSaving,
+              onPressed: widget.onSave,
+              isLoading: widget.isSaving,
               icon: Icons.check_rounded,
             ),
             const SizedBox(height: AppSpacing.md),

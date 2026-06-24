@@ -23,6 +23,9 @@ abstract final class AppDateUtils {
   static String formatMonthYear(DateTime date) =>
       DateFormat('MMMM yyyy').format(date);
 
+  static String formatWeekdayLong(DateTime date) =>
+      DateFormat('EEEE, MMMM d').format(date); // e.g. "Tuesday, June 23"
+
   static String formatTime(DateTime date) =>
       DateFormat('h:mm a').format(date);
 

@@ -53,6 +53,34 @@ void launchAffirmationSession({
   );
 }
 
+// ─── Public helper: launch add-affirmation form from anywhere ─────────────────
+
+/// Reusable opener for the add-affirmation form so it can be launched from
+/// outside this tab (e.g. a coach chat action pill), optionally prefilled
+/// with [initialText].
+class AffirmationFormModal {
+  static void show(
+    BuildContext context,
+    WidgetRef ref, {
+    required UserProfile profile,
+    String? initialText,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXl)),
+      ),
+      builder: (_) => ProviderScope(
+        parent: ProviderScope.containerOf(context),
+        child: _AddAffirmationModal(profile: profile, initialText: initialText),
+      ),
+    );
+  }
+}
+
 // ─── Main tab widget ──────────────────────────────────────────────────────────
 
 class AffirmationsTab extends ConsumerStatefulWidget {
@@ -232,22 +260,8 @@ class _AffirmationsTabState extends ConsumerState<AffirmationsTab> {
     );
   }
 
-  void _showAddModal(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet<void>(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-            top: Radius.circular(AppSpacing.radiusXl)),
-      ),
-      builder: (_) => ProviderScope(
-        parent: ProviderScope.containerOf(context),
-        child: _AddAffirmationModal(profile: widget.profile),
-      ),
-    );
-  }
+  void _showAddModal(BuildContext context, WidgetRef ref) =>
+      AffirmationFormModal.show(context, ref, profile: widget.profile);
 
   void _showGenerateModal(BuildContext context, WidgetRef ref) {
     showModalBottomSheet<void>(
@@ -271,8 +285,9 @@ class _AffirmationsTabState extends ConsumerState<AffirmationsTab> {
 
 class _AddAffirmationModal extends ConsumerStatefulWidget {
   final UserProfile profile;
+  final String? initialText;
 
-  const _AddAffirmationModal({required this.profile});
+  const _AddAffirmationModal({required this.profile, this.initialText});
 
   @override
   ConsumerState<_AddAffirmationModal> createState() =>
@@ -280,11 +295,17 @@ class _AddAffirmationModal extends ConsumerStatefulWidget {
 }
 
 class _AddAffirmationModalState extends ConsumerState<_AddAffirmationModal> {
-  final _ctrl = TextEditingController();
+  late final TextEditingController _ctrl;
   String _category = 'general';
   bool _enhancing = false;
   bool _loadingSuggestions = false;
   List<String> _suggestions = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.initialText ?? '');
+  }
 
   @override
   void dispose() {

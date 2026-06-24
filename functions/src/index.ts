@@ -10,7 +10,38 @@ admin.initializeApp();
 const anthropicKey = defineSecret('ANTHROPIC_API_KEY');
 const db = admin.firestore();
 
+// ─── Secret sanitizer ──────────────────────────────────────────────────────
+
+/**
+ * Strips any Anthropic API key pattern from a string before it reaches logs.
+ * node-fetch embeds header values in validation error messages, so without
+ * this the raw key can appear in Cloud Logging output.
+ */
+function sanitizeForLog(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return value.replace(/sk-ant-[A-Za-z0-9_\-]+/g, '[REDACTED]');
+  }
+  if (value instanceof Error) {
+    const cleaned = new Error(
+      sanitizeForLog(value.message) as string,
+    );
+    cleaned.stack = value.stack
+      ? (sanitizeForLog(value.stack) as string)
+      : undefined;
+    return cleaned;
+  }
+  return value;
+}
+
 // ─── Anthropic helper ──────────────────────────────────────────────────────
+
+// Appended to every system prompt to keep copy feeling human and coach-like.
+const STYLE_RULES = `
+
+STYLE RULES (non-negotiable):
+- Never use "--" or "—" (em dash). Use a comma, period, or new sentence instead.
+- Never use "..." (ellipsis) to trail off. End every thought completely.
+- Write like a trusted human coach who knows this person well, not like an AI assistant.`;
 
 async function callAnthropicInternal(
   systemPrompt: string,
@@ -19,15 +50,57 @@ async function callAnthropicInternal(
   apiKey: string,
 ): Promise<string> {
   const client = new Anthropic({ apiKey });
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-5',
-    max_tokens: maxTokens,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
-  });
-  const block = message.content[0];
-  if (block.type !== 'text') throw new Error('Unexpected response type from Claude');
-  return block.text;
+  try {
+    const message = await client.messages.create({
+      model: 'claude-sonnet-4-5',
+      max_tokens: maxTokens,
+      system: systemPrompt + STYLE_RULES,
+      messages: [{ role: 'user', content: userPrompt }],
+    });
+    const block = message.content[0];
+    if (block.type !== 'text') throw new Error('Unexpected response type from Claude');
+    // Safety net: strip any em-dash or double-hyphen patterns that slip through.
+    let text = block.text;
+    text = text.replace(/\s*—\s*/g, ', ').replace(/\s*--\s*/g, ', ');
+    return text;
+  } catch (err) {
+    // Re-throw a clean error so the raw node-fetch message (which may
+    // contain the API key) never propagates to the outer catch logger.
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Anthropic request failed: ${sanitizeForLog(msg)}`);
+  }
+}
+
+type ConversationTurn = { role: 'user' | 'assistant'; content: string };
+
+/**
+ * Conversation variant of the Anthropic helper. Sends a real multi-turn
+ * messages array (rather than a single concatenated user prompt) so the model
+ * has authentic dialogue structure. Used by the coach chat engine.
+ */
+async function callAnthropicConversation(
+  systemPrompt: string,
+  messages: ConversationTurn[],
+  maxTokens: number,
+  apiKey: string,
+): Promise<string> {
+  const client = new Anthropic({ apiKey });
+  try {
+    const message = await client.messages.create({
+      model: 'claude-sonnet-4-5',
+      max_tokens: maxTokens,
+      system: systemPrompt + STYLE_RULES,
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    });
+    const block = message.content[0];
+    if (block.type !== 'text') throw new Error('Unexpected response type from Claude');
+    let text = block.text;
+    text = text.replace(/\s*—\s*/g, ', ').replace(/\s*--\s*/g, ', ');
+    return text;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Anthropic request failed: ${sanitizeForLog(msg)}`);
+  }
 }
 
 // ─── Core AI callable ─────────────────────────────────────────────────────
@@ -39,7 +112,7 @@ async function callAnthropicInternal(
  * Output: { content: string }
  */
 export const callClaude = onCall(
-  { secrets: [anthropicKey], enforceAppCheck: false },
+  { secrets: [anthropicKey], enforceAppCheck: false, invoker: 'public' },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Must be authenticated to call Claude.');
@@ -60,11 +133,68 @@ export const callClaude = onCall(
         systemPrompt,
         userPrompt,
         maxTokens,
-        anthropicKey.value(),
+        anthropicKey.value().trim(),
       );
       return { content };
     } catch (err) {
-      console.error('Claude API error:', err);
+      console.error('Claude API error:', sanitizeForLog(err));
+      throw new HttpsError('internal', 'Failed to get AI response. Please try again.');
+    }
+  },
+);
+
+/**
+ * callClaudeConversation — auth-gated multi-turn Claude callable for the coach.
+ * Sends a real messages array so the model sees authentic dialogue turns.
+ * Input:  { systemPrompt?: string, messages: {role,content}[], maxTokens?: number }
+ * Output: { content: string }
+ */
+export const callClaudeConversation = onCall(
+  { secrets: [anthropicKey], enforceAppCheck: false, invoker: 'public' },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Must be authenticated to call Claude.');
+    }
+
+    const { systemPrompt = '', messages, maxTokens = 1200 } = request.data as {
+      systemPrompt?: string;
+      messages?: ConversationTurn[];
+      maxTokens?: number;
+    };
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      throw new HttpsError('invalid-argument', 'messages array is required.');
+    }
+
+    // Sanitize and validate each turn; Anthropic requires non-empty content
+    // and alternating-ish roles starting with a user turn.
+    const clean: ConversationTurn[] = messages
+      .filter(
+        (m) =>
+          m &&
+          (m.role === 'user' || m.role === 'assistant') &&
+          typeof m.content === 'string' &&
+          m.content.trim().length > 0,
+      )
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    if (clean.length === 0 || clean[0].role !== 'user') {
+      throw new HttpsError(
+        'invalid-argument',
+        'messages must start with a user turn and contain content.',
+      );
+    }
+
+    try {
+      const content = await callAnthropicConversation(
+        systemPrompt,
+        clean,
+        maxTokens,
+        anthropicKey.value().trim(),
+      );
+      return { content };
+    } catch (err) {
+      console.error('Claude conversation error:', sanitizeForLog(err));
       throw new HttpsError('internal', 'Failed to get AI response. Please try again.');
     }
   },
@@ -382,7 +512,7 @@ export const weeklyMindsetAnalysis = onSchedule(
       .limit(100)
       .get();
 
-    const apiKey = anthropicKey.value();
+    const apiKey = anthropicKey.value().trim();
 
     for (const userDoc of usersSnap.docs) {
       const profile = userDoc.data() as {
@@ -428,6 +558,147 @@ Write a 2-paragraph personalized weekly insight. Highlight their biggest win and
 );
 
 /**
+ * Profile shape (subset) needed to compute manifestation alignment server-side.
+ */
+interface ScorableProfile {
+  createdAt?: string;
+  dailyCompletions?: Array<{
+    date: string;
+    affirmationsMorning?: boolean;
+    affirmationsEvening?: boolean;
+    futureSelfCompleted?: boolean;
+    journalCompleted?: boolean;
+    chatCompleted?: boolean;
+    priorityActionsCompleted?: boolean;
+  }>;
+  habits?: Array<{ state?: string; completionHistory?: string[] }>;
+  goals?: Array<{ progressPercent?: number; status?: string }>;
+}
+
+interface ManifestationScores {
+  subconscious: number;
+  thought: number;
+  action: number;
+  results: number;
+  overall: number;
+  effectiveWindow: number;
+  daysSinceSignup: number;
+  isRampingUp: boolean;
+}
+
+function dateKey(d: Date): string {
+  const m = (d.getUTCMonth() + 1).toString().padStart(2, '0');
+  const day = d.getUTCDate().toString().padStart(2, '0');
+  return `${d.getUTCFullYear()}-${m}-${day}`;
+}
+
+/**
+ * Server-side port of lib/core/utils/manifestation_scoring.dart. Computes the
+ * four alignment layers from real activity over an effective window of
+ * min(10, daysSinceSignup + 1) so new users are scored fairly.
+ */
+function computeManifestationAlignment(
+  profile: ScorableProfile,
+  windowDays = 10,
+): ManifestationScores {
+  const now = new Date();
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+
+  let daysSinceSignup = 0;
+  if (profile.createdAt) {
+    const created = new Date(profile.createdAt);
+    if (!isNaN(created.getTime())) {
+      const createdDay = Date.UTC(
+        created.getUTCFullYear(),
+        created.getUTCMonth(),
+        created.getUTCDate(),
+      );
+      const diff = Math.floor((today - createdDay) / 86400000);
+      daysSinceSignup = diff < 0 ? 0 : diff;
+    }
+  }
+
+  const available = daysSinceSignup + 1;
+  const window = Math.max(1, Math.min(windowDays, available));
+
+  // Recent date keys (today first).
+  const dates: string[] = [];
+  for (let i = 0; i < window; i++) {
+    dates.push(dateKey(new Date(today - i * 86400000)));
+  }
+
+  const byDate = new Map<string, NonNullable<ScorableProfile['dailyCompletions']>[number]>();
+  for (const c of profile.dailyCompletions ?? []) {
+    byDate.set(c.date, c);
+  }
+
+  let affirmationDays = 0;
+  let visualizationDays = 0;
+  let journalDays = 0;
+  let chatDays = 0;
+  let priorityDays = 0;
+
+  for (const date of dates) {
+    const c = byDate.get(date);
+    if (!c) continue;
+    if (c.affirmationsMorning && c.affirmationsEvening) affirmationDays++;
+    if (c.futureSelfCompleted) visualizationDays++;
+    if (c.journalCompleted) journalDays++;
+    if (c.chatCompleted) chatDays++;
+    if (c.priorityActionsCompleted) priorityDays++;
+  }
+
+  const activeHabits = (profile.habits ?? []).filter(h => h.state === 'active');
+  let habitDays = 0;
+  if (activeHabits.length > 0) {
+    for (const date of dates) {
+      const completed = activeHabits.filter(h =>
+        (h.completionHistory ?? []).some(iso => {
+          const t = new Date(iso);
+          return !isNaN(t.getTime()) && dateKey(t) === date;
+        }),
+      ).length;
+      if (completed >= activeHabits.length * 0.7) habitDays++;
+    }
+  }
+
+  const twoW = window * 2;
+  const pct = (count: number, denom: number): number =>
+    denom <= 0 ? 0 : Math.min(100, Math.max(0, (count / denom) * 100));
+
+  const subconscious = pct(affirmationDays + visualizationDays, twoW);
+  const thought = pct(journalDays + chatDays, twoW);
+  const action = pct(habitDays + priorityDays, twoW);
+
+  const activeGoals = (profile.goals ?? []).filter(g => g.status === 'active');
+  const results =
+    activeGoals.length === 0
+      ? 0
+      : Math.min(
+          100,
+          Math.max(
+            0,
+            activeGoals.reduce((sum, g) => sum + (g.progressPercent ?? 0), 0) /
+              activeGoals.length,
+          ),
+        );
+
+  const overall =
+    subconscious * 0.35 + thought * 0.25 + action * 0.25 + results * 0.15;
+
+  return {
+    subconscious,
+    thought,
+    action,
+    results,
+    overall,
+    effectiveWindow: window,
+    daysSinceSignup,
+    isRampingUp: daysSinceSignup < windowDays - 1,
+  };
+}
+
+/**
  * weeklyManifestationReport — runs every Sunday at 10am UTC.
  * Generates a manifestation alignment report for each user.
  */
@@ -440,30 +711,31 @@ export const weeklyManifestationReport = onSchedule(
       .limit(100)
       .get();
 
-    const apiKey = anthropicKey.value();
+    const apiKey = anthropicKey.value().trim();
 
     for (const userDoc of usersSnap.docs) {
       const profile = userDoc.data() as {
         displayName?: string;
-        manifestationAlignment?: {
-          subconscious: number;
-          thought: number;
-          action: number;
-          results: number;
-        };
-        goals?: Array<{ title: string; status: string }>;
+        createdAt?: string;
+        dailyCompletions?: ScorableProfile['dailyCompletions'];
+        habits?: ScorableProfile['habits'];
+        goals?: Array<{ title: string; status: string; progressPercent?: number }>;
         evidenceLog?: Array<{ content: string }>;
       };
 
       try {
-        const alignment = profile.manifestationAlignment;
+        const alignment = computeManifestationAlignment(profile);
         const recentEvidence = (profile.evidenceLog ?? []).slice(-5).map(e => e.content).join('; ');
+
+        const rampUpNote = alignment.isRampingUp
+          ? `\nNOTE: This user is on day ${alignment.daysSinceSignup + 1} of their first 10 days. Scores are based on very little history and will look low regardless of effort. Do NOT call out low scores or frame them as a problem. Focus on encouragement and building the habit.`
+          : '';
 
         const prompt = `Generate a weekly manifestation alignment report:
 Name: ${profile.displayName ?? 'User'}
-Alignment Scores - Subconscious: ${alignment?.subconscious ?? 50}%, Thought: ${alignment?.thought ?? 50}%, Action: ${alignment?.action ?? 50}%, Results: ${alignment?.results ?? 50}%
+Alignment Scores (computed from real activity) - Subconscious: ${alignment.subconscious.toFixed(0)}%, Thought: ${alignment.thought.toFixed(0)}%, Action: ${alignment.action.toFixed(0)}%, Results: ${alignment.results.toFixed(0)}%
 Active Goals: ${(profile.goals ?? []).filter(g => g.status === 'active').map(g => g.title).join(', ')}
-Recent Evidence of Growth: ${recentEvidence || 'None logged'}
+Recent Evidence of Growth: ${recentEvidence || 'None logged'}${rampUpNote}
 
 Write a 2-paragraph report on their manifestation alignment. Identify the weakest layer and give one specific practice to strengthen it this week.`;
 
@@ -505,7 +777,7 @@ export const lowActivityAlert = onSchedule(
       .limit(50)
       .get();
 
-    const apiKey = anthropicKey.value();
+    const apiKey = anthropicKey.value().trim();
 
     for (const userDoc of usersSnap.docs) {
       const profile = userDoc.data() as {

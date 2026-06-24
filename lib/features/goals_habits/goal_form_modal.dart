@@ -5,13 +5,20 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/utils/app_date_utils.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_text_field.dart';
 import '../../models/goal.dart';
 import '../../providers/goals_provider.dart';
+import 'widgets/sheet_handle.dart';
 
 class GoalFormModal {
-  static void show(BuildContext context, WidgetRef ref, {Goal? existing}) {
+  static void show(
+    BuildContext context,
+    WidgetRef ref, {
+    Goal? existing,
+    String? initialTitle,
+  }) {
     showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
@@ -22,7 +29,7 @@ class GoalFormModal {
       ),
       builder: (_) => ProviderScope(
         parent: ProviderScope.containerOf(context),
-        child: _GoalFormSheet(existing: existing),
+        child: _GoalFormSheet(existing: existing, initialTitle: initialTitle),
       ),
     );
   }
@@ -30,8 +37,9 @@ class GoalFormModal {
 
 class _GoalFormSheet extends ConsumerStatefulWidget {
   final Goal? existing;
+  final String? initialTitle;
 
-  const _GoalFormSheet({this.existing});
+  const _GoalFormSheet({this.existing, this.initialTitle});
 
   @override
   ConsumerState<_GoalFormSheet> createState() => _GoalFormSheetState();
@@ -57,7 +65,9 @@ class _GoalFormSheetState extends ConsumerState<_GoalFormSheet> {
   @override
   void initState() {
     super.initState();
-    _titleCtrl = TextEditingController(text: widget.existing?.title ?? '');
+    _titleCtrl = TextEditingController(
+      text: widget.existing?.title ?? widget.initialTitle ?? '',
+    );
     _descCtrl = TextEditingController(text: widget.existing?.description ?? '');
     _identityCtrl = TextEditingController(text: widget.existing?.identityBecomes ?? '');
     _category = widget.existing?.category ?? 'personal_growth';
@@ -113,16 +123,25 @@ class _GoalFormSheetState extends ConsumerState<_GoalFormSheet> {
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.xl),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xl,
+          AppSpacing.sm,
+          AppSpacing.xl,
+          AppSpacing.xl,
+        ),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const SheetHandle(),
+              const SizedBox(height: AppSpacing.md),
               Row(
                 children: [
                   Text(
-                    widget.existing != null ? 'Edit Goal' : AppStrings.addGoal,
+                    widget.existing != null
+                        ? AppStrings.editGoal
+                        : AppStrings.addGoal,
                     style: AppTextStyles.headlineMedium,
                   ),
                   const Spacer(),
@@ -133,7 +152,7 @@ class _GoalFormSheetState extends ConsumerState<_GoalFormSheet> {
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),
-              Text('Category', style: AppTextStyles.labelMedium),
+              Text(AppStrings.goalCategory, style: AppTextStyles.labelMedium),
               const SizedBox(height: AppSpacing.sm),
               Wrap(
                 spacing: AppSpacing.sm,
@@ -174,26 +193,28 @@ class _GoalFormSheetState extends ConsumerState<_GoalFormSheet> {
               const SizedBox(height: AppSpacing.md),
               AppTextField(
                 label: AppStrings.goalTitle,
-                hint: 'e.g., Build my dream business',
+                hint: AppStrings.goalTitleHint,
                 controller: _titleCtrl,
-                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? AppStrings.fieldRequired : null,
               ),
               const SizedBox(height: AppSpacing.md),
               AppTextField(
-                label: '${AppStrings.goalDescription} (optional)',
-                hint: 'More details...',
+                label: AppStrings.goalDescription,
+                hint: AppStrings.goalDescriptionHint,
                 controller: _descCtrl,
                 maxLines: 3,
               ),
               const SizedBox(height: AppSpacing.md),
               AppTextField(
                 label: AppStrings.goalIdentityBecomes,
-                hint: 'e.g., I become a confident entrepreneur',
+                hint: AppStrings.goalIdentityHint,
                 controller: _identityCtrl,
-                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? AppStrings.fieldRequired : null,
               ),
               const SizedBox(height: AppSpacing.md),
-              Text('Target Date', style: AppTextStyles.labelMedium),
+              Text(AppStrings.goalTargetDate, style: AppTextStyles.labelMedium),
               const SizedBox(height: AppSpacing.sm),
               GestureDetector(
                 onTap: () async {
@@ -224,7 +245,7 @@ class _GoalFormSheetState extends ConsumerState<_GoalFormSheet> {
                       const Icon(Icons.calendar_today_rounded, color: AppColors.textMuted, size: 18),
                       const SizedBox(width: AppSpacing.sm),
                       Text(
-                        '${_targetDate.month}/${_targetDate.day}/${_targetDate.year}',
+                        AppDateUtils.formatDate(_targetDate),
                         style: AppTextStyles.bodyLarge,
                       ),
                     ],
@@ -233,7 +254,9 @@ class _GoalFormSheetState extends ConsumerState<_GoalFormSheet> {
               ),
               const SizedBox(height: AppSpacing.xl),
               AppPrimaryButton(
-                label: widget.existing != null ? 'Save Changes' : AppStrings.addGoal,
+                label: widget.existing != null
+                    ? AppStrings.saveChanges
+                    : AppStrings.addGoal,
                 onPressed: _save,
                 isLoading: _isSaving,
               ),

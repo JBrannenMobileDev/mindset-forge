@@ -10,7 +10,6 @@ import '../../../core/widgets/app_card.dart';
 import '../../../models/mindset_blueprint.dart';
 import '../../../models/goal.dart';
 import '../../../models/user_profile.dart';
-import '../../../models/manifestation_alignment.dart';
 import '../../../models/deep_dive.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/claude_provider.dart';
@@ -71,7 +70,6 @@ class _StepAiSummaryState extends ConsumerState<StepAiSummary> {
         identityStatement: widget.identityStatement,
         fearsDrift: widget.fearsDrift,
         mentalToughnessScore: widget.mentalToughnessScore,
-        manifestationAlignment: ManifestationAlignment.initial(),
         deepDive: DeepDive.initial(),
         createdAt: DateTime.now(),
       );

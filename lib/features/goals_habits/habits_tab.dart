@@ -10,79 +10,18 @@ import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/app_text_field.dart';
 import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/shimmer_widget.dart';
 import '../../models/habit.dart';
 import '../../providers/habits_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/claude_provider.dart';
+import 'widgets/actions_tab_skeleton.dart';
+import 'widgets/sheet_handle.dart';
 
-class HabitsTab extends ConsumerWidget {
-  const HabitsTab({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final habits = ref.watch(habitsProvider);
-
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddHabit(context, ref),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text(AppStrings.addHabit),
-      ),
-      body: habits.isEmpty
-          ? EmptyState(
-              icon: Icons.repeat_rounded,
-              title: AppStrings.noHabitsYet,
-              subtitle: AppStrings.noHabitsSubtitle,
-              ctaLabel: AppStrings.addHabit,
-              onCta: () => _showAddHabit(context, ref),
-            )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.screenPaddingH,
-                AppSpacing.lg,
-                AppSpacing.screenPaddingH,
-                100,
-              ),
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${habits.length} habit${habits.length == 1 ? '' : 's'}',
-                        style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-                      ),
-                    ),
-                    AppTextButton(
-                      label: AppStrings.aiSuggestions,
-                      onPressed: () => _showAISuggestions(context, ref),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.md),
-                ...habits.asMap().entries.map(
-                  (e) => Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                    child: _HabitCard(
-                      habit: e.value,
-                      onComplete: () async {
-                        await ref.read(habitsProvider.notifier).completeHabit(e.value.id);
-                      },
-                      onToggleState: (newState) async {
-                        await ref.read(habitsProvider.notifier).toggleState(e.value.id, newState);
-                      },
-                      onDelete: () async {
-                        await ref.read(habitsProvider.notifier).deleteHabit(e.value.id);
-                      },
-                    ).animate().fadeIn(delay: Duration(milliseconds: e.key * 60), duration: 400.ms),
-                  ),
-                ),
-              ],
-            ),
-    );
-  }
-
-  void _showAddHabit(BuildContext context, WidgetRef ref) {
+/// Reusable opener for the add-habit form so it can be launched from anywhere
+/// (e.g. a coach chat action pill), optionally prefilled with [initialName].
+class HabitFormModal {
+  static void show(BuildContext context, WidgetRef ref, {String? initialName}) {
     showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
@@ -93,8 +32,101 @@ class HabitsTab extends ConsumerWidget {
       ),
       builder: (_) => ProviderScope(
         parent: ProviderScope.containerOf(context),
-        child: const _HabitFormSheet(),
+        child: _HabitFormSheet(initialName: initialName),
       ),
+    );
+  }
+}
+
+class HabitsTab extends ConsumerWidget {
+  const HabitsTab({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profileAsync = ref.watch(currentUserProfileProvider);
+
+    return profileAsync.when(
+      loading: () => const ActionsTabSkeleton(),
+      error: (_, __) => ErrorState(
+        message: AppStrings.errorGeneric,
+        onRetry: () => ref.invalidate(currentUserProfileProvider),
+      ),
+      data: (profile) {
+        if (profile == null) return const ActionsTabSkeleton();
+        return const _HabitsContent();
+      },
+    );
+  }
+}
+
+class _HabitsContent extends ConsumerWidget {
+  const _HabitsContent();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final habits = ref.watch(habitsProvider);
+
+    if (habits.isEmpty) {
+      return EmptyState(
+        icon: Icons.repeat_rounded,
+        title: AppStrings.noHabitsYet,
+        subtitle: AppStrings.noHabitsSubtitle,
+        ctaLabel: AppStrings.addHabit,
+        onCta: () => HabitFormModal.show(context, ref),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenPaddingH,
+        AppSpacing.lg,
+        AppSpacing.screenPaddingH,
+        100,
+      ),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${habits.length} habit${habits.length == 1 ? '' : 's'}',
+                style: AppTextStyles.bodySmall
+                    .copyWith(color: AppColors.textSecondary),
+              ),
+            ),
+            AppTextButton(
+              label: AppStrings.aiSuggestions,
+              onPressed: () => _showAISuggestions(context, ref),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        ...habits.asMap().entries.map(
+              (e) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                child: _HabitCard(
+                  habit: e.value,
+                  onComplete: () async {
+                    await ref
+                        .read(habitsProvider.notifier)
+                        .completeHabit(e.value.id);
+                  },
+                  onToggleState: (newState) async {
+                    await ref
+                        .read(habitsProvider.notifier)
+                        .toggleState(e.value.id, newState);
+                  },
+                  onDelete: () async {
+                    await ref
+                        .read(habitsProvider.notifier)
+                        .deleteHabit(e.value.id);
+                  },
+                ).animate().fadeIn(
+                      delay: Duration(milliseconds: e.key * 60),
+                      duration: 400.ms,
+                    ),
+              ),
+            ),
+      ],
     );
   }
 
@@ -177,12 +209,15 @@ class _HabitCard extends StatelessWidget {
                     const Icon(Icons.local_fire_department_rounded, color: AppColors.warning, size: 12),
                     const SizedBox(width: 2),
                     Text(
-                      '${habit.currentStreak} day streak',
+                      '${habit.currentStreak} ${AppStrings.streakDays}',
                       style: AppTextStyles.labelSmall.copyWith(color: AppColors.warning),
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: isActive ? AppColors.secondaryContainer : AppColors.surfaceHighest,
                         borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
@@ -213,14 +248,14 @@ class _HabitCard extends StatelessWidget {
               PopupMenuItem(
                 value: 'toggle',
                 child: Text(
-                  isActive ? 'Pause' : 'Resume',
+                  isActive ? AppStrings.habitPause : AppStrings.habitResume,
                   style: AppTextStyles.bodyMedium,
                 ),
               ),
               PopupMenuItem(
                 value: 'delete',
                 child: Text(
-                  'Delete',
+                  AppStrings.habitDelete,
                   style: AppTextStyles.bodyMedium.copyWith(color: AppColors.error),
                 ),
               ),
@@ -233,18 +268,26 @@ class _HabitCard extends StatelessWidget {
 }
 
 class _HabitFormSheet extends ConsumerStatefulWidget {
-  const _HabitFormSheet();
+  final String? initialName;
+
+  const _HabitFormSheet({this.initialName});
 
   @override
   ConsumerState<_HabitFormSheet> createState() => _HabitFormSheetState();
 }
 
 class _HabitFormSheetState extends ConsumerState<_HabitFormSheet> {
-  final _nameCtrl = TextEditingController();
+  late final TextEditingController _nameCtrl;
   final _triggerCtrl = TextEditingController();
   final _identityCtrl = TextEditingController();
   String _frequency = 'daily';
   bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.initialName ?? '');
+  }
 
   @override
   void dispose() {
@@ -269,7 +312,13 @@ class _HabitFormSheetState extends ConsumerState<_HabitFormSheet> {
       );
       await ref.read(habitsProvider.notifier).addHabit(habit);
       if (mounted) Navigator.pop(context);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('_HabitFormSheet._save failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(AppStrings.errorGeneric)),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -280,10 +329,17 @@ class _HabitFormSheetState extends ConsumerState<_HabitFormSheet> {
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.xl),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xl,
+          AppSpacing.sm,
+          AppSpacing.xl,
+          AppSpacing.xl,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const SheetHandle(),
+            const SizedBox(height: AppSpacing.md),
             Row(
               children: [
                 Text(AppStrings.addHabit, style: AppTextStyles.headlineMedium),
@@ -297,19 +353,19 @@ class _HabitFormSheetState extends ConsumerState<_HabitFormSheet> {
             const SizedBox(height: AppSpacing.lg),
             AppTextField(
               label: AppStrings.habitName,
-              hint: 'e.g., Morning meditation',
+              hint: AppStrings.habitNameHint,
               controller: _nameCtrl,
             ),
             const SizedBox(height: AppSpacing.md),
             AppTextField(
               label: AppStrings.habitTrigger,
-              hint: 'e.g., After I wake up',
+              hint: AppStrings.habitTriggerHint,
               controller: _triggerCtrl,
             ),
             const SizedBox(height: AppSpacing.md),
             AppTextField(
               label: AppStrings.habitIdentityReinforces,
-              hint: 'e.g., I am a disciplined person',
+              hint: AppStrings.habitIdentityHint,
               controller: _identityCtrl,
             ),
             const SizedBox(height: AppSpacing.md),
@@ -360,6 +416,7 @@ class _HabitSuggestionsSheet extends ConsumerStatefulWidget {
 class _HabitSuggestionsSheetState extends ConsumerState<_HabitSuggestionsSheet> {
   List<Map<String, String>> _suggestions = [];
   bool _isLoading = true;
+  bool _hasError = false;
 
   @override
   void initState() {
@@ -368,18 +425,30 @@ class _HabitSuggestionsSheetState extends ConsumerState<_HabitSuggestionsSheet> 
   }
 
   Future<void> _load() async {
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
     try {
       final profile = ref.read(currentUserProfileProvider).valueOrNull;
-      if (profile == null) return;
-      final result = await ref.read(claudeServiceProvider).generateHabitSuggestions(profile);
+      if (profile == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+      final result =
+          await ref.read(claudeServiceProvider).generateHabitSuggestions(profile);
       if (!mounted) return;
       setState(() {
         _suggestions = result;
         _isLoading = false;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('_HabitSuggestionsSheet._load failed: $e');
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+      });
     }
   }
 
@@ -398,20 +467,29 @@ class _HabitSuggestionsSheetState extends ConsumerState<_HabitSuggestionsSheet> 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.xl),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.sm,
+        AppSpacing.xl,
+        AppSpacing.xl,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SheetHandle(),
+          const SizedBox(height: AppSpacing.md),
           Row(
             children: [
-              Text('Habit Suggestions', style: AppTextStyles.headlineMedium),
+              Text(AppStrings.habitSuggestionsTitle, style: AppTextStyles.headlineMedium),
               const Spacer(),
               IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(context)),
             ],
           ),
           const SizedBox(height: AppSpacing.lg),
           if (_isLoading)
-            const Center(child: CircularProgressIndicator(color: AppColors.primary))
+            const ShimmerList(count: 3, itemHeight: 88)
+          else if (_hasError)
+            ErrorState(message: AppStrings.errorAI, onRetry: _load)
           else
             ..._suggestions.map(
               (s) => Padding(
@@ -425,7 +503,7 @@ class _HabitSuggestionsSheetState extends ConsumerState<_HabitSuggestionsSheet> 
                           children: [
                             Text(s['name'] ?? '', style: AppTextStyles.labelLarge),
                             if ((s['trigger'] ?? '').isNotEmpty)
-                              Text('When: ${s['trigger']}', style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
+                              Text('${AppStrings.habitWhenPrefix} ${s['trigger']}', style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
                             if ((s['identityReinforces'] ?? '').isNotEmpty)
                               Text(s['identityReinforces']!, style: AppTextStyles.bodySmall.copyWith(color: AppColors.primary, fontStyle: FontStyle.italic)),
                           ],
@@ -440,7 +518,6 @@ class _HabitSuggestionsSheetState extends ConsumerState<_HabitSuggestionsSheet> 
                 ),
               ),
             ),
-          const SizedBox(height: AppSpacing.xl),
         ],
       ),
     );

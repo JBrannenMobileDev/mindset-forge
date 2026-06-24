@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -27,12 +28,26 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
 
+  late final TapGestureRecognizer _termsTap;
+  late final TapGestureRecognizer _privacyTap;
+
+  @override
+  void initState() {
+    super.initState();
+    _termsTap = TapGestureRecognizer()
+      ..onTap = () => context.push('/terms');
+    _privacyTap = TapGestureRecognizer()
+      ..onTap = () => context.push('/privacy');
+  }
+
   @override
   void dispose() {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     _confirmCtrl.dispose();
+    _termsTap.dispose();
+    _privacyTap.dispose();
     super.dispose();
   }
 
@@ -172,6 +187,34 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                           label: AppStrings.signup,
                           onPressed: _signup,
                           isLoading: isLoading,
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        Text.rich(
+                          TextSpan(
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.textMuted,
+                            ),
+                            children: [
+                              const TextSpan(text: AppStrings.agreementPrefix),
+                              TextSpan(
+                                text: AppStrings.termsTitle,
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  color: AppColors.primary,
+                                ),
+                                recognizer: _termsTap,
+                              ),
+                              const TextSpan(text: AppStrings.agreementAnd),
+                              TextSpan(
+                                text: AppStrings.privacyTitle,
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  color: AppColors.primary,
+                                ),
+                                recognizer: _privacyTap,
+                              ),
+                              const TextSpan(text: AppStrings.agreementSuffix),
+                            ],
+                          ),
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),

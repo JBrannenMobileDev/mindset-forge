@@ -1,93 +1,105 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/utils/app_date_utils.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/section_header.dart';
 import '../../models/goal.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/goals_provider.dart';
 import 'goal_form_modal.dart';
-import 'goal_detail_screen.dart';
+import 'widgets/actions_tab_skeleton.dart';
 
 class GoalsTab extends ConsumerWidget {
   const GoalsTab({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final goals = ref.watch(goalsProvider);
-    final longTerm = goals.where((g) => g.isLongTerm && g.status == 'active').toList();
-    final shortTerm = goals.where((g) => !g.isLongTerm && g.status == 'active').toList();
+    final profileAsync = ref.watch(currentUserProfileProvider);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => GoalFormModal.show(context, ref),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text(AppStrings.addGoal),
+    return profileAsync.when(
+      loading: () => const ActionsTabSkeleton(),
+      error: (_, __) => ErrorState(
+        message: AppStrings.errorGeneric,
+        onRetry: () => ref.invalidate(currentUserProfileProvider),
       ),
-      body: goals.isEmpty
-          ? EmptyState(
-              icon: Icons.track_changes_rounded,
-              title: AppStrings.noGoalsYet,
-              subtitle: AppStrings.noGoalsSubtitle,
-              ctaLabel: AppStrings.addGoal,
-              onCta: () => GoalFormModal.show(context, ref),
-            )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.screenPaddingH,
-                AppSpacing.lg,
-                AppSpacing.screenPaddingH,
-                100,
+      data: (profile) {
+        if (profile == null) return const ActionsTabSkeleton();
+        return const _GoalsContent();
+      },
+    );
+  }
+}
+
+class _GoalsContent extends ConsumerWidget {
+  const _GoalsContent();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final goals = ref.watch(goalsProvider);
+    final longTerm =
+        goals.where((g) => g.isLongTerm && g.status == 'active').toList();
+    final shortTerm =
+        goals.where((g) => !g.isLongTerm && g.status == 'active').toList();
+
+    if (longTerm.isEmpty && shortTerm.isEmpty) {
+      return EmptyState(
+        icon: Icons.track_changes_rounded,
+        title: AppStrings.noGoalsYet,
+        subtitle: AppStrings.noGoalsSubtitle,
+        ctaLabel: AppStrings.addGoal,
+        onCta: () => GoalFormModal.show(context, ref),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenPaddingH,
+        AppSpacing.lg,
+        AppSpacing.screenPaddingH,
+        100,
+      ),
+      children: [
+        if (longTerm.isNotEmpty) ...[
+          const SectionHeader(title: AppStrings.goalLongTerm),
+          const SizedBox(height: AppSpacing.md),
+          ...longTerm.asMap().entries.map(
+                (e) => Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                  child: _GoalCard(
+                    goal: e.value,
+                    onTap: () => context.push('/actions/goal/${e.value.id}'),
+                  ).animate().fadeIn(
+                        delay: Duration(milliseconds: e.key * 60),
+                        duration: 400.ms,
+                      ),
+                ),
               ),
-              children: [
-                if (longTerm.isNotEmpty) ...[
-                  SectionHeader(title: AppStrings.goalLongTerm),
-                  const SizedBox(height: AppSpacing.md),
-                  ...longTerm.asMap().entries.map(
-                    (e) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                      child: _GoalCard(
-                        goal: e.value,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => GoalDetailScreen(goal: e.value),
-                          ),
-                        ),
-                      ).animate().fadeIn(
-                            delay: Duration(milliseconds: e.key * 60),
-                            duration: 400.ms,
-                          ),
-                    ),
-                  ),
-                ],
-                if (shortTerm.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  SectionHeader(title: AppStrings.goalShortTerm),
-                  const SizedBox(height: AppSpacing.md),
-                  ...shortTerm.asMap().entries.map(
-                    (e) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                      child: _GoalCard(
-                        goal: e.value,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => GoalDetailScreen(goal: e.value),
-                          ),
-                        ),
-                      ).animate().fadeIn(
-                            delay: Duration(milliseconds: e.key * 60),
-                            duration: 400.ms,
-                          ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+        ],
+        if (shortTerm.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.md),
+          const SectionHeader(title: AppStrings.goalShortTerm),
+          const SizedBox(height: AppSpacing.md),
+          ...shortTerm.asMap().entries.map(
+                (e) => Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                  child: _GoalCard(
+                    goal: e.value,
+                    onTap: () => context.push('/actions/goal/${e.value.id}'),
+                  ).animate().fadeIn(
+                        delay: Duration(milliseconds: e.key * 60),
+                        duration: 400.ms,
+                      ),
+                ),
+              ),
+        ],
+      ],
     );
   }
 }
@@ -189,7 +201,7 @@ class _GoalCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Target: ${goal.targetDate.month}/${goal.targetDate.day}/${goal.targetDate.year}',
+                '${AppStrings.goalTargetPrefix} ${AppDateUtils.formatDate(goal.targetDate)}',
                 style: AppTextStyles.labelSmall,
               ),
               const Icon(

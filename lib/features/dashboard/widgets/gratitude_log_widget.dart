@@ -5,8 +5,6 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/constants/app_strings.dart';
-import '../../../core/widgets/app_card.dart';
-import '../../../core/widgets/section_header.dart';
 import '../../../models/user_profile.dart';
 import '../../../models/gratitude_entry.dart';
 import '../../../providers/auth_provider.dart';
@@ -54,6 +52,7 @@ class _GratitudeLogWidgetState extends ConsumerState<GratitudeLogWidget> {
 
       await ref.read(dailyCompletionProvider.notifier).toggle('gratitudeLogged', true);
       _controller.clear();
+      if (mounted) Navigator.of(context).pop();
     } catch (_) {
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -63,26 +62,53 @@ class _GratitudeLogWidgetState extends ConsumerState<GratitudeLogWidget> {
   @override
   Widget build(BuildContext context) {
     final recent = widget.profile.gratitudeLog.reversed.take(3).toList();
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
-    return Column(
-      children: [
-        SectionHeader(title: AppStrings.gratitudeLog),
-        const SizedBox(height: AppSpacing.md),
-        AppCard(
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.sm,
+            AppSpacing.lg,
+            AppSpacing.lg,
+          ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Drag handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              // Header
               Row(
                 children: [
-                  const Icon(Icons.favorite_rounded, color: AppColors.error, size: 16),
-                  const SizedBox(width: AppSpacing.xs),
+                  const Icon(Icons.favorite_rounded, color: AppColors.error, size: 18),
+                  const SizedBox(width: AppSpacing.sm),
                   Text(
-                    AppStrings.gratitudePrompt,
-                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                    AppStrings.gratitudeLog,
+                    style: AppTextStyles.headlineSmall,
                   ),
                 ],
               ),
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                AppStrings.gratitudePrompt,
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              // Input row
               Row(
                 children: [
                   Expanded(
@@ -91,12 +117,13 @@ class _GratitudeLogWidgetState extends ConsumerState<GratitudeLogWidget> {
                       style: AppTextStyles.bodyMedium,
                       cursorColor: AppColors.primary,
                       textInputAction: TextInputAction.done,
+                      autofocus: true,
                       onSubmitted: (_) => _save(),
                       decoration: InputDecoration(
                         hintText: 'I am grateful for...',
                         hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
                         filled: true,
-                        fillColor: AppColors.surface,
+                        fillColor: AppColors.surfaceElevated,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                           borderSide: const BorderSide(color: AppColors.border),
@@ -130,8 +157,9 @@ class _GratitudeLogWidgetState extends ConsumerState<GratitudeLogWidget> {
                         ),
                 ],
               ),
+              // Recent entries
               if (recent.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.md),
+                const SizedBox(height: AppSpacing.lg),
                 const Divider(color: AppColors.border, height: 1),
                 const SizedBox(height: AppSpacing.md),
                 ...recent.map(
@@ -163,7 +191,7 @@ class _GratitudeLogWidgetState extends ConsumerState<GratitudeLogWidget> {
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 }

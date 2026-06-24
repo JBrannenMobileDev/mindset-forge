@@ -91,7 +91,7 @@ class GettingStartedChecklist extends StatelessWidget {
       _ChecklistItem(
         label: 'Add your first goal',
         isDone: profile.goals.isNotEmpty,
-        onTap: () => context.push('/actions'),
+        onTap: () => context.push('/actions?tab=goals'),
       ),
       _ChecklistItem(
         label: 'Complete your first journal entry',

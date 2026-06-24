@@ -7,46 +7,73 @@ import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
+import '../../core/widgets/empty_state.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/claude_provider.dart';
-import '../../providers/daily_completion_provider.dart';
+import '../../providers/priority_actions_provider.dart';
+import 'widgets/actions_tab_skeleton.dart';
 
-final _tabActionsProvider = StateProvider<List<String>>((ref) => []);
-final _tabActionsLoadingProvider = StateProvider<bool>((ref) => false);
-
-class PriorityActionsTab extends ConsumerStatefulWidget {
+class PriorityActionsTab extends ConsumerWidget {
   const PriorityActionsTab({super.key});
 
   @override
-  ConsumerState<PriorityActionsTab> createState() => _PriorityActionsTabState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profileAsync = ref.watch(currentUserProfileProvider);
+
+    return profileAsync.when(
+      loading: () => const ActionsTabSkeleton(),
+      error: (_, __) => ErrorState(
+        message: AppStrings.errorGeneric,
+        onRetry: () => ref.invalidate(currentUserProfileProvider),
+      ),
+      data: (profile) {
+        if (profile == null) return const ActionsTabSkeleton();
+        return const _PriorityActionsContent();
+      },
+    );
+  }
 }
 
-class _PriorityActionsTabState extends ConsumerState<PriorityActionsTab> {
-  final Set<int> _completed = {};
+class _PriorityActionsContent extends ConsumerStatefulWidget {
+  const _PriorityActionsContent();
 
-  Future<void> _planDay() async {
-    ref.read(_tabActionsLoadingProvider.notifier).state = true;
+  @override
+  ConsumerState<_PriorityActionsContent> createState() =>
+      _PriorityActionsContentState();
+}
+
+class _PriorityActionsContentState
+    extends ConsumerState<_PriorityActionsContent> {
+  final _addCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _addCtrl.dispose();
+    super.dispose();
+  }
+
+  void _add() {
+    final text = _addCtrl.text.trim();
+    if (text.isEmpty) return;
+    ref.read(priorityActionsProvider.notifier).addAction(text);
+    _addCtrl.clear();
+    FocusScope.of(context).unfocus();
+  }
+
+  Future<void> _generate() async {
     try {
-      final profile = ref.read(currentUserProfileProvider).valueOrNull;
-      if (profile == null) return;
-      final actions = await ref.read(claudeServiceProvider).generatePriorityActions(profile);
-      ref.read(_tabActionsProvider.notifier).state = actions;
-      setState(() => _completed.clear());
+      await ref.read(priorityActionsProvider.notifier).regenerate();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text(AppStrings.errorAI)),
         );
       }
-    } finally {
-      ref.read(_tabActionsLoadingProvider.notifier).state = false;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final actions = ref.watch(_tabActionsProvider);
-    final isLoading = ref.watch(_tabActionsLoadingProvider);
+    final state = ref.watch(priorityActionsProvider);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -55,101 +82,284 @@ class _PriorityActionsTabState extends ConsumerState<PriorityActionsTab> {
         AppSpacing.screenPaddingH,
         100,
       ),
-      children: [
-        Text(
-          'Plan your 3 most important actions for today.',
-          style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+      children: state.isPlanned
+          ? _plannedChildren(state)
+          : _emptyChildren(state),
+    );
+  }
+
+  List<Widget> _emptyChildren(PriorityActionsState state) {
+    return [
+      Container(
+        width: 64,
+        height: 64,
+        decoration: const BoxDecoration(
+          color: AppColors.primaryContainer,
+          shape: BoxShape.circle,
         ),
-        const SizedBox(height: AppSpacing.lg),
-        AppPrimaryButton(
-          label: AppStrings.planMyDay,
-          isLoading: isLoading,
-          onPressed: _planDay,
-          icon: Icons.auto_awesome_rounded,
+        child: const Icon(Icons.flag_rounded,
+            color: AppColors.primary, size: 30),
+      ),
+      const SizedBox(height: AppSpacing.lg),
+      Text(AppStrings.priorityActionsEmptyTitle,
+          style: AppTextStyles.headlineSmall),
+      const SizedBox(height: AppSpacing.sm),
+      Text(
+        AppStrings.priorityActionsEmptySubtitle,
+        style:
+            AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+      ),
+      const SizedBox(height: AppSpacing.lg),
+      _AddPriorityRow(controller: _addCtrl, onAdd: _add),
+      const SizedBox(height: AppSpacing.md),
+      Row(
+        children: [
+          const Expanded(
+            child: Divider(color: AppColors.border, height: 1),
+          ),
+          Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+            child: Text(
+              AppStrings.orLabel,
+              style: AppTextStyles.labelSmall
+                  .copyWith(color: AppColors.textMuted),
+            ),
+          ),
+          const Expanded(
+            child: Divider(color: AppColors.border, height: 1),
+          ),
+        ],
+      ),
+      const SizedBox(height: AppSpacing.md),
+      AppSecondaryButton(
+        label: AppStrings.priorityActionsGenerate,
+        icon: Icons.auto_awesome_rounded,
+        isLoading: state.isGenerating,
+        onPressed: _generate,
+      ),
+    ];
+  }
+
+  List<Widget> _plannedChildren(PriorityActionsState state) {
+    final hasFocus = state.focusAction.isNotEmpty;
+    final focusComplete =
+        hasFocus && state.completed.contains(state.focusAction);
+    final String hint;
+    if (focusComplete) {
+      hint = AppStrings.priorityActionsAllDone;
+    } else if (hasFocus) {
+      hint = AppStrings.priorityActionsFocusSet;
+    } else {
+      hint = AppStrings.priorityActionsFocusHint;
+    }
+
+    return [
+      Text(
+        AppStrings.priorityActionsHeader,
+        style: AppTextStyles.overline.copyWith(color: AppColors.textMuted),
+      ),
+      const SizedBox(height: AppSpacing.xs),
+      Text(
+        hint,
+        style: AppTextStyles.bodySmall.copyWith(
+          color:
+              focusComplete ? AppColors.success : AppColors.textSecondary,
         ),
-        const SizedBox(height: AppSpacing.xl),
-        if (actions.isNotEmpty)
-          ...actions.asMap().entries.map(
+      ),
+      const SizedBox(height: AppSpacing.md),
+      ...state.actions.asMap().entries.map(
             (e) => Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
               child: _PriorityActionCard(
-                number: e.key + 1,
                 action: e.value,
-                isCompleted: _completed.contains(e.key),
-                onToggle: () async {
-                  setState(() {
-                    if (_completed.contains(e.key)) {
-                      _completed.remove(e.key);
-                    } else {
-                      _completed.add(e.key);
-                    }
-                  });
-                  if (_completed.length == actions.length) {
-                    await ref.read(dailyCompletionProvider.notifier).toggle('priorityActionsCompleted', true);
-                  }
-                },
-              ).animate().fadeIn(delay: Duration(milliseconds: e.key * 100), duration: 400.ms),
+                isCompleted: state.completed.contains(e.value),
+                isFocus: e.value == state.focusAction,
+                onToggleComplete: () => ref
+                    .read(priorityActionsProvider.notifier)
+                    .toggleComplete(e.value),
+                onSetFocus: () =>
+                    ref.read(priorityActionsProvider.notifier).setFocus(e.value),
+                onRemove: () => ref
+                    .read(priorityActionsProvider.notifier)
+                    .removeAction(e.value),
+              ).animate().fadeIn(
+                    delay: Duration(milliseconds: e.key * 80),
+                    duration: 400.ms,
+                  ),
             ),
           ),
+      const SizedBox(height: AppSpacing.xs),
+      _AddPriorityRow(controller: _addCtrl, onAdd: _add),
+    ];
+  }
+}
+
+class _AddPriorityRow extends StatelessWidget {
+  final TextEditingController controller;
+  final VoidCallback onAdd;
+
+  const _AddPriorityRow({required this.controller, required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: controller,
+            style: AppTextStyles.bodyMedium,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => onAdd(),
+            decoration: InputDecoration(
+              hintText: AppStrings.priorityActionAddHint,
+              hintStyle: AppTextStyles.bodyMedium
+                  .copyWith(color: AppColors.textMuted),
+              filled: true,
+              fillColor: AppColors.surfaceElevated,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm + 2,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                borderSide:
+                    const BorderSide(color: AppColors.primary, width: 1.5),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        GestureDetector(
+          onTap: onAdd,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+            ),
+            child: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
+          ),
+        ),
       ],
     );
   }
 }
 
 class _PriorityActionCard extends StatelessWidget {
-  final int number;
   final String action;
   final bool isCompleted;
-  final VoidCallback onToggle;
+  final bool isFocus;
+  final VoidCallback onToggleComplete;
+  final VoidCallback onSetFocus;
+  final VoidCallback onRemove;
 
   const _PriorityActionCard({
-    required this.number,
     required this.action,
     required this.isCompleted,
-    required this.onToggle,
+    required this.isFocus,
+    required this.onToggleComplete,
+    required this.onSetFocus,
+    required this.onRemove,
   });
 
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      onTap: onToggle,
-      backgroundColor: isCompleted ? AppColors.primaryContainer : AppColors.surfaceElevated,
-      borderColor: isCompleted ? AppColors.primary.withValues(alpha: 0.4) : AppColors.border,
+      backgroundColor:
+          isCompleted ? AppColors.primaryContainer : AppColors.surfaceElevated,
+      borderColor: isFocus
+          ? AppColors.primary.withValues(alpha: 0.5)
+          : (isCompleted
+              ? AppColors.primary.withValues(alpha: 0.3)
+              : AppColors.border),
       child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
+        children: [
+          // Completion toggle
+          GestureDetector(
+            onTap: onToggleComplete,
+            behavior: HitTestBehavior.opaque,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
-                color: isCompleted ? AppColors.primary : AppColors.surface,
+                color: isCompleted ? AppColors.primary : Colors.transparent,
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: isCompleted ? AppColors.primary : AppColors.border,
+                  width: 2,
                 ),
               ),
               child: isCompleted
-                  ? const Icon(Icons.check_rounded, color: Colors.white, size: 18)
-                  : Center(
-                      child: Text(
-                        '$number',
-                        style: AppTextStyles.labelLarge.copyWith(
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ),
+                  ? const Icon(Icons.check_rounded,
+                      color: Colors.white, size: 18)
+                  : null,
             ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Text(
-                action,
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: isCompleted ? AppColors.primary : AppColors.textPrimary,
-                  decoration: isCompleted ? TextDecoration.lineThrough : null,
-                  decorationColor: AppColors.primary,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isFocus)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Text(
+                      AppStrings.priorityActionsFocusLabel,
+                      style: AppTextStyles.overline
+                          .copyWith(color: AppColors.primary),
+                    ),
+                  ),
+                Text(
+                  action,
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: isCompleted
+                        ? AppColors.primary
+                        : AppColors.textPrimary,
+                    decoration:
+                        isCompleted ? TextDecoration.lineThrough : null,
+                    decorationColor: AppColors.primary,
+                  ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          // Focus toggle (star)
+          GestureDetector(
+            onTap: onSetFocus,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.xs),
+              child: Icon(
+                isFocus ? Icons.star_rounded : Icons.star_outline_rounded,
+                color: isFocus ? AppColors.primary : AppColors.textMuted,
+                size: 22,
               ),
             ),
-          ],
+          ),
+          // Remove
+          GestureDetector(
+            onTap: onRemove,
+            behavior: HitTestBehavior.opaque,
+            child: const Padding(
+              padding: EdgeInsets.all(AppSpacing.xs),
+              child: Icon(Icons.close_rounded,
+                  color: AppColors.textMuted, size: 18),
+            ),
+          ),
+        ],
       ),
     );
   }

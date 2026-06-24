@@ -1,67 +1,72 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
-import '../../../core/constants/app_strings.dart';
-import '../../../core/widgets/app_card.dart';
-import '../../../core/widgets/section_header.dart';
+import '../../../core/utils/manifestation_scoring.dart';
 import '../../../models/user_profile.dart';
 
-class AlignmentScoreWidget extends StatelessWidget {
+/// Header-less alignment content (ring + dimension bars + ramp note).
+/// Wrapped by `ProgressOverviewCard`; carries no `SectionHeader`/`AppCard`.
+class AlignmentScoreBody extends StatelessWidget {
   final UserProfile profile;
 
-  const AlignmentScoreWidget({super.key, required this.profile});
+  const AlignmentScoreBody({super.key, required this.profile});
 
   @override
   Widget build(BuildContext context) {
-    final alignment = profile.manifestationAlignment;
+    final alignment = ManifestationScoring.calculate(profile);
     final score = alignment.overall;
+    final isRampingUp = ManifestationScoring.isRampingUp(profile);
+    final rampDay = ManifestationScoring.daysSinceSignup(profile) + 1;
 
     return Column(
       children: [
-        SectionHeader(title: AppStrings.alignmentScore),
-        const SizedBox(height: AppSpacing.md),
-        AppCard(
-          child: Column(
-            children: [
-              Row(
+        Row(
+          children: [
+            _CircularScore(score: score),
+            const SizedBox(width: AppSpacing.xl),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _CircularScore(score: score),
-                  const SizedBox(width: AppSpacing.xl),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          alignment.masteryLevel,
-                          style: AppTextStyles.headlineSmall.copyWith(
-                            color: AppColors.primary,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          'Manifestation Level',
-                          style: AppTextStyles.labelSmall,
-                        ),
-                        const SizedBox(height: AppSpacing.md),
-                        _DimensionBar(
-                            label: 'Subconscious', value: alignment.subconscious),
-                        const SizedBox(height: AppSpacing.xs),
-                        _DimensionBar(label: 'Thought', value: alignment.thought),
-                        const SizedBox(height: AppSpacing.xs),
-                        _DimensionBar(label: 'Action', value: alignment.action),
-                        const SizedBox(height: AppSpacing.xs),
-                        _DimensionBar(label: 'Results', value: alignment.results),
-                      ],
+                  Text(
+                    alignment.masteryLevel,
+                    style: AppTextStyles.headlineSmall.copyWith(
+                      color: AppColors.primary,
                     ),
                   ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Manifestation Level',
+                    style: AppTextStyles.labelSmall,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  _DimensionBar(
+                      label: 'Subconscious', value: alignment.subconscious),
+                  const SizedBox(height: AppSpacing.xs),
+                  _DimensionBar(label: 'Thought', value: alignment.thought),
+                  const SizedBox(height: AppSpacing.xs),
+                  _DimensionBar(label: 'Action', value: alignment.action),
+                  const SizedBox(height: AppSpacing.xs),
+                  _DimensionBar(label: 'Results', value: alignment.results),
                 ],
               ),
-            ],
+            ),
+          ],
+        ),
+        if (isRampingUp) ...[
+          const SizedBox(height: AppSpacing.md),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Building your baseline (day $rampDay of 10)',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textMuted,
+              ),
+            ),
           ),
-        ).animate().fadeIn(duration: 400.ms),
+        ],
       ],
     );
   }
@@ -88,13 +93,14 @@ class _CircularScore extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                score.toStringAsFixed(0),
+                '${score.toStringAsFixed(0)}%',
                 style: AppTextStyles.statNumber.copyWith(
                   color: AppColors.primary,
+                  fontSize: 28,
                 ),
               ),
               Text(
-                'score',
+                'aligned',
                 style: AppTextStyles.labelSmall,
               ),
             ],
@@ -123,7 +129,7 @@ class _ScoreRingPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     final gradient = SweepGradient(
-      colors: [AppColors.primary, AppColors.secondary],
+      colors: const [AppColors.primary, AppColors.secondary],
       startAngle: -math.pi / 2,
       endAngle: -math.pi / 2 + math.pi * 2 * (score / 100),
     );
@@ -181,7 +187,7 @@ class _DimensionBar extends StatelessWidget {
         ),
         const SizedBox(width: AppSpacing.sm),
         Text(
-          value.toStringAsFixed(0),
+          '${value.toStringAsFixed(0)}%',
           style: AppTextStyles.labelSmall.copyWith(color: AppColors.primary),
         ),
       ],

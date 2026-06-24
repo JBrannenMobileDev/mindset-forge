@@ -136,8 +136,12 @@ class _PlanDaySheetState extends ConsumerState<_PlanDaySheet> {
           'priorityActions': _actions,
           'priorityActionsDate': _todayStr,
         });
+        // Committing a focus satisfies the "Plan Day" morning win; the focus
+        // is freshly picked so its completion resets to false.
+        final dc = ref.read(dailyCompletionProvider.notifier);
+        await dc.toggle('dayPlanned', true);
+        await dc.toggle('priorityActionsCompleted', false);
       }
-      await ref.read(dailyCompletionProvider.notifier).toggle('priorityActionsCompleted', true);
       if (mounted) Navigator.of(context).pop();
     } catch (_) {
       if (mounted) {

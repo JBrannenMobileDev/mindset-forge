@@ -30,7 +30,11 @@ abstract final class AppSpacing {
   // Component heights
   static const double buttonHeight = 52.0;
   static const double inputHeight = 52.0;
-  static const double bottomNavHeight = 72.0;
+
+  // Floating bottom nav geometry (single source of truth shared by the shell
+  // and any screen that needs to clear the floating pill, e.g. the chat input).
+  static const double bottomNavHeight = 58.0; // actual pill height
+  static const double bottomNavMargin = 8.0; // gap below the pill
   static const double appBarHeight = 60.0;
   static const double chipHeight = 36.0;
 

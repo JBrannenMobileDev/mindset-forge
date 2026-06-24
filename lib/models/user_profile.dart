@@ -3,7 +3,6 @@ import 'goal.dart';
 import 'habit.dart';
 import 'affirmation.dart';
 import 'daily_completion.dart';
-import 'manifestation_alignment.dart';
 import 'future_self_setup.dart';
 import 'future_self_practice.dart';
 import 'belief_pattern.dart';
@@ -14,6 +13,7 @@ import 'identity_read_log.dart';
 import 'encouragement_message.dart';
 import 'accountability_relationship.dart';
 import 'journal_summary.dart';
+import 'coach_memory.dart';
 
 class UserProfile {
   final String uid;
@@ -36,7 +36,6 @@ class UserProfile {
   final List<String> limitingBeliefs;
   final FutureSelfPractice? futureSelfPractice;
   final FutureSelfSetup? futureSelfSetup;
-  final ManifestationAlignment manifestationAlignment;
   final List<BeliefPattern> beliefPatternHistory;
   final DeepDive deepDive;
   final List<String> fearsDrift;
@@ -48,11 +47,14 @@ class UserProfile {
   final String dailyFocusAction;
   final String dailyFocusActionDate;
   final bool dailyFocusActionCompleted;
+  final List<String> completedPriorityActions;
   final String journalPreference; // 'morning' | 'evening' | 'both'
   final List<JournalSummary> recentJournalSummaries;
   final List<AccountabilityRelationship> accountabilityRelationships;
   final List<EncouragementMessage> encouragementMessages;
   final List<String> partnerUids;
+  final CoachMemory coachMemory;
+  final DateTime? coachDisclaimerAcceptedAt;
   final String? fcmToken;
   final DateTime? lastActiveAt;
   final DateTime createdAt;
@@ -78,7 +80,6 @@ class UserProfile {
     this.limitingBeliefs = const [],
     this.futureSelfPractice,
     this.futureSelfSetup,
-    required this.manifestationAlignment,
     this.beliefPatternHistory = const [],
     required this.deepDive,
     this.fearsDrift = const [],
@@ -90,15 +91,21 @@ class UserProfile {
     this.dailyFocusAction = '',
     this.dailyFocusActionDate = '',
     this.dailyFocusActionCompleted = false,
+    this.completedPriorityActions = const [],
     this.journalPreference = 'both',
     this.recentJournalSummaries = const [],
     this.accountabilityRelationships = const [],
     this.encouragementMessages = const [],
     this.partnerUids = const [],
+    this.coachMemory = const CoachMemory(),
+    this.coachDisclaimerAcceptedAt,
     this.fcmToken,
     this.lastActiveAt,
     required this.createdAt,
   });
+
+  /// Whether the user has acknowledged the one-time coach disclaimer.
+  bool get hasAcceptedCoachDisclaimer => coachDisclaimerAcceptedAt != null;
 
   String get firstName =>
       displayName.isNotEmpty ? displayName.split(' ').first : 'there';
@@ -169,7 +176,6 @@ class UserProfile {
     List<String>? limitingBeliefs,
     FutureSelfPractice? futureSelfPractice,
     FutureSelfSetup? futureSelfSetup,
-    ManifestationAlignment? manifestationAlignment,
     List<BeliefPattern>? beliefPatternHistory,
     DeepDive? deepDive,
     List<String>? fearsDrift,
@@ -181,11 +187,14 @@ class UserProfile {
     String? dailyFocusAction,
     String? dailyFocusActionDate,
     bool? dailyFocusActionCompleted,
+    List<String>? completedPriorityActions,
     String? journalPreference,
     List<JournalSummary>? recentJournalSummaries,
     List<AccountabilityRelationship>? accountabilityRelationships,
     List<EncouragementMessage>? encouragementMessages,
     List<String>? partnerUids,
+    CoachMemory? coachMemory,
+    DateTime? coachDisclaimerAcceptedAt,
     String? fcmToken,
     DateTime? lastActiveAt,
     DateTime? createdAt,
@@ -213,8 +222,6 @@ class UserProfile {
       limitingBeliefs: limitingBeliefs ?? this.limitingBeliefs,
       futureSelfPractice: futureSelfPractice ?? this.futureSelfPractice,
       futureSelfSetup: futureSelfSetup ?? this.futureSelfSetup,
-      manifestationAlignment:
-          manifestationAlignment ?? this.manifestationAlignment,
       beliefPatternHistory: beliefPatternHistory ?? this.beliefPatternHistory,
       deepDive: deepDive ?? this.deepDive,
       fearsDrift: fearsDrift ?? this.fearsDrift,
@@ -226,11 +233,15 @@ class UserProfile {
       dailyFocusAction: dailyFocusAction ?? this.dailyFocusAction,
       dailyFocusActionDate: dailyFocusActionDate ?? this.dailyFocusActionDate,
       dailyFocusActionCompleted: dailyFocusActionCompleted ?? this.dailyFocusActionCompleted,
+      completedPriorityActions: completedPriorityActions ?? this.completedPriorityActions,
       journalPreference: journalPreference ?? this.journalPreference,
       recentJournalSummaries: recentJournalSummaries ?? this.recentJournalSummaries,
       accountabilityRelationships: accountabilityRelationships ?? this.accountabilityRelationships,
       encouragementMessages: encouragementMessages ?? this.encouragementMessages,
       partnerUids: partnerUids ?? this.partnerUids,
+      coachMemory: coachMemory ?? this.coachMemory,
+      coachDisclaimerAcceptedAt:
+          coachDisclaimerAcceptedAt ?? this.coachDisclaimerAcceptedAt,
       fcmToken: fcmToken ?? this.fcmToken,
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
       createdAt: createdAt ?? this.createdAt,
@@ -248,7 +259,6 @@ class UserProfile {
       displayName: displayName,
       mindsetBlueprint: const MindsetBlueprint(),
       originalMindsetBaseline: const MindsetBlueprint(),
-      manifestationAlignment: ManifestationAlignment.initial(),
       deepDive: DeepDive.initial(),
       createdAt: DateTime.now(),
     );
@@ -317,10 +327,6 @@ class UserProfile {
           ? FutureSelfSetup.fromJson(
               json['futureSelfSetup'] as Map<String, dynamic>)
           : null,
-      manifestationAlignment: json['manifestationAlignment'] != null
-          ? ManifestationAlignment.fromJson(
-              json['manifestationAlignment'] as Map<String, dynamic>)
-          : ManifestationAlignment.initial(),
       beliefPatternHistory:
           (json['beliefPatternHistory'] as List<dynamic>?)
                   ?.map((e) =>
@@ -341,6 +347,8 @@ class UserProfile {
       dailyFocusAction: json['dailyFocusAction'] as String? ?? '',
       dailyFocusActionDate: json['dailyFocusActionDate'] as String? ?? '',
       dailyFocusActionCompleted: json['dailyFocusActionCompleted'] as bool? ?? false,
+      completedPriorityActions: List<String>.from(
+          json['completedPriorityActions'] as List<dynamic>? ?? []),
       journalPreference: json['journalPreference'] as String? ?? 'both',
       recentJournalSummaries:
           (json['recentJournalSummaries'] as List<dynamic>?)
@@ -358,6 +366,12 @@ class UserProfile {
                   .toList() ??
               [],
       partnerUids: List<String>.from(json['partnerUids'] as List<dynamic>? ?? []),
+      coachMemory: json['coachMemory'] != null
+          ? CoachMemory.fromJson(json['coachMemory'] as Map<String, dynamic>)
+          : const CoachMemory(),
+      coachDisclaimerAcceptedAt: json['coachDisclaimerAcceptedAt'] != null
+          ? DateTime.tryParse(json['coachDisclaimerAcceptedAt'] as String)
+          : null,
       fcmToken: json['fcmToken'] as String?,
       lastActiveAt: json['lastActiveAt'] != null
           ? DateTime.tryParse(json['lastActiveAt'] as String)
@@ -389,7 +403,6 @@ class UserProfile {
         'limitingBeliefs': limitingBeliefs,
         'futureSelfPractice': futureSelfPractice?.toJson(),
         'futureSelfSetup': futureSelfSetup?.toJson(),
-        'manifestationAlignment': manifestationAlignment.toJson(),
         'beliefPatternHistory':
             beliefPatternHistory.map((b) => b.toJson()).toList(),
         'deepDive': deepDive.toJson(),
@@ -402,6 +415,7 @@ class UserProfile {
         'dailyFocusAction': dailyFocusAction,
         'dailyFocusActionDate': dailyFocusActionDate,
         'dailyFocusActionCompleted': dailyFocusActionCompleted,
+        'completedPriorityActions': completedPriorityActions,
         'journalPreference': journalPreference,
         'recentJournalSummaries':
             recentJournalSummaries.map((s) => s.toJson()).toList(),
@@ -410,6 +424,8 @@ class UserProfile {
         'encouragementMessages':
             encouragementMessages.map((m) => m.toJson()).toList(),
         'partnerUids': partnerUids,
+        'coachMemory': coachMemory.toJson(),
+        'coachDisclaimerAcceptedAt': coachDisclaimerAcceptedAt?.toIso8601String(),
         'fcmToken': fcmToken,
         'lastActiveAt': lastActiveAt?.toIso8601String(),
         'createdAt': createdAt.toIso8601String(),

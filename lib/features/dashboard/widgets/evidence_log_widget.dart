@@ -5,11 +5,11 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/constants/app_strings.dart';
-import '../../../core/widgets/app_card.dart';
-import '../../../core/widgets/section_header.dart';
+import '../../../core/utils/app_date_utils.dart';
 import '../../../models/user_profile.dart';
 import '../../../models/evidence_entry.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../providers/daily_completion_provider.dart';
 
 class EvidenceLogWidget extends ConsumerStatefulWidget {
   final UserProfile profile;
@@ -49,19 +49,19 @@ class _EvidenceLogWidgetState extends ConsumerState<EvidenceLogWidget> {
       await ref.read(firestoreServiceProvider).updateUserField(uid, {
         'evidenceLog': updated.map((e) => e.toJson()).toList(),
       });
+      if (!mounted) return;
 
+      await ref
+          .read(dailyCompletionProvider.notifier)
+          .toggle('evidenceLogged', true);
       _controller.clear();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Evidence logged! Keep building that identity.')),
-        );
-      }
+      if (!mounted) return;
+      Navigator.of(context).pop();
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(AppStrings.errorGeneric)),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(AppStrings.errorGeneric)),
+      );
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -69,71 +69,182 @@ class _EvidenceLogWidgetState extends ConsumerState<EvidenceLogWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        SectionHeader(title: AppStrings.evidenceLog),
-        const SizedBox(height: AppSpacing.md),
-        AppCard(
+    final recent = widget.profile.evidenceLog.reversed.take(3).toList();
+    final identity = widget.profile.identityStatement.trim();
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.sm,
+            AppSpacing.lg,
+            AppSpacing.lg,
+          ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.star_rounded, color: AppColors.warning, size: 16),
-                  const SizedBox(width: AppSpacing.xs),
-                  Expanded(
-                    child: Text(
-                      AppStrings.evidencePrompt,
-                      style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.md),
-              TextField(
-                controller: _controller,
-                maxLines: 3,
-                style: AppTextStyles.bodyMedium,
-                cursorColor: AppColors.primary,
-                decoration: InputDecoration(
-                  hintText: 'I showed up for...',
-                  hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
-                  filled: true,
-                  fillColor: AppColors.surface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                    borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+              // Drag handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
-              Align(
-                alignment: Alignment.centerRight,
-                child: _isSaving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                      )
-                    : TextButton.icon(
-                        onPressed: _save,
-                        icon: const Icon(Icons.check_rounded, size: 16),
-                        label: const Text('Log Evidence'),
-                        style: TextButton.styleFrom(foregroundColor: AppColors.primary),
-                      ),
+              // Header
+              Row(
+                children: [
+                  const Icon(Icons.nightlight_round,
+                      color: AppColors.secondary, size: 18),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(
+                    AppStrings.evidenceLog,
+                    style: AppTextStyles.headlineSmall,
+                  ),
+                ],
               ),
+              // Identity context block
+              if (identity.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.md),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceElevated,
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        AppStrings.evidenceIdentityLabel.toUpperCase(),
+                        style: AppTextStyles.labelSmall.copyWith(
+                          color: AppColors.secondary,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        identity,
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: AppColors.textPrimary,
+                          fontStyle: FontStyle.italic,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                AppStrings.evidencePrompt,
+                style: AppTextStyles.bodyMedium
+                    .copyWith(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              // Input row
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      style: AppTextStyles.bodyMedium,
+                      cursorColor: AppColors.primary,
+                      maxLines: 4,
+                      minLines: 3,
+                      autofocus: true,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: InputDecoration(
+                        hintText: AppStrings.evidenceHint,
+                        hintStyle: AppTextStyles.bodyMedium
+                            .copyWith(color: AppColors.textMuted),
+                        filled: true,
+                        fillColor: AppColors.surfaceElevated,
+                        border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppSpacing.radiusMd),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppSpacing.radiusMd),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppSpacing.radiusMd),
+                          borderSide: const BorderSide(
+                              color: AppColors.primary, width: 1.5),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.sm,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  _isSaving
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppColors.primary),
+                        )
+                      : IconButton(
+                          onPressed: _save,
+                          icon: const Icon(Icons.send_rounded),
+                          color: AppColors.primary,
+                        ),
+                ],
+              ),
+              // Recent entries
+              if (recent.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.lg),
+                const Divider(color: AppColors.border, height: 1),
+                const SizedBox(height: AppSpacing.md),
+                ...recent.map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.circle, size: 6, color: AppColors.textMuted),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            e.content,
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Text(
+                          AppDateUtils.formatDateShort(e.createdAt),
+                          style: AppTextStyles.labelSmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 }

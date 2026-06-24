@@ -45,7 +45,7 @@ class GoalsSummaryWidget extends StatelessWidget {
           child: SectionHeader(
             title: AppStrings.goalsSummary,
             actionLabel: 'See All',
-            onAction: () => context.go('/actions'),
+            onAction: () => context.go('/actions?tab=goals'),
           ),
         ),
         const SizedBox(height: AppSpacing.md),
@@ -53,7 +53,7 @@ class GoalsSummaryWidget extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPaddingH),
             child: GestureDetector(
-              onTap: () => context.go('/actions'),
+              onTap: () => context.go('/actions?tab=goals'),
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(AppSpacing.lg),

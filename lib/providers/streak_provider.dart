@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/utils/manifestation_scoring.dart';
 import 'auth_provider.dart';
 
 final streakProvider = Provider<int>((ref) {
@@ -13,5 +14,5 @@ final perfectDayCountProvider = Provider<int>((ref) {
 
 final alignmentScoreProvider = Provider<double>((ref) {
   final profile = ref.watch(currentUserProfileProvider).valueOrNull;
-  return profile?.manifestationAlignment.overall ?? 50.0;
+  return profile != null ? ManifestationScoring.calculate(profile).overall : 50.0;
 });

@@ -16,6 +16,7 @@ import 'steps/step_identity.dart';
 import 'steps/step_mental_toughness.dart';
 import 'steps/step_fears.dart';
 import 'steps/step_summary.dart';
+import 'steps/step_manifestation_system.dart';
 import 'steps/step_ai_summary.dart';
 
 /// Step index constants — update here if order ever changes.
@@ -26,8 +27,9 @@ const _kStepIdentity = 3;
 const _kStepMentalToughness = 4;
 const _kStepFears = 5;
 const _kStepSummary = 6;
-const _kStepAiAnalysis = 7;
-const _kTotalSteps = 8;
+const _kStepManifestation = 7;
+const _kStepAiAnalysis = 8;
+const _kTotalSteps = 9;
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -232,11 +234,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     limitingBeliefs: _limitingBeliefs,
                     mentalToughnessScore: _mentalToughnessScore,
                     fearsDrift: _fearsDrift,
-                    onComplete: () => _goToStep(_kStepAiAnalysis),
+                    onComplete: () => _goToStep(_kStepManifestation),
                     onBack: () => _goToStep(_kStepFears),
                   ),
 
-                  // Step 7 — AI Analysis
+                  // Step 7 — Manifestation System intro
+                  StepManifestationSystem(
+                    onNext: () => _goToStep(_kStepAiAnalysis),
+                    onBack: () => _goToStep(_kStepSummary),
+                  ),
+
+                  // Step 8 — AI Analysis
                   StepAiSummary(
                     blueprint: _blueprint,
                     limitingBeliefs: _limitingBeliefs,

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/utils/app_date_utils.dart';
 import '../models/user_profile.dart';
@@ -46,8 +47,9 @@ class DailyWisdomNotifier extends StateNotifier<DailyWisdomState> {
     final today = AppDateUtils.todayString();
     final cached = profile.dailyWisdom[today];
 
-    // Serve cache immediately.
-    if (cached != null && cached.isNotEmpty) {
+    // Serve cache immediately — but not if the cached value is the fallback
+    // string, which means a prior Claude failure was incorrectly persisted.
+    if (cached != null && cached.isNotEmpty && cached != _fallback) {
       state = state.copyWith(wisdom: cached);
       return;
     }
@@ -74,7 +76,9 @@ class DailyWisdomNotifier extends StateNotifier<DailyWisdomState> {
           'dailyWisdom': newMap,
         });
       }
-    } catch (_) {
+    } catch (e) {
+      _generateCalled = false;
+      debugPrint('DailyWisdomNotifier: generation failed — $e');
       state = const DailyWisdomState().copyWith(wisdom: _fallback, isLoading: false);
     }
   }

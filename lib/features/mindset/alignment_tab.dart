@@ -1,72 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/widgets/app_card.dart';
+import '../../core/widgets/manifestation_system_explainer.dart';
+import '../../core/utils/manifestation_scoring.dart';
 import '../../models/user_profile.dart';
 import '../../models/manifestation_alignment.dart';
-import '../../providers/auth_provider.dart';
 import 'dart:math' as math;
 
-class AlignmentTab extends ConsumerStatefulWidget {
+class AlignmentTab extends StatelessWidget {
   final UserProfile profile;
 
   const AlignmentTab({super.key, required this.profile});
 
   @override
-  ConsumerState<AlignmentTab> createState() => _AlignmentTabState();
-}
-
-class _AlignmentTabState extends ConsumerState<AlignmentTab> {
-  late ManifestationAlignment _alignment;
-  bool _isDirty = false;
-  bool _isSaving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _alignment = widget.profile.manifestationAlignment;
-  }
-
-  @override
-  void didUpdateWidget(AlignmentTab old) {
-    super.didUpdateWidget(old);
-    if (!_isDirty) {
-      _alignment = widget.profile.manifestationAlignment;
-    }
-  }
-
-  Future<void> _save() async {
-    final uid = ref.read(authStateProvider).valueOrNull?.uid;
-    if (uid == null) return;
-    setState(() => _isSaving = true);
-    try {
-      await ref.read(firestoreServiceProvider).updateUserField(uid, {
-        'manifestationAlignment': _alignment.copyWith(recordedAt: DateTime.now()).toJson(),
-      });
-      if (mounted) setState(() => _isDirty = false);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to save. Please try again.')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
-  }
-
-  void _update(ManifestationAlignment updated) {
-    setState(() {
-      _alignment = updated;
-      _isDirty = true;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final alignment = ManifestationScoring.calculate(profile);
+    final isRampingUp = ManifestationScoring.isRampingUp(profile);
+    final rampDay = ManifestationScoring.daysSinceSignup(profile) + 1;
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.screenPaddingH,
@@ -75,38 +29,41 @@ class _AlignmentTabState extends ConsumerState<AlignmentTab> {
         100,
       ),
       children: [
-        _AlignmentHero(alignment: _alignment).animate().fadeIn(duration: 400.ms),
+        _AlignmentHero(alignment: alignment).animate().fadeIn(duration: 400.ms),
+        if (isRampingUp) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Building your baseline (day $rampDay of 10)',
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted),
+          ),
+        ],
         const SizedBox(height: AppSpacing.xl),
         Row(
           children: [
-            Expanded(child: Text('Adjust Your Scores', style: AppTextStyles.headlineSmall)),
-            if (_isDirty)
-              _isSaving
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                    )
-                  : TextButton(
-                      onPressed: _save,
-                      child: const Text('Save'),
-                    ),
+            Expanded(
+              child: Text('Your Alignment Breakdown', style: AppTextStyles.headlineSmall),
+            ),
+            IconButton(
+              onPressed: () => showManifestationSystemSheet(context),
+              icon: const Icon(Icons.info_outline_rounded),
+              color: AppColors.textSecondary,
+              iconSize: AppSpacing.iconLg,
+              tooltip: 'How this works',
+              visualDensity: VisualDensity.compact,
+            ),
           ],
         ),
         const SizedBox(height: AppSpacing.xs),
         Text(
-          'Reflect honestly on each dimension of your alignment.',
+          'Each layer is calculated from what you actually do, not a self-rating.',
           style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
         ),
         const SizedBox(height: AppSpacing.md),
-        _EditableDimensionCards(
-          alignment: _alignment,
-          onChanged: _update,
-        ).animate().fadeIn(delay: 200.ms),
+        _DimensionBreakdown(alignment: alignment).animate().fadeIn(delay: 200.ms),
         const SizedBox(height: AppSpacing.xl),
         Text('Tips to Level Up', style: AppTextStyles.headlineSmall),
         const SizedBox(height: AppSpacing.md),
-        _TipsSection(alignment: _alignment).animate().fadeIn(delay: 400.ms),
+        _TipsSection(alignment: alignment).animate().fadeIn(delay: 400.ms),
       ],
     );
   }
@@ -223,17 +180,16 @@ class _ScoreRingPainter extends CustomPainter {
   bool shouldRepaint(_ScoreRingPainter old) => old.score != score;
 }
 
-class _EditableDimensionCards extends StatelessWidget {
+class _DimensionBreakdown extends StatelessWidget {
   final ManifestationAlignment alignment;
-  final ValueChanged<ManifestationAlignment> onChanged;
 
-  const _EditableDimensionCards({required this.alignment, required this.onChanged});
+  const _DimensionBreakdown({required this.alignment});
 
   static const _descriptions = {
-    'Subconscious': 'Your deep-rooted beliefs and identity programs that shape reality automatically.',
-    'Thought': 'The quality and direction of your conscious thoughts and mental focus.',
-    'Action': 'Your daily behaviors, habits, and committed execution toward goals.',
-    'Results': 'The tangible outcomes and evidence manifesting in your external world.',
+    'Subconscious': 'Fed by morning + evening affirmations and future-self visualization.',
+    'Thought': 'Fed by journaling and coaching conversations.',
+    'Action': 'Fed by completing habits and priority actions.',
+    'Results': 'Average progress across your active goals.',
   };
 
   @override
@@ -265,34 +221,20 @@ class _EditableDimensionCards extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.xs),
+                const SizedBox(height: AppSpacing.sm),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: value / 100,
+                    backgroundColor: AppColors.border,
+                    valueColor: const AlwaysStoppedAnimation(AppColors.primary),
+                    minHeight: 6,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
                 Text(
                   _descriptions[name] ?? '',
                   style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    activeTrackColor: AppColors.primary,
-                    inactiveTrackColor: AppColors.border,
-                    thumbColor: AppColors.primary,
-                    overlayColor: AppColors.primaryGlow,
-                    trackHeight: 6,
-                  ),
-                  child: Slider(
-                    value: value,
-                    min: 0,
-                    max: 100,
-                    divisions: 20,
-                    onChanged: (v) {
-                      onChanged(switch (name) {
-                        'Subconscious' => alignment.copyWith(subconscious: v),
-                        'Thought' => alignment.copyWith(thought: v),
-                        'Action' => alignment.copyWith(action: v),
-                        _ => alignment.copyWith(results: v),
-                      });
-                    },
-                  ),
                 ),
               ],
             ),

@@ -14,20 +14,43 @@ import '../../core/widgets/responsive_layout.dart';
 import '../../core/utils/app_date_utils.dart';
 import '../../models/journal_entry.dart';
 import '../../providers/journal_provider.dart';
+import '../../providers/daily_completion_provider.dart';
 
-class JournalScreen extends ConsumerWidget {
+class JournalScreen extends ConsumerStatefulWidget {
   const JournalScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<JournalScreen> createState() => _JournalScreenState();
+}
+
+class _JournalScreenState extends ConsumerState<JournalScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final journalDone =
+          ref.read(dailyCompletionProvider).journalCompleted;
+      if (!journalDone) {
+        context.push('/journal/new');
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final entriesAsync = ref.watch(journalEntriesProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/journal/new'),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text(AppStrings.newEntry),
+      floatingActionButton: entriesAsync.whenOrNull(
+        data: (entries) => entries.isEmpty
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: () => context.push('/journal/new'),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text(AppStrings.newEntry),
+              ),
       ),
       body: SafeArea(
         bottom: false,
@@ -63,12 +86,14 @@ class JournalScreen extends ConsumerWidget {
               data: (entries) {
                 if (entries.isEmpty) {
                   return Expanded(
-                    child: EmptyState(
-                      icon: Icons.menu_book_rounded,
-                      title: AppStrings.noJournalEntries,
-                      subtitle: AppStrings.noJournalSubtitle,
-                      ctaLabel: AppStrings.newEntry,
-                      onCta: () => context.push('/journal/new'),
+                    child: Center(
+                      child: EmptyState(
+                        icon: Icons.menu_book_rounded,
+                        title: AppStrings.noJournalEntries,
+                        subtitle: AppStrings.noJournalSubtitle,
+                        ctaLabel: AppStrings.newEntry,
+                        onCta: () => context.push('/journal/new'),
+                      ),
                     ),
                   );
                 }

@@ -1,9 +1,12 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import '../../models/user_profile.dart';
 import '../../models/chat_message.dart';
+import '../../models/coach_reply.dart';
 import '../../models/future_self_setup.dart';
+import 'coaching_frameworks.dart';
 import 'user_context_builder.dart';
 
 /// All Claude AI calls route through the Firebase Cloud Function `callClaude`.
@@ -58,16 +61,108 @@ class ClaudeService {
     );
   }
 
+  /// Calls the multi-turn `callClaudeConversation` Cloud Function with a real
+  /// messages array. Throws on network/server error.
+  Future<String> completeConversation({
+    required String systemPrompt,
+    required List<Map<String, String>> messages,
+    int maxTokens = 1200,
+  }) async {
+    try {
+      final callable = _functions.httpsCallable('callClaudeConversation');
+      final result = await callable.call<Map<String, dynamic>>({
+        'systemPrompt': systemPrompt,
+        'messages': messages,
+        'maxTokens': maxTokens,
+      });
+      final content = result.data['content'];
+      if (content is String) return content;
+      throw Exception('Unexpected response shape from callClaudeConversation');
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint(
+          'ClaudeService.completeConversation: ${e.code}: ${e.message}');
+      rethrow;
+    } catch (e) {
+      debugPrint('ClaudeService.completeConversation: unexpected error — $e');
+      rethrow;
+    }
+  }
+
+  /// Builds a trimmed, well-formed messages array for the conversation engine.
+  ///
+  /// Keeps the MOST RECENT turns (not the oldest), summarizes anything older so
+  /// long-running threads stay coherent without blowing the token budget, and
+  /// guarantees the array starts with a user turn.
+  List<Map<String, String>> _buildConversationMessages(
+    List<ChatMessage> history,
+    String userMessage, {
+    int recentTurns = 16,
+  }) {
+    final cleaned = history
+        .where((m) => m.content.trim().isNotEmpty)
+        .toList();
+
+    final older = cleaned.length > recentTurns
+        ? cleaned.sublist(0, cleaned.length - recentTurns)
+        : <ChatMessage>[];
+    final recent = cleaned.length > recentTurns
+        ? cleaned.sublist(cleaned.length - recentTurns)
+        : cleaned;
+
+    final messages = <Map<String, String>>[];
+
+    // Fold older turns into a single summary user-turn so context isn't lost.
+    if (older.isNotEmpty) {
+      final summary = older
+          .map((m) =>
+              '${m.isAssistant ? 'Coach' : 'User'}: ${_stripActionMarkers(m.content)}')
+          .join('\n');
+      messages.add({
+        'role': 'user',
+        'content':
+            '[Earlier in this conversation, summarized]\n$summary\n[End summary]',
+      });
+    }
+
+    for (final m in recent) {
+      messages.add({
+        'role': m.isAssistant ? 'assistant' : 'user',
+        'content': m.isAssistant ? _stripActionMarkers(m.content) : m.content,
+      });
+    }
+
+    messages.add({'role': 'user', 'content': userMessage});
+
+    // Anthropic requires the first turn to be a user turn.
+    if (messages.isNotEmpty && messages.first['role'] != 'user') {
+      messages.insert(0, {'role': 'user', 'content': '(start of conversation)'});
+    }
+    return messages;
+  }
+
+  static String _stripActionMarkers(String text) =>
+      text.replaceAll(RegExp(r'\[\[ACTION:[^\]]*\]\]'), '').trim();
+
   // ─── System prompts ───────────────────────────────────────────────────────
 
   String _coachSystemPrompt(UserProfile profile) {
-    return '''You are the MindsetForge AI Coach — a world-class mindset coach drawing from six foundational books:
-1. Think and Grow Rich by Napoleon Hill — goal-setting, persistence, definiteness of purpose, burning desire
-2. Outwitting the Devil by Napoleon Hill — defeating procrastination, fear, drift, and indecision
-3. Secrets of the Millionaire Mind by T. Harv Eker — money beliefs, abundance vs. scarcity mindset
-4. Mind Magic by James R. Doty MD — visualization, manifestation, self-compassion, rewiring the brain
-5. 177 Mental Toughness Secrets by Steve Siebold — performance under pressure, discomfort as growth
-6. How to Win Friends and Influence People by Dale Carnegie — relationships, persuasion, leadership
+    // Compose only the blocks that have content so the prompt stays tight.
+    final optionalBlocks = <String>[
+      UserContextBuilder.coachMemoryBlock(profile),
+      UserContextBuilder.deepDiveBlock(profile),
+      UserContextBuilder.routineTimingBlock(profile),
+    ].where((b) => b.isNotEmpty).join('\n\n');
+
+    final memoryAndDeepDive =
+        optionalBlocks.isNotEmpty ? '\n\n$optionalBlocks' : '';
+
+    return '''You are ${profile.firstName}'s personal mindset coach inside MindsetForge. You are not a generic AI assistant. You are the one coach who actually knows this person, remembers their history, and is invested in who they are becoming. Talk like a sharp, warm human coach who has earned their trust, not like a chatbot.
+
+${CoachingFrameworks.playbook}
+
+${CoachingFrameworks.manifestationPipeline}
+
+# WHO YOU ARE TALKING TO
 
 ${UserContextBuilder.coreBlock(profile)}
 
@@ -75,26 +170,104 @@ ${UserContextBuilder.goalsBlock(profile)}
 
 ${UserContextBuilder.habitsBlock(profile)}
 
+${UserContextBuilder.behavioralBlock(profile)}
+
 ${UserContextBuilder.recentActivityBlock(profile)}
 
 ${UserContextBuilder.beliefHistoryBlock(profile)}
 
+${UserContextBuilder.baselineDeltaBlock(profile)}
+
+${UserContextBuilder.affirmationsBlock(profile)}
+
 ${UserContextBuilder.manifestationBlock(profile)}
 
-${UserContextBuilder.journalMoodBlock(profile)}
+${UserContextBuilder.journalMoodBlock(profile)}$memoryAndDeepDive
 
-COACHING RULES:
-- Detect the user's situation: auto-select tone from [Support, Clarity, Action, Belief Exploration]
-- Reference the most relevant framework from the 6 books for each response
-- Always weave in the user's identity statement and goals naturally
-- Address limiting beliefs when they surface implicitly or explicitly
-- FEAR AWARENESS: When the user hesitates, avoids, or seems stuck, name their primary fear directly using Outwitting the Devil's framework — call it out as the drifting pattern it is
-- MENTAL TOUGHNESS: Calibrate challenge level to their toughness score — push a Champion harder, meet a Rising with encouragement
-- Use journal mood trend to calibrate emotional tone (if declining, lead with empathy first)
-- Be direct, warm, and transformational — never generic
-- Keep responses focused (150–300 words unless asked for more)
-- End with a reflection question or a specific action step
-- Never use therapy language. You are a coach, not a therapist.''';
+# COACHING MODES (pick ONE per turn)
+
+- SUPPORT: They're hurting or low. Lead with empathy and steadiness before anything else.
+- CLARITY: It's foggy or vague. Help them name what's actually going on or what they truly want.
+- ACTION: They're ready or stalling. Extract one concrete next step.
+- REFLECTIVE_INQUIRY: Use Socratic questioning to help them understand THEMSELVES, why a feeling or pattern is showing up. This is your signature move (see below).
+- BELIEF_REFRAME: A limiting belief surfaced. Name it as a belief (not fact) and offer the reframe.
+- ACCOUNTABILITY: They committed to something or a pattern is repeating. Hold them to it warmly.
+- CELEBRATE: They won or showed up. Make it land, then connect it to identity.
+
+# REFLECTIVE INQUIRY MOVE (your signature)
+
+Great coaches help people see themselves. When there's something underneath the surface:
+- Use "a part of you" language: "It sounds like a part of you believes X. Where do you think that comes from?"
+- Ask ONE genuine curiosity question that opens a door inward, then STOP. Do not stack questions.
+- Do not rush to reassure or fix. Sit in the question with them. Let them do the discovering.
+- Mirror back the pattern you're hearing, then ask what it's protecting them from or pointing to.
+This is how a trusted friend who happens to be a brilliant coach talks. Use it often, but never more than one inward question per turn.
+
+# OPERATING CONTRACT
+
+- ONE idea per turn. One insight, one question, or one action. Never a list of five things.
+- Reference what you actually know about them (memory, goals, patterns, journal mood) so it's clear you remember. Do not recite their data like a file; weave it in like someone who remembers.
+- Name the mechanism when a framework fits ("this is drifting", "that's your money blueprint").
+- Calibrate to mental toughness: push a Champion harder, meet someone Still Building with more warmth.
+- If journal mood is declining, lead with empathy before any push.
+- Keep it tight: 60 to 160 words. Short and potent beats long and generic.
+- End with EITHER one real question OR one specific next step, never both, never neither.
+
+# SOUND HUMAN (anti-AI rules)
+
+- Never mirror their words back as a preface ("It sounds like you're feeling frustrated that..."). Just respond like a person.
+- No therapy-speak, no "I hear you", no "thank you for sharing", no hedging like "it seems" or "perhaps".
+- No bullet lists or numbered steps in your reply. Talk in plain sentences.
+- Vary your openings. Never start consecutive replies the same way.
+- Before sending, silently check: "Would a real coach who knows ${profile.firstName} say it exactly like this?" If it sounds like an AI, rewrite it.
+
+# COACH, NOT THERAPIST
+
+You coach mindset, goals, beliefs, and behavior — forward-looking growth. You do NOT diagnose, treat mental illness, or process trauma. If the conversation moves toward clinical territory (depression, trauma, abuse, disordered eating), you may hold space briefly with warmth, then gently note that a licensed professional is the right support for that, and steer back to what they can work on with you. This is a boundary of competence, not a brush-off.
+
+# SAFETY PROTOCOL (highest priority, overrides everything)
+
+If the user expresses any intent or thoughts of suicide, self-harm, or harming others, you MUST:
+- Set "safety" to "crisis".
+- STOP coaching entirely. Do not give mindset advice, frameworks, action steps, or questions.
+- Respond with genuine human warmth and concern, tell them they matter and they are not alone, and urge them to reach out to a crisis line or emergency services right now. The app will show resource buttons, so tell them help is one tap away below your message.
+If they express serious distress without crisis intent, set "safety" to "concern", lead fully with support, and keep any coaching very gentle. Otherwise set "safety" to "none".
+
+# INLINE ACTIONS (optional)
+
+The app offers exactly FOUR things the user can create or do, and nothing else. You may embed AT MOST ONE action marker per turn, ONLY when you are explicitly recommending the user create one of these exact items or run the Future Self practice. Use exactly this format: [[ACTION:Type:Payload]]
+
+Allowed types (use the exact word, singular):
+- Goal — Payload is the exact goal title to prefill (e.g. "Run a half marathon by spring").
+- Habit — Payload is the exact habit name to prefill (e.g. "Meditate 10 minutes every morning").
+- Affirmation — Payload is the exact affirmation sentence to prefill (e.g. "I am disciplined and follow through").
+- FutureSelf — Payload is ignored; use it only to start the Future Self visualization practice. Write [[ACTION:FutureSelf:Start a Future Self practice]].
+
+The Payload becomes the prefilled text in the creation form, so it MUST be the literal item content, never a UI label or instruction.
+
+CRITICAL: Only emit a marker when the action maps EXACTLY to one of these four flows. NEVER emit a marker for anything the app does not do — no "schedule a working session", "block time on your calendar", "set a reminder", "review this later", "open your journal", "track your mood", etc. If the next step is not literally creating a goal/habit/affirmation or doing the Future Self practice, include NO marker and just say it in plain text. Most turns need none.
+
+Example: "Let's lock this in. [[ACTION:Goal:Run a half marathon by spring]]"
+
+# RESPONSE FORMAT (return ONLY this JSON object, nothing else)
+
+{
+  "response": "your coaching message as plain text, may contain at most one [[ACTION:Type:Payload]] marker",
+  "mode": "support | clarity | action | reflective_inquiry | belief_reframe | accountability | celebrate",
+  "framework": "the one book you drew from, or empty string",
+  "safety": "none | concern | crisis",
+  "memory_updates": {
+    "session_summary": "one sentence recap of this exchange, or empty",
+    "long_term_summary": "only if your understanding of them meaningfully updated, else empty",
+    "new_commitments": ["any concrete thing they committed to, else empty array"],
+    "fulfilled_commitments": ["any prior commitment they reported doing"],
+    "patterns": ["any recurring pattern worth remembering, short phrase"],
+    "key_moments": ["any breakthrough or emotionally significant moment"],
+    "belief_reframes": [{"belief": "the limiting belief", "reframe": "the reframe you offered"}]
+  }
+}
+
+Keep memory_updates minimal and only include what genuinely happened this turn. Empty arrays and empty strings are expected most of the time.''';
   }
 
   String _futureSelfSystemPrompt(UserProfile profile) {
@@ -142,47 +315,46 @@ RULES — NEVER BREAK THESE:
     final weakest = sorted.first.key;
     final strongest = sorted.last.key;
 
-    try {
-      return await complete(
-        systemPrompt:
-            'You generate one powerful, concise daily wisdom quote for a mindset coaching app. '
-            'Draw inspiration from classic mindset and success books such as Think and Grow Rich, '
-            'Outwitting the Devil, Secrets of the Millionaire Mind, Mind Magic, '
-            '177 Mental Toughness Secrets, and How to Win Friends and Influence People. '
-            'The quote must be tied to the user\'s journey and weakest trait. '
-            'Return ONLY the quote, no attribution, no preamble. Max 20 words.',
-        userPrompt:
-            'User: ${profile.displayName}\n'
-            'Weakest trait: $weakest | Strongest trait: $strongest\n'
-            'Resilience score: ${blueprint.resilience}/10\n'
-            'Identity: "${profile.identityStatement}"\n'
-            'Active goals: ${profile.goals.where((g) => g.status == 'active').take(2).map((g) => g.title).join(', ')}\n'
-            '${UserContextBuilder.recentActivityBlock(profile)}\n'
-            '${UserContextBuilder.beliefHistoryBlock(profile)}',
-        maxTokens: 80,
-      );
-    } catch (_) {
-      return 'Your inner world creates your outer world.';
-    }
+    return await complete(
+      systemPrompt:
+          'You generate one powerful, concise daily wisdom quote for a mindset coaching app. '
+          'Draw inspiration from classic mindset and success books such as Think and Grow Rich, '
+          'Outwitting the Devil, Secrets of the Millionaire Mind, Mind Magic, '
+          '177 Mental Toughness Secrets, and How to Win Friends and Influence People. '
+          'The quote must be tied to the user\'s journey and weakest trait. '
+          'Return ONLY the quote, no attribution, no preamble. Max 20 words.',
+      userPrompt:
+          'User: ${profile.displayName}\n'
+          'Weakest trait: $weakest | Strongest trait: $strongest\n'
+          'Resilience score: ${blueprint.resilience}/10\n'
+          'Identity: "${profile.identityStatement}"\n'
+          'Active goals: ${profile.goals.where((g) => g.status == 'active').take(2).map((g) => g.title).join(', ')}\n'
+          '${UserContextBuilder.recentActivityBlock(profile)}\n'
+          '${UserContextBuilder.beliefHistoryBlock(profile)}',
+      maxTokens: 80,
+    );
   }
 
-  Future<String> generateCoachResponse(
+  /// Generates a structured coach reply (message + mode + framework + safety +
+  /// memory updates). Uses the multi-turn conversation engine and keeps the
+  /// most recent turns rather than the oldest.
+  Future<CoachReply> generateCoachResponse(
     UserProfile profile,
     List<ChatMessage> history,
     String userMessage,
   ) async {
     try {
-      final messages = [
-        ...history.take(20).map((m) => m.toApiFormat()),
-        {'role': 'user', 'content': userMessage},
-      ];
-      return await completeWithHistory(
+      final messages = _buildConversationMessages(history, userMessage);
+      final raw = await completeConversation(
         systemPrompt: _coachSystemPrompt(profile),
         messages: messages,
-        maxTokens: 500,
+        maxTokens: 1100,
       );
+      return CoachReply.parse(raw);
     } catch (_) {
-      return 'I\'m having trouble connecting right now. Please try again in a moment.';
+      return CoachReply.plain(
+        'I\'m having trouble connecting right now. Give me a moment and try again.',
+      );
     }
   }
 
@@ -202,7 +374,7 @@ RULES — NEVER BREAK THESE:
         maxTokens: 400,
       );
     } catch (_) {
-      return 'I remember this moment. Trust the path you\'re on — it leads somewhere extraordinary.';
+      return 'I remember this moment. Trust the path you\'re on, it leads somewhere extraordinary.';
     }
   }
 
@@ -566,20 +738,58 @@ RULES — NEVER BREAK THESE:
   }) async {
     final contextNote = journalContext != null
         ? '\n\nThe user just wrote a journal entry:\n---\n$journalContext\n---\n'
-            'Open by acknowledging what they wrote.'
+            'Open by acknowledging what they wrote, specifically.'
         : '';
+
+    // Double-randomized freshness: a style x a profile-focus x a session salt
+    // so openers feel different every time instead of "Hey NAME, what's on your
+    // mind?" on repeat.
+    final rng = Random();
+    const styles = [
+      'Open like you are picking up a thread from before, not starting cold.',
+      'Open with a single sharp observation about where they are right now.',
+      'Open by naming something you genuinely respect about their recent effort.',
+      'Open with quiet curiosity, like a friend who noticed something.',
+      'Open with a small challenge that meets their current energy.',
+      'Open by connecting today to who they said they want to become.',
+    ];
+    final focuses = <String>[
+      if (profile.coachMemory.lastSessionSummary.isNotEmpty)
+        'Reference your last session: "${profile.coachMemory.lastSessionSummary}".',
+      if (profile.coachMemory.openCommitments.any((c) => !c.fulfilled))
+        'Gently check in on an open commitment they made.',
+      if (profile.currentStreak > 0)
+        'Acknowledge their ${profile.currentStreak}-day streak naturally.',
+      if (profile.goals.any((g) => g.status == 'active'))
+        'Tie into one of their active goals.',
+      'Tie into their identity statement.',
+      'Tie into their recent journal mood.',
+    ];
+    final style = styles[rng.nextInt(styles.length)];
+    final focus = focuses[rng.nextInt(focuses.length)];
+    final salt = rng.nextInt(100000);
+
+    final memoryBlock = UserContextBuilder.coachMemoryBlock(profile);
+    final memoryNote = memoryBlock.isNotEmpty ? '\n\n$memoryBlock' : '';
 
     try {
       final response = await complete(
         systemPrompt:
-            'You are an AI mindset coach opening a coaching session. '
-            'Return ONLY valid JSON with keys: "opener" (1-2 sentence warm greeting), '
-            '"prompts" (array of exactly 4 short follow-up question strings ≤10 words each). '
+            'You are ${profile.firstName}\'s personal mindset coach opening a session. '
+            'You know them well and remember your history together. Sound like a real '
+            'human coach, never like an AI. $style $focus '
+            'Do not mention this instruction or the variation id. '
+            'Return ONLY valid JSON with keys: "opener" (1-2 warm, specific sentences) '
+            'and "prompts" (array of exactly 4 short prompts the USER could tap to say to YOU, '
+            'each phrased in first person from the user\'s point of view, 10 words or fewer). '
             'No other text.',
         userPrompt:
             '${UserContextBuilder.coreBlock(profile)}\n\n'
             '${UserContextBuilder.goalsBlock(profile)}\n\n'
-            '${UserContextBuilder.recentActivityBlock(profile)}$contextNote',
+            '${UserContextBuilder.behavioralBlock(profile)}\n\n'
+            '${UserContextBuilder.recentActivityBlock(profile)}'
+            '$memoryNote$contextNote\n\n'
+            '(variation: $salt)',
         maxTokens: 350,
       );
       final jsonStr = response.contains('{')
@@ -595,12 +805,12 @@ RULES — NEVER BREAK THESE:
       };
     } catch (_) {
       return {
-        'opener': 'Hey ${profile.firstName}! What\'s on your mind today?',
+        'opener': 'Good to see you, ${profile.firstName}. Where\'s your head at today?',
         'prompts': [
-          'How am I feeling right now?',
-          'What\'s blocking my top goal?',
-          'What fear held me back today?',
-          'What would my best self do?',
+          'I\'m feeling stuck on something.',
+          'I want to talk through a goal.',
+          'A fear is holding me back.',
+          'Help me reset my focus.',
         ],
       };
     }

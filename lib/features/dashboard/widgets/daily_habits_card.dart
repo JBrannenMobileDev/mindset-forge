@@ -7,68 +7,91 @@ import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/widgets/app_card.dart';
-import '../../../core/widgets/section_header.dart';
-import '../../../models/user_profile.dart';
+import '../../../core/widgets/empty_state.dart';
 import '../../../models/habit.dart';
 import '../../../providers/habits_provider.dart';
-import '../../../providers/daily_completion_provider.dart';
 
-class HabitsChecklistWidget extends ConsumerWidget {
-  final UserProfile profile;
-
-  const HabitsChecklistWidget({super.key, required this.profile});
+/// Standalone daily habits card on the dashboard. Lists each active habit with
+/// its own checkbox and self-completes when all are done. The matching
+/// `habitsCompleted` daily-win flag is kept in sync by [HabitsNotifier], so this
+/// widget only dispatches completion — it owns no streak logic.
+class DailyHabitsCard extends ConsumerWidget {
+  const DailyHabitsCard({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final habits = ref.watch(habitsProvider);
-    final activeHabits = habits.where((h) => h.state == 'active').toList();
+    final activeHabits =
+        ref.watch(habitsProvider).where((h) => h.state == 'active').toList();
 
-    return Column(
-      children: [
-        SectionHeader(
-          title: AppStrings.habitsToday,
-          actionLabel: 'Manage',
-          onAction: () => context.go('/actions'),
+    if (activeHabits.isEmpty) {
+      return AppCard(
+        padding: EdgeInsets.zero,
+        child: SizedBox(
+          width: double.infinity,
+          child: EmptyState(
+            icon: Icons.repeat_rounded,
+            title: AppStrings.noHabitsYet,
+            subtitle: AppStrings.noHabitsSubtitle,
+            ctaLabel: AppStrings.setUpHabits,
+            onCta: () => context.go('/actions?tab=habits'),
+          ),
         ),
-        const SizedBox(height: AppSpacing.md),
-        if (activeHabits.isEmpty)
-          AppCard(
+      ).animate().fadeIn(duration: 400.ms);
+    }
+
+    final doneCount = activeHabits.where((h) => h.isCompletedToday).length;
+    final allDone = doneCount == activeHabits.length;
+
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.cardPadding,
+              AppSpacing.md,
+              AppSpacing.cardPadding,
+              AppSpacing.sm,
+            ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.add_rounded, color: AppColors.primary, size: 20),
+                Icon(
+                  allDone ? Icons.check_circle_rounded : Icons.repeat_rounded,
+                  size: 18,
+                  color: allDone ? AppColors.success : AppColors.primary,
+                ),
                 const SizedBox(width: AppSpacing.sm),
                 Text(
-                  'Add habits to track daily progress',
-                  style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                  allDone ? AppStrings.habitsAllDone : AppStrings.dailyHabits,
+                  style: AppTextStyles.headlineSmall.copyWith(
+                    color: allDone ? AppColors.success : AppColors.textPrimary,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '$doneCount/${activeHabits.length}',
+                  style: AppTextStyles.labelSmall.copyWith(
+                    color: allDone ? AppColors.success : AppColors.textMuted,
+                  ),
                 ),
               ],
             ),
-          )
-        else
-          AppCard(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: List.generate(
-                activeHabits.length.clamp(0, 5),
-                (i) => _HabitRow(
-                  habit: activeHabits[i],
-                  isLast: i == (activeHabits.length.clamp(0, 5) - 1),
-                  onComplete: () async {
-                    await ref.read(habitsProvider.notifier).completeHabit(activeHabits[i].id);
-                    final allDone = ref
-                        .read(habitsProvider)
-                        .where((h) => h.state == 'active')
-                        .every((h) => h.isCompletedToday);
-                    if (allDone) {
-                      await ref.read(dailyCompletionProvider.notifier).toggle('habitsCompleted', true);
-                    }
-                  },
-                ).animate().fadeIn(delay: Duration(milliseconds: i * 60), duration: 400.ms),
-              ),
-            ),
           ),
-      ],
+          const Divider(height: 1, color: AppColors.border),
+          for (int i = 0; i < activeHabits.length; i++)
+            _HabitRow(
+              habit: activeHabits[i],
+              isLast: i == activeHabits.length - 1,
+              onComplete: () => ref
+                  .read(habitsProvider.notifier)
+                  .completeHabit(activeHabits[i].id),
+            ).animate().fadeIn(
+                  delay: Duration(milliseconds: i * 60),
+                  duration: 400.ms,
+                ),
+        ],
+      ),
     );
   }
 }
@@ -97,6 +120,7 @@ class _HabitRow extends StatelessWidget {
             children: [
               GestureDetector(
                 onTap: habit.isCompletedToday ? null : onComplete,
+                behavior: HitTestBehavior.opaque,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   width: 28,
@@ -114,7 +138,8 @@ class _HabitRow extends StatelessWidget {
                     ),
                   ),
                   child: habit.isCompletedToday
-                      ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+                      ? const Icon(Icons.check_rounded,
+                          size: 16, color: Colors.white)
                       : null,
                 ),
               ),
@@ -153,7 +178,8 @@ class _HabitRow extends StatelessWidget {
                   const SizedBox(width: 2),
                   Text(
                     '${habit.currentStreak}',
-                    style: AppTextStyles.labelSmall.copyWith(color: AppColors.warning),
+                    style:
+                        AppTextStyles.labelSmall.copyWith(color: AppColors.warning),
                   ),
                 ],
               ),
@@ -161,7 +187,11 @@ class _HabitRow extends StatelessWidget {
           ),
         ),
         if (!isLast)
-          const Divider(height: 1, indent: AppSpacing.cardPadding + 28 + AppSpacing.md),
+          const Divider(
+            height: 1,
+            indent: AppSpacing.cardPadding + 28 + AppSpacing.md,
+            color: AppColors.border,
+          ),
       ],
     );
   }

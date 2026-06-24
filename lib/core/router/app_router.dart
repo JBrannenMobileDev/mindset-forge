@@ -9,6 +9,7 @@ import '../../features/pricing/pricing_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
 import '../../features/coach_chat/chat_screen.dart';
 import '../../features/goals_habits/actions_screen.dart';
+import '../../features/goals_habits/goal_detail_screen.dart';
 import '../../features/journal/journal_screen.dart';
 import '../../features/journal/new_journal_entry_screen.dart';
 import '../../features/journal/journal_entry_detail_screen.dart';
@@ -21,6 +22,9 @@ import '../../features/accountability/accountability_screen.dart';
 import '../../features/accountability/partner_invite_screen.dart';
 import '../../features/accountability/partner_dashboard_screen.dart';
 import '../../features/deep_dive/deep_dive_screen.dart';
+import '../../features/legal/legal_screen.dart';
+import '../constants/app_strings.dart';
+import '../constants/legal_content.dart';
 import '../../providers/auth_provider.dart';
 import '../widgets/bottom_nav_shell.dart';
 
@@ -44,11 +48,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isOnAuthPath = location == '/login' ||
           location == '/signup' ||
           location == '/splash';
+      // Legal pages are reachable pre-auth (linked from the signup screen).
+      final isPublicInfoPath = location == '/terms' || location == '/privacy';
 
       if (authAsync.isLoading) return null;
 
       if (user == null) {
-        if (isOnAuthPath) return null;
+        if (isOnAuthPath || isPublicInfoPath) return null;
         return '/login';
       }
 
@@ -121,7 +127,17 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/actions',
-            builder: (_, __) => const ActionsScreen(),
+            builder: (_, state) => ActionsScreen(
+              initialTab: state.uri.queryParameters['tab'],
+            ),
+            routes: [
+              GoRoute(
+                path: 'goal/:id',
+                builder: (_, state) => GoalDetailScreen(
+                  goalId: state.pathParameters['id']!,
+                ),
+              ),
+            ],
           ),
           GoRoute(
             path: '/journal',
@@ -174,6 +190,20 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/deep-dive',
         builder: (_, __) => const DeepDiveScreen(),
+      ),
+      GoRoute(
+        path: '/terms',
+        builder: (_, __) => const LegalScreen(
+          title: AppStrings.termsTitle,
+          sections: LegalContent.terms,
+        ),
+      ),
+      GoRoute(
+        path: '/privacy',
+        builder: (_, __) => const LegalScreen(
+          title: AppStrings.privacyTitle,
+          sections: LegalContent.privacy,
+        ),
       ),
     ],
   );

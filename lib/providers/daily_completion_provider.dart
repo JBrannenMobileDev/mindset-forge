@@ -21,7 +21,13 @@ class DailyCompletionNotifier extends StateNotifier<DailyCompletion> {
   }
 
   Future<void> toggle(String field, bool value) async {
-    final updated = _applyField(field, value);
+    final times = Map<String, String>.from(state.completionTimes);
+    if (value) {
+      times[field] = DateTime.now().toIso8601String();
+    } else {
+      times.remove(field);
+    }
+    final updated = _applyField(field, value).copyWith(completionTimes: times);
     state = updated;
     await _persist(updated);
   }
@@ -30,6 +36,8 @@ class DailyCompletionNotifier extends StateNotifier<DailyCompletion> {
     switch (field) {
       case 'habitsCompleted':
         return state.copyWith(habitsCompleted: value);
+      case 'dayPlanned':
+        return state.copyWith(dayPlanned: value);
       case 'priorityActionsCompleted':
         return state.copyWith(priorityActionsCompleted: value);
       case 'affirmationsMorning':

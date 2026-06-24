@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/widgets/shimmer_widget.dart';
 import '../../core/widgets/responsive_layout.dart';
@@ -11,9 +12,9 @@ import '../../core/widgets/empty_state.dart';
 import '../../providers/auth_provider.dart';
 import 'widgets/dashboard_header.dart';
 import 'widgets/daily_wins_tracker.dart';
+import 'widgets/daily_habits_card.dart';
 import 'widgets/focus_mode_banner.dart';
-import 'widgets/alignment_score_widget.dart';
-import 'widgets/weekly_chart_widget.dart';
+import 'widgets/progress_overview_card.dart';
 import 'widgets/getting_started_checklist.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -38,8 +39,12 @@ class DashboardScreen extends ConsumerWidget {
               return const _DashboardSkeleton();
             }
 
-            final hasHadPerfectDay = profile.dailyCompletions.any((c) => c.isPerfectDay);
             final deepDiveComplete = profile.deepDive.isFullyComplete;
+            final allOnboardingDone = profile.identityStatement.isNotEmpty &&
+                profile.goals.isNotEmpty &&
+                profile.dailyCompletions.any((c) => c.journalCompleted) &&
+                profile.dailyCompletions.any((c) => c.chatCompleted) &&
+                profile.deepDive.modules.isNotEmpty;
 
             return ResponsiveLayout(
               maxWidth: 680,
@@ -52,19 +57,14 @@ class DashboardScreen extends ConsumerWidget {
                       padding: const EdgeInsets.only(
                         left: AppSpacing.screenPaddingH,
                         right: AppSpacing.screenPaddingH,
-                        top: AppSpacing.xxl + AppSpacing.md,
+                        top: AppSpacing.md,
                       ),
                       child: DashboardHeader(profile: profile),
                     ),
                   ),
 
-                  // ── Current Focus banner (only after committing) ─────
-                  SliverToBoxAdapter(
-                    child: FocusModeBanner(profile: profile),
-                  ),
-
-                  // ── Getting Started (shown until first perfect day) ──
-                  if (!hasHadPerfectDay)
+                  // ── Getting Started (shown until all onboarding steps done) ──
+                  if (!allOnboardingDone)
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(
@@ -77,16 +77,53 @@ class DashboardScreen extends ConsumerWidget {
                       ),
                     ),
 
-                  // ── Daily Wins Tracker (hero) ─────────────────────────
+                  // ── GROUP: Today (focus + daily wins) ────────────────
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.screenPaddingH,
-                        AppSpacing.sectionGap,
-                        AppSpacing.screenPaddingH,
-                        0,
+                      padding: const EdgeInsets.only(top: AppSpacing.xxl),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const _GroupLabel(AppStrings.groupToday),
+                          const SizedBox(height: AppSpacing.md),
+                          // Current Focus banner (only after committing).
+                          // Self-collapses; carries its own bottom gap when shown.
+                          FocusModeBanner(profile: profile),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.screenPaddingH,
+                            ),
+                            child: DailyWinsTracker(profile: profile),
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: AppSpacing.screenPaddingH,
+                            ),
+                            child: DailyHabitsCard(),
+                          ),
+                        ],
                       ),
-                      child: DailyWinsTracker(profile: profile),
+                    ),
+                  ),
+
+                  // ── GROUP: Your Progress (alignment | activity) ──────
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.xxl),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const _GroupLabel(AppStrings.groupProgress),
+                          const SizedBox(height: AppSpacing.md),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.screenPaddingH,
+                            ),
+                            child: ProgressOverviewCard(profile: profile),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
 
@@ -96,7 +133,7 @@ class DashboardScreen extends ConsumerWidget {
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(
                           AppSpacing.screenPaddingH,
-                          AppSpacing.sectionGap,
+                          AppSpacing.xxl,
                           AppSpacing.screenPaddingH,
                           0,
                         ),
@@ -104,39 +141,39 @@ class DashboardScreen extends ConsumerWidget {
                       ),
                     ),
 
-                  // ── Manifestation Alignment ──────────────────────────
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.screenPaddingH,
-                        AppSpacing.sectionGap,
-                        AppSpacing.screenPaddingH,
-                        0,
-                      ),
-                      child: AlignmentScoreWidget(profile: profile),
-                    ),
-                  ),
-
-                  // ── Weekly Activity Chart ─────────────────────────────
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.screenPaddingH,
-                        AppSpacing.sectionGap,
-                        AppSpacing.screenPaddingH,
-                        0,
-                      ),
-                      child: WeeklyChartWidget(profile: profile),
-                    ),
-                  ),
-
+                  // Extra bottom space so the final card clears the floating
+                  // nav and is comfortably scrollable into view.
                   const SliverToBoxAdapter(
-                    child: SizedBox(height: 100),
+                    child: SizedBox(height: 140),
                   ),
                 ],
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+/// Lightweight section-group label (e.g. "TODAY", "YOUR PROGRESS") used to
+/// chunk the dashboard into calm, related groups.
+class _GroupLabel extends StatelessWidget {
+  final String label;
+
+  const _GroupLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.screenPaddingH,
+      ),
+      child: Text(
+        label.toUpperCase(),
+        style: AppTextStyles.overline.copyWith(
+          color: AppColors.textMuted,
+          letterSpacing: 1.2,
         ),
       ),
     );
@@ -176,11 +213,13 @@ class _DeepDiveNudgeCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Complete Your Deep Dive', style: AppTextStyles.labelLarge),
+                  Text('Complete Your Deep Dive',
+                      style: AppTextStyles.labelLarge),
                   const SizedBox(height: 2),
                   Text(
                     'Five modules to unlock your deepest patterns and tune your coach.',
-                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: AppColors.textSecondary),
                   ),
                 ],
               ),
@@ -203,7 +242,7 @@ class _DashboardSkeleton extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.screenPaddingH,
-        AppSpacing.xxl + AppSpacing.md,
+        AppSpacing.md,
         AppSpacing.screenPaddingH,
         100,
       ),

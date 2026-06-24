@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/action_step.dart';
 import '../models/goal.dart';
 import '../models/user_profile.dart';
 import 'auth_provider.dart';
@@ -43,6 +44,35 @@ class GoalsNotifier extends StateNotifier<List<Goal>> {
     await _ref.read(firestoreServiceProvider).updateUserField(uid, {
       'goals': updated.map((g) => g.toJson()).toList(),
     });
+  }
+
+  /// Toggle a single action step's completion and recompute the goal's
+  /// progress from the proportion of completed steps.
+  Future<void> toggleActionStep(String goalId, String stepId) async {
+    final goal = state.firstWhere(
+      (g) => g.id == goalId,
+      orElse: () => throw StateError('Goal $goalId not found'),
+    );
+
+    final steps = goal.actionSteps.map((s) {
+      if (s.id != stepId) return s;
+      final nowDone = !s.isCompleted;
+      return ActionStep(
+        id: s.id,
+        description: s.description,
+        isCompleted: nowDone,
+        completedAt: nowDone ? DateTime.now() : null,
+      );
+    }).toList();
+
+    final progress = steps.isEmpty
+        ? goal.progressPercent
+        : steps.where((s) => s.isCompleted).length / steps.length * 100;
+
+    await updateGoal(goal.copyWith(
+      actionSteps: steps,
+      progressPercent: progress,
+    ));
   }
 
   Future<void> completeGoal(String goalId) async {

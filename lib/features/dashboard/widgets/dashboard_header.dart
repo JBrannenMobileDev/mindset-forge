@@ -23,78 +23,61 @@ class DashboardHeader extends ConsumerWidget {
 
     final wisdomState = ref.watch(dailyWisdomProvider);
 
-    return Row(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Greeting + wisdom ────────────────────────────────────────────────
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${AppDateUtils.greetingForTime()}, ${profile.firstName}!',
-                style: AppTextStyles.headlineLarge,
-              ).animate().fadeIn(duration: 400.ms),
-              const SizedBox(height: AppSpacing.sm),
-              if (wisdomState.isLoading || wisdomState.wisdom == null)
-                ShimmerBox(width: 200, height: 14, borderRadius: AppSpacing.radiusSm)
-              else
-                Text(
-                  '"${wisdomState.wisdom!}"',
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    fontStyle: FontStyle.italic,
-                    color: AppColors.textSecondary,
-                  ),
-                ).animate().fadeIn(duration: 600.ms),
-            ],
-          ),
-        ),
-
-        const SizedBox(width: AppSpacing.md),
-
-        // ── Streak + avatar ──────────────────────────────────────────────────
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        // ── Zone 1: App bar row ──────────────────────────────────────────────
+        // Streak lives (with more detail) in the Daily Wins tracker, so the
+        // header keeps just the account entry point to stay uncluttered.
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.local_fire_department_rounded,
-                  color: AppColors.warning,
+            Text(
+              AppDateUtils.formatWeekdayLong(DateTime.now()).toUpperCase(),
+              style: AppTextStyles.overline.copyWith(
+                color: AppColors.textMuted,
+                letterSpacing: 1.2,
+              ),
+            ).animate().fadeIn(duration: 400.ms),
+            GestureDetector(
+              onTap: () => context.push('/settings'),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceElevated,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: const Icon(
+                  Icons.person_rounded,
+                  color: AppColors.textSecondary,
                   size: 20,
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  '${profile.currentStreak}',
-                  style: AppTextStyles.headlineSmall.copyWith(
-                    color: AppColors.warning,
-                  ),
-                ),
-              ],
-            ),
-            Text('day streak', style: AppTextStyles.labelSmall),
+              ),
+            ).animate().fadeIn(delay: 300.ms),
           ],
-        ).animate().fadeIn(delay: 200.ms),
+        ),
 
-        const SizedBox(width: 12),
+        const SizedBox(height: AppSpacing.lg),
 
-        GestureDetector(
-          onTap: () => context.push('/settings'),
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.surfaceElevated,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.border),
-            ),
-            child: const Icon(
-              Icons.person_rounded,
+        // ── Zone 2: Page title ───────────────────────────────────────────────
+        Text(
+          '${AppDateUtils.greetingForTime()}, ${profile.firstName}!',
+          style: AppTextStyles.headlineLarge,
+        ).animate().fadeIn(duration: 400.ms),
+        const SizedBox(height: AppSpacing.sm),
+        if (wisdomState.isLoading || wisdomState.wisdom == null)
+          ShimmerBox(width: 200, height: 14, borderRadius: AppSpacing.radiusSm)
+        else
+          Text(
+            '"${wisdomState.wisdom!}"',
+            style: AppTextStyles.bodyMedium.copyWith(
+              fontStyle: FontStyle.italic,
               color: AppColors.textSecondary,
-              size: 20,
             ),
-          ),
-        ).animate().fadeIn(delay: 300.ms),
+          ).animate().fadeIn(duration: 600.ms),
       ],
     );
   }
