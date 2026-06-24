@@ -48,3 +48,8 @@ app.*.map.json
 .env
 google-services.json
 GoogleService-Info.plist
+
+# Node / Firebase Functions (deps + compiled output are regenerated)
+node_modules/
+functions/node_modules/
+functions/lib/
