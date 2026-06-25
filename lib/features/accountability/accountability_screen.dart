@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:share_plus/share_plus.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
@@ -11,6 +10,7 @@ import '../../core/widgets/app_card.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/accountability_provider.dart';
+import 'invite_share.dart';
 
 class AccountabilityScreen extends ConsumerStatefulWidget {
   const AccountabilityScreen({super.key});
@@ -44,39 +44,22 @@ class _AccountabilityScreenState extends ConsumerState<AccountabilityScreen> {
       _successMessage = null;
     });
 
-    try {
-      final link = await ref
-          .read(accountabilityProvider.notifier)
-          .createInvite(partnerEmail: email, partnerName: name);
+    final ok = await shareInvite(
+      context,
+      ref.read(accountabilityProvider.notifier),
+      name: name,
+      email: email,
+    );
 
-      if (link.isEmpty) {
-        if (mounted) {
-          setState(() => _errorMessage = 'Could not create invite. Please try again.');
-        }
-        return;
+    if (!mounted) return;
+    setState(() {
+      _isSending = false;
+      if (ok) {
+        _showInviteForm = false;
+        _emailCtrl.clear();
+        _nameCtrl.clear();
       }
-
-      final partnerLabel = name.isNotEmpty ? name : 'there';
-      final shareText =
-          'Hey $partnerLabel, I\'m using MindsetForge to build a stronger mindset and I\'d love you as my accountability partner. Tap to join (it\'s free for partners): $link';
-
-      await Share.share(shareText, subject: 'Be my accountability partner');
-
-      if (mounted) {
-        setState(() {
-          _successMessage = 'Invite link created! Share it with your partner.';
-          _showInviteForm = false;
-          _emailCtrl.clear();
-          _nameCtrl.clear();
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _errorMessage = 'Failed to create invite. Please try again.');
-      }
-    } finally {
-      if (mounted) setState(() => _isSending = false);
-    }
+    });
   }
 
   Future<void> _confirmRemove(String relationshipId, String name) async {

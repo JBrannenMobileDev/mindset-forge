@@ -685,6 +685,98 @@ export const acceptPartnerInvite = onCall(async (request) => {
  * sendEncouragement — partner sends an encouragement message to the primary user.
  * Writes to the primary user's encouragementMessages array.
  */
+// ─── Push helpers ───────────────────────────────────────────────────────────
+
+type PushCategory = 'routine' | 'streak' | 'partner' | 'lifecycle';
+
+/** Records a notification send/open for the metrics pipeline (best-effort). */
+async function logNotificationEventDoc(
+  uid: string | null,
+  category: string,
+  action: 'sent' | 'open',
+): Promise<void> {
+  try {
+    await db.collection('notification_events').add({
+      uid,
+      category,
+      action,
+      at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('logNotificationEvent failed:', err);
+  }
+}
+
+/**
+ * Sends a push with the consistent payload the client tap-router understands:
+ * `{ type, category, route, ...data }`. Logs the send for analytics.
+ */
+async function sendPush(params: {
+  token: string;
+  title: string;
+  body: string;
+  type: string;
+  category: PushCategory;
+  route: string;
+  recipientUid?: string;
+  data?: Record<string, string>;
+}): Promise<boolean> {
+  try {
+    await admin.messaging().send({
+      token: params.token,
+      notification: { title: params.title, body: params.body },
+      data: {
+        type: params.type,
+        category: params.category,
+        route: params.route,
+        ...(params.data ?? {}),
+      },
+    });
+    await logNotificationEventDoc(
+      params.recipientUid ?? null,
+      params.category,
+      'sent',
+    );
+    return true;
+  } catch (err) {
+    console.error(`sendPush(${params.type}) failed:`, err);
+    return false;
+  }
+}
+
+/** yyyy-MM-dd for a date in the given IANA timezone (falls back to server local). */
+function localDateKeyInTz(d: Date, tz?: string): string {
+  if (tz) {
+    try {
+      // en-CA formats as yyyy-MM-dd.
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(d);
+    } catch (_) {
+      // fall through
+    }
+  }
+  return localDateKey(d);
+}
+
+/** Records a notification open, called by the client after a tap. */
+export const logNotificationEvent = onCall(async (request) => {
+  if (!request.auth) return { success: false };
+  const { category, action } = request.data as {
+    category?: string;
+    action?: string;
+  };
+  await logNotificationEventDoc(
+    request.auth.uid,
+    category ?? 'unknown',
+    action === 'sent' ? 'sent' : 'open',
+  );
+  return { success: true };
+});
+
 export const sendEncouragement = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be authenticated.');
@@ -724,18 +816,26 @@ export const sendEncouragement = onCall(async (request) => {
     encouragementMessages: admin.firestore.FieldValue.arrayUnion(encouragement),
   });
 
-  // Push a notification to the primary user if we have their FCM token.
+  // Push a notification to the primary user if we have their FCM token and they
+  // haven't opted out of partner notifications.
   try {
     const primarySnap = await db.collection('users').doc(primaryUid).get();
-    const fcmToken = (primarySnap.data() as { fcmToken?: string } | undefined)?.fcmToken;
-    if (fcmToken) {
-      await admin.messaging().send({
-        token: fcmToken,
-        notification: {
-          title: `${fromName} sent you encouragement`,
-          body: message.length > 120 ? `${message.slice(0, 117)}...` : message,
-        },
-        data: { type: 'encouragement' },
+    const primaryData = primarySnap.data() as {
+      fcmToken?: string;
+      notificationPrefs?: { masterEnabled?: boolean; partnerEnabled?: boolean };
+    } | undefined;
+    const prefs = primaryData?.notificationPrefs;
+    const partnerPushAllowed =
+      prefs?.masterEnabled !== false && prefs?.partnerEnabled !== false;
+    if (primaryData?.fcmToken && partnerPushAllowed) {
+      await sendPush({
+        token: primaryData.fcmToken,
+        title: `${fromName} sent you encouragement`,
+        body: message.length > 120 ? `${message.slice(0, 117)}...` : message,
+        type: 'encouragement',
+        category: 'partner',
+        route: '/notifications',
+        recipientUid: primaryUid,
       });
     }
   } catch (err) {
@@ -1331,21 +1431,34 @@ Write a 2-paragraph report on their manifestation alignment. Identify the weakes
 );
 
 /**
+ * Maps days-since-active to a re-engagement tier. Win-backs fire at day 3, 7,
+ * 14, and 30, then stop. The user's stored `lifecycleTier` is reset to 0 by the
+ * client whenever they become active again.
+ */
+function lifecycleTierForDays(days: number): number {
+  if (days >= 30) return 4;
+  if (days >= 14) return 3;
+  if (days >= 7) return 2;
+  if (days >= 3) return 1;
+  return 0;
+}
+
+/**
  * lowActivityAlert — runs daily at 10am UTC.
- * Finds users inactive for 3+ days and generates a personalized re-engagement message.
+ * Tiered, deduplicated re-engagement: each lapsed user gets at most one nudge
+ * per tier (day 3/7/14/30), never daily spam.
  */
 export const lowActivityAlert = onSchedule(
   { schedule: '0 10 * * *', secrets: [anthropicKey] },
   async () => {
-    const threeDaysAgo = new Date();
-    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-    const cutoff = threeDaysAgo.toISOString();
+    const now = Date.now();
+    const threeDaysAgo = new Date(now - 3 * 86400000).toISOString();
 
     const usersSnap = await db
       .collection('users')
       .where('onboardingStep', '>=', 5)
-      .where('lastActiveAt', '<', cutoff)
-      .limit(50)
+      .where('lastActiveAt', '<', threeDaysAgo)
+      .limit(100)
       .get();
 
     const apiKey = anthropicKey.value().trim();
@@ -1356,10 +1469,31 @@ export const lowActivityAlert = onSchedule(
         identityStatement?: string;
         goals?: Array<{ title: string; status: string }>;
         fcmToken?: string;
+        lastActiveAt?: string;
+        lifecycleTier?: number;
+        notificationPrefs?: { masterEnabled?: boolean; lifecycleEnabled?: boolean };
       };
 
+      const prefs = profile.notificationPrefs;
+      if (prefs?.masterEnabled === false || prefs?.lifecycleEnabled === false) {
+        continue;
+      }
+
+      const last = profile.lastActiveAt
+        ? Date.parse(profile.lastActiveAt)
+        : NaN;
+      if (isNaN(last)) continue;
+
+      const days = Math.floor((now - last) / 86400000);
+      const tier = lifecycleTierForDays(days);
+      if (tier === 0) continue;
+
+      // Already nudged at this depth (or deeper) — don't repeat.
+      const sentTier = profile.lifecycleTier ?? 0;
+      if (tier <= sentTier) continue;
+
       try {
-        const prompt = `Write a short, warm re-engagement message (2-3 sentences) for ${profile.displayName ?? 'a user'} who hasn't checked in for 3+ days. 
+        const prompt = `Write a short, warm re-engagement message (2-3 sentences) for ${profile.displayName ?? 'a user'} who hasn't checked in for ${days} days. 
 Their identity: "${profile.identityStatement ?? 'becoming their best self'}"
 Their goals: ${(profile.goals ?? []).filter(g => g.status === 'active').map(g => g.title).slice(0, 2).join(', ')}
 Make it personal, not generic. No guilt-tripping. Just a warm reminder of who they're becoming.`;
@@ -1371,22 +1505,216 @@ Make it personal, not generic. No guilt-tripping. Just a warm reminder of who th
           apiKey,
         );
 
-        // Send FCM push if token is available
         if (profile.fcmToken) {
-          await admin.messaging().send({
+          await sendPush({
             token: profile.fcmToken,
-            notification: {
-              title: 'Your mindset journey misses you ✨',
-              body: alertMessage,
-            },
-            data: { type: 'low_activity_alert' },
+            title: 'Your mindset journey misses you ✨',
+            body: alertMessage,
+            type: 'low_activity_alert',
+            category: 'lifecycle',
+            route: '/dashboard',
+            recipientUid: userDoc.id,
           });
         }
 
-        console.log(`Low activity alert sent to: ${userDoc.id}`);
+        // Record the tier so we don't nudge again until they lapse deeper.
+        await userDoc.ref.update({ lifecycleTier: tier });
+        console.log(`Lifecycle nudge (tier ${tier}) sent to: ${userDoc.id}`);
       } catch (err) {
         console.error(`Failed low activity alert for user ${userDoc.id}:`, err);
       }
+    }
+  },
+);
+
+// ─── Partner accountability loop ─────────────────────────────────────────────
+
+/**
+ * partnerAccountabilityDaily — runs daily. For each primary user with active
+ * partners, evaluates the day that just ended and notifies their partners:
+ *   - slip alert    → primary missed the day (prompts the partner to check in)
+ *   - celebration   → primary had a perfect day or hit a streak milestone
+ *
+ * Guardrails: gated on the primary's `notifyPartnerOnSlip` consent (slips only),
+ * deduped per day, and capped at 3 slip alerts per rolling week so a chronically
+ * lapsed primary never burns out their partner.
+ */
+const STREAK_MILESTONES = [7, 14, 30, 50, 100, 200, 365];
+
+export const partnerAccountabilityDaily = onSchedule(
+  { schedule: '0 1 * * *' },
+  async () => {
+    const now = new Date();
+    const nowMs = now.getTime();
+    const weekKey = localDateKey(new Date(nowMs - (now.getUTCDay() * 86400000)));
+
+    const usersSnap = await db
+      .collection('users')
+      .where('onboardingStep', '>=', 5)
+      .limit(500)
+      .get();
+
+    for (const primaryDoc of usersSnap.docs) {
+      const primary = primaryDoc.data() as {
+        displayName?: string;
+        timezone?: string;
+        createdAt?: string;
+        partnerUids?: string[];
+        dailyCompletions?: CompletionDoc[];
+        notificationPrefs?: { notifyPartnerOnSlip?: boolean };
+        partnerNudge?: {
+          lastSlipDate?: string;
+          lastCelebrationDate?: string;
+          weekKey?: string;
+          slipCount?: number;
+        };
+      };
+
+      const partnerUids = primary.partnerUids ?? [];
+      if (partnerUids.length === 0) continue;
+
+      // Skip brand-new accounts so day-one users aren't flagged as slipping.
+      const created = primary.createdAt ? Date.parse(primary.createdAt) : nowMs;
+      if (nowMs - created < 2 * 86400000) continue;
+
+      const completions = primary.dailyCompletions ?? [];
+      const yKey = localDateKeyInTz(new Date(nowMs - 86400000), primary.timezone);
+      const yesterday = completions.find((c) => c.date === yKey);
+      const yCount = yesterday ? completedCount(yesterday) : 0;
+      const streak = computeStreak(completions);
+      const firstName = (primary.displayName ?? 'Your partner').split(' ')[0];
+
+      const nudge = primary.partnerNudge ?? {};
+      const isSlip = yCount < 5;
+      const isPerfect = yCount >= 8;
+      const isMilestone = STREAK_MILESTONES.includes(streak);
+
+      // ── Celebration (positive; no consent gate, deduped per day) ──
+      if ((isPerfect || isMilestone) && nudge.lastCelebrationDate !== yKey) {
+        const body = isMilestone
+          ? `${firstName} just hit a ${streak}-day streak. Cheer them on!`
+          : `${firstName} just had a perfect day. Celebrate with them!`;
+        await notifyPartners(partnerUids, primaryDoc.id, {
+          title: `${firstName} is on a roll`,
+          body,
+          type: 'partner_celebration',
+        });
+        await primaryDoc.ref.update({
+          'partnerNudge.lastCelebrationDate': yKey,
+        });
+      }
+
+      // ── Slip alert (consent-gated, deduped, weekly-capped) ──
+      const slipAllowed =
+        primary.notificationPrefs?.notifyPartnerOnSlip !== false;
+      if (isSlip && slipAllowed && nudge.lastSlipDate !== yKey) {
+        const sameWeek = nudge.weekKey === weekKey;
+        const slipCount = sameWeek ? nudge.slipCount ?? 0 : 0;
+        if (slipCount < 3) {
+          await notifyPartners(partnerUids, primaryDoc.id, {
+            title: `${firstName} could use a nudge`,
+            body: `${firstName} hasn't checked in. A quick word from you goes a long way.`,
+            type: 'partner_slip',
+          });
+          await primaryDoc.ref.update({
+            'partnerNudge.lastSlipDate': yKey,
+            'partnerNudge.weekKey': weekKey,
+            'partnerNudge.slipCount': slipCount + 1,
+          });
+        }
+      }
+    }
+  },
+);
+
+/**
+ * Sends a partner-category push to each partner of a primary user, deep-linking
+ * to that primary's progress view. Respects each partner's notification prefs.
+ */
+async function notifyPartners(
+  partnerUids: string[],
+  primaryUid: string,
+  msg: { title: string; body: string; type: string },
+): Promise<void> {
+  for (const partnerUid of partnerUids) {
+    try {
+      const partnerSnap = await db.collection('users').doc(partnerUid).get();
+      const partner = partnerSnap.data() as {
+        fcmToken?: string;
+        notificationPrefs?: { masterEnabled?: boolean; partnerEnabled?: boolean };
+      } | undefined;
+      if (!partner?.fcmToken) continue;
+      const prefs = partner.notificationPrefs;
+      if (prefs?.masterEnabled === false || prefs?.partnerEnabled === false) {
+        continue;
+      }
+      await sendPush({
+        token: partner.fcmToken,
+        title: msg.title,
+        body: msg.body,
+        type: msg.type,
+        category: 'partner',
+        route: `/partner-view/${primaryUid}`,
+        recipientUid: partnerUid,
+        data: { primaryUid },
+      });
+    } catch (err) {
+      console.error(`notifyPartners failed for ${partnerUid}:`, err);
+    }
+  }
+}
+
+/**
+ * weeklyPartnerDigest — Sunday 16:00 UTC. A low-frequency summary of each
+ * primary user's week sent to their partners, so distant partners stay in the
+ * loop without daily pings.
+ */
+export const weeklyPartnerDigest = onSchedule(
+  { schedule: '0 16 * * 0' },
+  async () => {
+    const nowMs = Date.now();
+
+    const usersSnap = await db
+      .collection('users')
+      .where('onboardingStep', '>=', 5)
+      .limit(500)
+      .get();
+
+    for (const primaryDoc of usersSnap.docs) {
+      const primary = primaryDoc.data() as {
+        displayName?: string;
+        timezone?: string;
+        partnerUids?: string[];
+        dailyCompletions?: CompletionDoc[];
+      };
+
+      const partnerUids = primary.partnerUids ?? [];
+      if (partnerUids.length === 0) continue;
+
+      const completions = primary.dailyCompletions ?? [];
+      const byDate = new Map<string, CompletionDoc>();
+      for (const c of completions) {
+        if (c.date) byDate.set(c.date, c);
+      }
+
+      let activeDays = 0;
+      for (let i = 1; i <= 7; i++) {
+        const key = localDateKeyInTz(
+          new Date(nowMs - i * 86400000),
+          primary.timezone,
+        );
+        const c = byDate.get(key);
+        if (c && completedCount(c) >= 5) activeDays++;
+      }
+
+      const streak = computeStreak(completions);
+      const firstName = (primary.displayName ?? 'Your partner').split(' ')[0];
+
+      await notifyPartners(partnerUids, primaryDoc.id, {
+        title: `${firstName}'s week`,
+        body: `${activeDays}/7 active days and a ${streak}-day streak. Send some encouragement.`,
+        type: 'partner_digest',
+      });
     }
   },
 );

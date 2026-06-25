@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../core/firebase/firestore_service.dart';
+import '../core/services/notification_service.dart';
 import '../models/user_profile.dart';
 import 'auth_provider.dart';
 
@@ -142,6 +143,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> signOut() async {
+    // Clear push token + local reminders so a logged-out user (or the next user
+    // on a shared device) stops receiving this account's notifications.
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    try {
+      final service = NotificationService();
+      if (uid != null) await service.clearToken(uid, _firestoreService);
+      await service.cancelAll();
+    } catch (_) {}
     await FirebaseAuth.instance.signOut();
   }
 

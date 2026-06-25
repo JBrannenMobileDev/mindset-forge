@@ -4,7 +4,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
@@ -13,17 +12,17 @@ import 'core/constants/app_colors.dart';
 import 'core/constants/app_text_styles.dart';
 import 'core/router/app_router.dart';
 import 'core/services/deep_link_service.dart';
+import 'core/services/notification_service.dart';
 import 'core/services/pending_invite_store.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/widgets/splash_view.dart';
 import 'firebase_options.dart';
-import 'providers/fcm_provider.dart';
+import 'providers/auth_provider.dart';
+import 'providers/notification_provider.dart';
 
-// RevenueCat API keys — replace with your actual keys from the RevenueCat dashboard
-const _revenueCatApiKeyIos = 'appl_REPLACE_WITH_IOS_KEY';
+// RevenueCat API keys
+const _revenueCatApiKeyIos = 'appl_dKUUgDcXtEccZBfJkLEoToRdSri';
 const _revenueCatApiKeyAndroid = 'goog_REPLACE_WITH_ANDROID_KEY';
-
-final _localNotifications = FlutterLocalNotificationsPlugin();
 
 /// Handle background FCM messages
 @pragma('vm:entry-point')
@@ -118,15 +117,7 @@ class _InitAppState extends State<_InitApp> {
 
   Future<void> _initLocalNotifications() async {
     if (kIsWeb) return; // flutter_local_notifications doesn't support web
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: false,
-      requestBadgePermission: false,
-      requestSoundPermission: false,
-    );
-    await _localNotifications.initialize(
-      const InitializationSettings(android: androidSettings, iOS: iosSettings),
-    );
+    await NotificationService().initPlugin();
   }
 
   @override
@@ -185,24 +176,66 @@ class MindsetForgeApp extends ConsumerStatefulWidget {
   ConsumerState<MindsetForgeApp> createState() => _MindsetForgeAppState();
 }
 
-class _MindsetForgeAppState extends ConsumerState<MindsetForgeApp> {
+class _MindsetForgeAppState extends ConsumerState<MindsetForgeApp>
+    with WidgetsBindingObserver {
   DeepLinkService? _deepLinkService;
 
   @override
   void initState() {
     super.initState();
-    // Start listening for partner-invite deep links (cold + warm start).
+    WidgetsBinding.instance.addObserver(this);
     if (!kIsWeb) {
-      _deepLinkService = DeepLinkService(ref.read(routerProvider));
+      final router = ref.read(routerProvider);
+      // Start listening for partner-invite deep links (cold + warm start).
+      _deepLinkService = DeepLinkService(router);
       _deepLinkService!.init();
+      // Route notification taps (FCM open + cold-start launch) via the router.
+      ref.read(notificationServiceProvider).attachRouter(router);
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _onResume();
+    }
+  }
+
+  /// On every foreground resume: refresh activity tracking and re-evaluate local
+  /// reminders against today's live completion state (suppressing finished items).
+  Future<void> _onResume() async {
+    if (kIsWeb) return;
+    final uid = ref.read(authStateProvider).valueOrNull?.uid;
+    final profile = ref.read(currentUserProfileProvider).valueOrNull;
+    if (uid == null) return;
+    await ref
+        .read(notificationServiceProvider)
+        .markActive(uid, ref.read(firestoreServiceProvider));
+    if (profile != null) {
+      await ref.read(notificationSchedulerProvider).rescheduleAll(profile);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
-    // Eagerly activate FCM initialization whenever a user is signed in
-    ref.watch(fcmInitProvider);
+    // Eagerly activate notification initialization whenever a user is signed in.
+    ref.watch(notificationInitProvider);
+    // Reschedule local reminders whenever the profile changes (login, completion
+    // updates, preference edits all flow through the profile stream).
+    ref.listen(currentUserProfileProvider, (_, next) {
+      next.whenData((profile) {
+        if (profile != null && !kIsWeb) {
+          ref.read(notificationSchedulerProvider).rescheduleAll(profile);
+        }
+      });
+    });
 
     return MaterialApp.router(
       title: 'MindsetForge',

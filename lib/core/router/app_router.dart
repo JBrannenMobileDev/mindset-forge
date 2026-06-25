@@ -20,6 +20,7 @@ import '../../features/mindset/blueprint_setup_screen.dart';
 import '../../features/future_self/future_self_screen.dart';
 import '../../features/progress/progress_screen.dart';
 import '../../features/settings/settings_screen.dart';
+import '../../features/settings/notification_settings_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
 import '../../features/accountability/accountability_screen.dart';
 import '../../features/accountability/partner_invite_screen.dart';
@@ -39,6 +40,7 @@ const _noSubscriptionPaths = {
   '/settings',
   '/accountability',
   '/notifications',
+  '/notification-settings',
 };
 
 /// Prefixes (sub-routes) reachable without a subscription.
@@ -233,6 +235,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/notifications',
         builder: (_, __) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/notification-settings',
+        builder: (_, __) => const NotificationSettingsScreen(),
       ),
       GoRoute(
         path: '/accountability',

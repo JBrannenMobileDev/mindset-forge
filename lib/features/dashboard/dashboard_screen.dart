@@ -9,7 +9,11 @@ import '../../core/constants/app_text_styles.dart';
 import '../../core/widgets/shimmer_widget.dart';
 import '../../core/widgets/responsive_layout.dart';
 import '../../core/widgets/empty_state.dart';
+import '../../models/daily_completion.dart';
+import '../../models/user_profile.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/daily_completion_provider.dart';
+import '../../providers/invite_prompt_provider.dart';
 import 'widgets/dashboard_header.dart';
 import 'widgets/daily_wins_tracker.dart';
 import 'widgets/daily_habits_card.dart';
@@ -18,12 +22,57 @@ import 'widgets/progress_overview_card.dart';
 import 'widgets/getting_started_checklist.dart';
 import 'widgets/accountability_banner.dart';
 
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  /// Fires an invite prompt after the current frame; the controller dedupes and
+  /// enforces the "don't nag" rules, so callers only detect the moment.
+  void _firePrompt(InviteTrigger trigger) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(invitePromptProvider).maybeShow(context, trigger);
+    });
+  }
+
+  void _onPerfectDay(DailyCompletion? prev, DailyCompletion next) {
+    // Only on a genuine in-session false→true transition (mirrors the
+    // confetti logic in DailyWinsTracker), not on initial load.
+    if (prev != null && !prev.isPerfectDay && next.isPerfectDay) {
+      _firePrompt(InviteTrigger.perfectDay);
+    }
+  }
+
+  void _onStreakChanged(UserProfile? prev, UserProfile? next) {
+    if (prev == null || next == null) return;
+    final before = prev.currentStreak;
+    final after = next.currentStreak;
+    if (after <= before) return;
+
+    InviteTrigger? trigger;
+    if (before < 30 && after >= 30) {
+      trigger = InviteTrigger.streak30;
+    } else if (before < 7 && after >= 7) {
+      trigger = InviteTrigger.streak7;
+    } else if (before < 3 && after >= 3) {
+      trigger = InviteTrigger.streak3;
+    }
+    if (trigger != null) _firePrompt(trigger);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final profileAsync = ref.watch(currentUserProfileProvider);
+
+    // High-intent invite moments — one prompt per visit; controller dedupes.
+    ref.listen<DailyCompletion>(dailyCompletionProvider, _onPerfectDay);
+    ref.listen<AsyncValue<UserProfile?>>(currentUserProfileProvider, (prev, next) {
+      _onStreakChanged(prev?.valueOrNull, next.valueOrNull);
+    });
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -45,9 +94,14 @@ class DashboardScreen extends ConsumerWidget {
             // or an invite nudge for settled-in subscribers without a partner).
             final hasActivePartner = profile.accountabilityRelationships
                 .any((r) => r.type == 'primary' && r.status == 'active');
-            final showAccountabilityBanner = profile.isPartnerAccount ||
-                (!hasActivePartner &&
-                    DateTime.now().difference(profile.createdAt).inDays >= 3);
+            final inviteSnoozed = profile.invitePromptSnoozedUntil != null &&
+                DateTime.now().isBefore(profile.invitePromptSnoozedUntil!);
+            final showInviteNudge = !hasActivePartner &&
+                !profile.invitePromptsDismissed &&
+                !inviteSnoozed &&
+                DateTime.now().difference(profile.createdAt).inDays >= 3;
+            final showAccountabilityBanner =
+                profile.isPartnerAccount || showInviteNudge;
             final allOnboardingDone = profile.identityStatement.isNotEmpty &&
                 profile.goals.isNotEmpty &&
                 profile.dailyCompletions.any((c) => c.journalCompleted) &&

@@ -14,6 +14,7 @@ import 'encouragement_message.dart';
 import 'accountability_relationship.dart';
 import 'journal_summary.dart';
 import 'coach_memory.dart';
+import 'notification_prefs.dart';
 
 class UserProfile {
   final String uid;
@@ -62,10 +63,29 @@ class UserProfile {
   /// Weekly usage counters for free "partner" accounts (limited app access).
   /// Shape: { 'weekStart': 'yyyy-MM-dd', 'chatMessages': int, 'journalEntries': int }.
   final Map<String, dynamic> partnerUsage;
+
+  /// Keys of accountability-partner invite prompts already shown (e.g.
+  /// 'onboarding', 'perfect_day', 'streak_7') so each fires at most once.
+  final List<String> invitePromptsShown;
+
+  /// While set and in the future, suppresses invite prompts ("Not now" snooze).
+  final DateTime? invitePromptSnoozedUntil;
+
+  /// True once the user opts out of all invite prompts ("Don't ask again").
+  final bool invitePromptsDismissed;
   final CoachMemory coachMemory;
   final DateTime? coachDisclaimerAcceptedAt;
   final String? fcmToken;
   final DateTime? lastActiveAt;
+
+  /// IANA timezone name of the user's device (e.g. 'America/Denver'). Captured
+  /// on launch so server-side scheduled pushes can resolve the user's local
+  /// time. Empty until first captured.
+  final String timezone;
+
+  /// User-controllable notification preferences (categories, reminder times,
+  /// quiet hours, partner-slip consent).
+  final NotificationPrefs notificationPrefs;
   final DateTime createdAt;
 
   const UserProfile({
@@ -110,10 +130,15 @@ class UserProfile {
     this.encouragementMessages = const [],
     this.partnerUids = const [],
     this.partnerUsage = const {},
+    this.invitePromptsShown = const [],
+    this.invitePromptSnoozedUntil,
+    this.invitePromptsDismissed = false,
     this.coachMemory = const CoachMemory(),
     this.coachDisclaimerAcceptedAt,
     this.fcmToken,
     this.lastActiveAt,
+    this.timezone = '',
+    this.notificationPrefs = const NotificationPrefs(),
     required this.createdAt,
   });
 
@@ -235,10 +260,15 @@ class UserProfile {
     List<EncouragementMessage>? encouragementMessages,
     List<String>? partnerUids,
     Map<String, dynamic>? partnerUsage,
+    List<String>? invitePromptsShown,
+    DateTime? invitePromptSnoozedUntil,
+    bool? invitePromptsDismissed,
     CoachMemory? coachMemory,
     DateTime? coachDisclaimerAcceptedAt,
     String? fcmToken,
     DateTime? lastActiveAt,
+    String? timezone,
+    NotificationPrefs? notificationPrefs,
     DateTime? createdAt,
   }) {
     return UserProfile(
@@ -286,11 +316,18 @@ class UserProfile {
       encouragementMessages: encouragementMessages ?? this.encouragementMessages,
       partnerUids: partnerUids ?? this.partnerUids,
       partnerUsage: partnerUsage ?? this.partnerUsage,
+      invitePromptsShown: invitePromptsShown ?? this.invitePromptsShown,
+      invitePromptSnoozedUntil:
+          invitePromptSnoozedUntil ?? this.invitePromptSnoozedUntil,
+      invitePromptsDismissed:
+          invitePromptsDismissed ?? this.invitePromptsDismissed,
       coachMemory: coachMemory ?? this.coachMemory,
       coachDisclaimerAcceptedAt:
           coachDisclaimerAcceptedAt ?? this.coachDisclaimerAcceptedAt,
       fcmToken: fcmToken ?? this.fcmToken,
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
+      timezone: timezone ?? this.timezone,
+      notificationPrefs: notificationPrefs ?? this.notificationPrefs,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -420,6 +457,13 @@ class UserProfile {
       partnerUids: List<String>.from(json['partnerUids'] as List<dynamic>? ?? []),
       partnerUsage:
           Map<String, dynamic>.from(json['partnerUsage'] as Map? ?? {}),
+      invitePromptsShown:
+          List<String>.from(json['invitePromptsShown'] as List<dynamic>? ?? []),
+      invitePromptSnoozedUntil: json['invitePromptSnoozedUntil'] != null
+          ? DateTime.tryParse(json['invitePromptSnoozedUntil'] as String)
+          : null,
+      invitePromptsDismissed:
+          json['invitePromptsDismissed'] as bool? ?? false,
       coachMemory: json['coachMemory'] != null
           ? CoachMemory.fromJson(json['coachMemory'] as Map<String, dynamic>)
           : const CoachMemory(),
@@ -430,6 +474,11 @@ class UserProfile {
       lastActiveAt: json['lastActiveAt'] != null
           ? DateTime.tryParse(json['lastActiveAt'] as String)
           : null,
+      timezone: json['timezone'] as String? ?? '',
+      notificationPrefs: json['notificationPrefs'] != null
+          ? NotificationPrefs.fromJson(
+              json['notificationPrefs'] as Map<String, dynamic>)
+          : const NotificationPrefs(),
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
     );
   }
@@ -483,10 +532,15 @@ class UserProfile {
             encouragementMessages.map((m) => m.toJson()).toList(),
         'partnerUids': partnerUids,
         'partnerUsage': partnerUsage,
+        'invitePromptsShown': invitePromptsShown,
+        'invitePromptSnoozedUntil': invitePromptSnoozedUntil?.toIso8601String(),
+        'invitePromptsDismissed': invitePromptsDismissed,
         'coachMemory': coachMemory.toJson(),
         'coachDisclaimerAcceptedAt': coachDisclaimerAcceptedAt?.toIso8601String(),
         'fcmToken': fcmToken,
         'lastActiveAt': lastActiveAt?.toIso8601String(),
+        'timezone': timezone,
+        'notificationPrefs': notificationPrefs.toJson(),
         'createdAt': createdAt.toIso8601String(),
       };
 }

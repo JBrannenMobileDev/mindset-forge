@@ -494,6 +494,33 @@ abstract final class AppStrings {
   static const String categoryFinances = 'Finances';
   static const String categoryPersonalGrowth = 'Personal Growth';
 
+  // Accountability partner invite prompts
+  static const String invitePromptCta = 'Invite a Partner';
+  static const String invitePromptNotNow = 'Not now';
+  static const String invitePromptDismiss = "Don't ask again";
+  static const String invitePromptManage = 'Manage partners';
+
+  static const String invitePromptOnboardingTitle = 'Bring someone along';
+  static const String invitePromptOnboardingBody =
+      'People who are watched follow through. Invite a friend as your accountability partner — they get the app free and can cheer you on from day one.';
+
+  static const String invitePromptPerfectDayTitle = 'Perfect day! Make it stick';
+  static const String invitePromptPerfectDayBody =
+      'Days like this are easier with someone in your corner. Invite an accountability partner to keep the momentum going.';
+
+  static String invitePromptStreakTitle(int days) => '$days-day streak!';
+  static String invitePromptStreakBody(int days) =>
+      "You're on a $days-day streak — lock it in by inviting someone to keep you honest. They join free and can send you encouragement.";
+
+  static const String inviteShareSubject = 'Be my accountability partner';
+  static String inviteShareText(String partnerLabel, String link) =>
+      "Hey $partnerLabel, I'm using MindsetForge to build a stronger mindset and I'd love you as my accountability partner. Tap to join (it's free for partners): $link";
+
+  static const String inviteCreatedSuccess =
+      'Invite link created! Share it with your partner.';
+  static const String inviteCreateError =
+      'Could not create invite. Please try again.';
+
   // Suggested limiting beliefs
   static const List<String> suggestedBeliefs = [
     "I'm not good enough",

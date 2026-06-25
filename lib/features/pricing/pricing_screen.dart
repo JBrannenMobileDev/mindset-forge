@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
@@ -194,15 +195,56 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Cancel anytime. No commitment.',
-              style: AppTextStyles.labelSmall,
-              textAlign: TextAlign.center,
-            ),
+            _buildLegalFooter(),
             const SizedBox(height: AppSpacing.lg),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildLegalFooter() {
+    return Column(
+      children: [
+        Text(
+          'Subscription auto-renews unless cancelled at least 24 hours before the end of the current period. '
+          'Manage or cancel in iPhone Settings → Apple ID → Subscriptions.',
+          style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            GestureDetector(
+              onTap: () => context.push('/terms'),
+              child: Text(
+                'Terms of Service',
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                  decoration: TextDecoration.underline,
+                  decorationColor: AppColors.textSecondary,
+                ),
+              ),
+            ),
+            Text(
+              '  ·  ',
+              style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted),
+            ),
+            GestureDetector(
+              onTap: () => context.push('/privacy'),
+              child: Text(
+                'Privacy Policy',
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                  decoration: TextDecoration.underline,
+                  decorationColor: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -255,12 +297,6 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
             ],
           ),
         ).animate().fadeIn(delay: 300.ms),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          'Price will increase as we grow — lock in your rate today',
-          style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-          textAlign: TextAlign.center,
-        ).animate().fadeIn(delay: 350.ms),
       ],
     );
   }

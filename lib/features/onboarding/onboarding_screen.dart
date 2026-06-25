@@ -8,7 +8,8 @@ import '../../models/mindset_blueprint.dart';
 import '../../models/goal.dart';
 import '../../models/user_profile.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/fcm_provider.dart';
+import '../../providers/notification_provider.dart';
+import '../../providers/invite_prompt_provider.dart';
 import 'steps/step_welcome.dart';
 import 'steps/step_goals.dart';
 import 'steps/step_identity.dart';
@@ -125,6 +126,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     if (!mounted) return;
 
     await _askForNotifications();
+    if (!mounted) return;
+
+    await ref
+        .read(invitePromptProvider)
+        .maybeShow(context, InviteTrigger.onboarding);
     if (mounted) context.go('/dashboard');
   }
 
@@ -154,7 +160,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
 
     if (granted == true) {
-      await ref.read(fcmServiceProvider).requestPermission();
+      await ref.read(notificationServiceProvider).requestPermission();
     }
   }
 
