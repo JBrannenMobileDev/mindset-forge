@@ -20,16 +20,18 @@ import '../../providers/chat_provider.dart';
 import '../../providers/claude_provider.dart';
 import '../../providers/coach_memory_provider.dart';
 import '../../providers/daily_completion_provider.dart';
+import '../../providers/partner_limits_provider.dart';
 import '../goals_habits/goal_form_modal.dart';
 import '../goals_habits/habits_tab.dart';
 import '../mindset/affirmations_tab.dart';
-import 'future_self_setup_screen.dart';
+import '../future_self/future_self_wizard.dart';
 import 'widgets/crisis_resource_card.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String? journalContext;
+  final String? journalPrompt;
 
-  const ChatScreen({super.key, this.journalContext});
+  const ChatScreen({super.key, this.journalContext, this.journalPrompt});
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -241,6 +243,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     onNewSession: () => _startNewSession(_coachMode),
                     profile: profile,
                     journalContext: widget.journalContext,
+                    journalPrompt: widget.journalPrompt,
                   ),
                   _FutureSelfChatView(
                     mode: _futureSelfMode,
@@ -283,12 +286,14 @@ class _ChatView extends ConsumerStatefulWidget {
   final VoidCallback onNewSession;
   final dynamic profile;
   final String? journalContext;
+  final String? journalPrompt;
 
   const _ChatView({
     required this.mode,
     required this.onNewSession,
     required this.profile,
     this.journalContext,
+    this.journalPrompt,
   });
 
   @override
@@ -351,8 +356,10 @@ class _ChatViewState extends ConsumerState<_ChatView> {
       await Future.delayed(Duration.zero);
       if (!mounted) return;
     }
-    _inputCtrl.text =
-        'I want to discuss my journal entry:\n\n${widget.journalContext}';
+    final prompt = widget.journalPrompt;
+    _inputCtrl.text = prompt != null && prompt.isNotEmpty
+        ? 'I want to discuss my journal entry.\n\nToday\'s prompt: $prompt\n\nMy response: ${widget.journalContext}'
+        : 'I want to discuss my journal entry:\n\n${widget.journalContext}';
     await _send();
   }
 
@@ -409,6 +416,12 @@ class _ChatViewState extends ConsumerState<_ChatView> {
   Future<void> _send() async {
     final text = _inputCtrl.text.trim();
     if (text.isEmpty) return;
+
+    // Free partner accounts get a limited number of coach messages per week.
+    final allowed = await ref
+        .read(partnerLimitsProvider)
+        .tryConsume(context, PartnerFeature.chat);
+    if (!allowed || !mounted) return;
 
     final session = ref.read(activeChatProvider);
     if (session == null) {
@@ -734,7 +747,7 @@ class _FutureSelfChatView extends ConsumerWidget {
             AppPrimaryButton(
               label: AppStrings.futureSelfSetupTitle,
               onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const FutureSelfSetupScreen()),
+                MaterialPageRoute(builder: (_) => const FutureSelfWizard()),
               ),
             ),
           ],

@@ -11,25 +11,22 @@ import '../../providers/auth_provider.dart';
 import '../../providers/fcm_provider.dart';
 import 'steps/step_welcome.dart';
 import 'steps/step_goals.dart';
-import 'steps/step_assessment.dart';
 import 'steps/step_identity.dart';
-import 'steps/step_mental_toughness.dart';
-import 'steps/step_fears.dart';
-import 'steps/step_summary.dart';
-import 'steps/step_manifestation_system.dart';
+import 'steps/step_blocker.dart';
 import 'steps/step_ai_summary.dart';
 
 /// Step index constants — update here if order ever changes.
+///
+/// Onboarding is intentionally short: collect just enough (goal, identity,
+/// one blocker) to deliver a personalized "aha" via the AI analysis, then hand
+/// off into the app. Deeper mindset data (trait blueprint, mental toughness,
+/// full fear quiz) is collected progressively in-app afterwards.
 const _kStepWelcome = 0;
 const _kStepGoals = 1;
-const _kStepAssessment = 2;
-const _kStepIdentity = 3;
-const _kStepMentalToughness = 4;
-const _kStepFears = 5;
-const _kStepSummary = 6;
-const _kStepManifestation = 7;
-const _kStepAiAnalysis = 8;
-const _kTotalSteps = 9;
+const _kStepIdentity = 2;
+const _kStepBlocker = 3;
+const _kStepAiAnalysis = 4;
+const _kTotalSteps = 5;
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -43,11 +40,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   int _currentStep = 0;
 
   // ── Accumulated onboarding data ────────────────────────────────────────────
-  MindsetBlueprint _blueprint = const MindsetBlueprint();
-  List<String> _limitingBeliefs = [];
+  // Blueprint + mental toughness are seeded with neutral defaults here and
+  // refined later via the in-app blueprint setup flow.
+  final MindsetBlueprint _blueprint = const MindsetBlueprint();
+  final double _mentalToughnessScore = 50.0;
   List<Goal> _goals = [];
   String _identityStatement = '';
-  double _mentalToughnessScore = 50.0;
+  String _identitySituation = '';
+  List<String> _identityQualities = [];
+  List<String> _limitingBeliefs = [];
   List<String> _fearsDrift = [];
   String _mindsetBlueprintSummary = '';
 
@@ -106,12 +107,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
     final updated = base.copyWith(
       onboardingStep: _kTotalSteps,
+      // Seeded neutral defaults — refined later via in-app blueprint setup.
       mindsetBlueprint: _blueprint,
       originalMindsetBaseline: _blueprint,
+      mentalToughnessScore: _mentalToughnessScore,
+      blueprintCompleted: false,
       limitingBeliefs: _limitingBeliefs,
       identityStatement: _identityStatement,
+      identitySituation: _identitySituation,
+      identityQualities: _identityQualities,
       goals: _goals,
-      mentalToughnessScore: _mentalToughnessScore,
       fearsDrift: _fearsDrift,
       mindsetBlueprintSummary: _mindsetBlueprintSummary,
     );
@@ -158,6 +163,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             _OnboardingProgressBar(
@@ -177,74 +183,38 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     initial: _goals,
                     onNext: (goals) {
                       _goals = goals;
-                      _goToStep(_kStepAssessment);
+                      _goToStep(_kStepIdentity);
                     },
                     onBack: () => _goToStep(_kStepWelcome),
                   ),
 
-                  // Step 2 — Assessment + Limiting Beliefs (merged)
-                  StepAssessment(
-                    initialBlueprint: _blueprint,
-                    initialBeliefs: _limitingBeliefs,
-                    onNext: (blueprint, beliefs) {
-                      _blueprint = blueprint;
-                      _limitingBeliefs = beliefs;
-                      _goToStep(_kStepIdentity);
-                    },
-                    onBack: () => _goToStep(_kStepGoals),
-                  ),
-
-                  // Step 3 — Identity Wizard
+                  // Step 2 — Identity Wizard
                   StepIdentity(
                     initial: _identityStatement,
                     blueprint: _blueprint,
                     goals: _goals,
-                    onNext: (statement) {
+                    onNext: (statement, situation, qualities) {
                       _identityStatement = statement;
-                      _goToStep(_kStepMentalToughness);
+                      _identitySituation = situation;
+                      _identityQualities = qualities;
+                      _goToStep(_kStepBlocker);
                     },
-                    onBack: () => _goToStep(_kStepAssessment),
+                    onBack: () => _goToStep(_kStepGoals),
                   ),
 
-                  // Step 4 — Mental Toughness (NEW)
-                  StepMentalToughness(
-                    initial: _mentalToughnessScore,
-                    onNext: (score) {
-                      _mentalToughnessScore = score;
-                      _goToStep(_kStepFears);
+                  // Step 3 — Blocker (limiting belief + optional fear)
+                  StepBlocker(
+                    initialBeliefs: _limitingBeliefs,
+                    initialFears: _fearsDrift,
+                    onNext: (beliefs, fears) {
+                      _limitingBeliefs = beliefs;
+                      _fearsDrift = fears;
+                      _goToStep(_kStepAiAnalysis);
                     },
                     onBack: () => _goToStep(_kStepIdentity),
                   ),
 
-                  // Step 5 — Fears (NEW)
-                  StepFears(
-                    initial: _fearsDrift,
-                    onNext: (fears) {
-                      _fearsDrift = fears;
-                      _goToStep(_kStepSummary);
-                    },
-                    onBack: () => _goToStep(_kStepMentalToughness),
-                  ),
-
-                  // Step 6 — Summary (NEW)
-                  StepSummary(
-                    identityStatement: _identityStatement,
-                    goals: _goals,
-                    blueprint: _blueprint,
-                    limitingBeliefs: _limitingBeliefs,
-                    mentalToughnessScore: _mentalToughnessScore,
-                    fearsDrift: _fearsDrift,
-                    onComplete: () => _goToStep(_kStepManifestation),
-                    onBack: () => _goToStep(_kStepFears),
-                  ),
-
-                  // Step 7 — Manifestation System intro
-                  StepManifestationSystem(
-                    onNext: () => _goToStep(_kStepAiAnalysis),
-                    onBack: () => _goToStep(_kStepSummary),
-                  ),
-
-                  // Step 8 — AI Analysis
+                  // Step 4 — AI Analysis (the "aha")
                   StepAiSummary(
                     blueprint: _blueprint,
                     limitingBeliefs: _limitingBeliefs,

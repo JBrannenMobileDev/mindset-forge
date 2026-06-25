@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Background color shown while the Flutter engine initializes — must match
+         the app background (#0A0A0F) so there is no color flash between the
+         native splash and the first Flutter frame. -->
+    <color name="splashBackground">#FF0A0A0F</color>
+</resources>

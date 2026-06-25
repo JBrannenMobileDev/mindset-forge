@@ -127,7 +127,7 @@ class _StepLimitingBeliefsState extends State<StepLimitingBeliefs> {
             const SizedBox(height: AppSpacing.lg),
           ],
           Text(
-            'Suggestions — tap to add:',
+            'Suggestions (tap to add):',
             style: AppTextStyles.labelMedium,
           ).animate().fadeIn(delay: 300.ms),
           const SizedBox(height: AppSpacing.sm),

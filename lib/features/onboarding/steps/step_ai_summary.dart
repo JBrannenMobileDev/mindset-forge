@@ -109,8 +109,10 @@ class _StepAiSummaryState extends ConsumerState<StepAiSummary> {
             style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
           ).animate().fadeIn(delay: 100.ms),
           const SizedBox(height: AppSpacing.xl),
-          _BlueprintSummary(blueprint: widget.blueprint),
-          const SizedBox(height: AppSpacing.lg),
+          if (widget.identityStatement.trim().isNotEmpty) ...[
+            _IdentityRecap(statement: widget.identityStatement.trim()),
+            const SizedBox(height: AppSpacing.lg),
+          ],
           if (_isLoading) _LoadingCard(),
           if (_error != null)
             AppCard(
@@ -151,12 +153,20 @@ class _StepAiSummaryState extends ConsumerState<StepAiSummary> {
                 ],
               ),
             ).animate().fadeIn(duration: 600.ms),
-          const SizedBox(height: AppSpacing.xxl),
+          const SizedBox(height: AppSpacing.xl),
           AppPrimaryButton(
-            label: AppStrings.enterMindsetForge,
+            label: AppStrings.onboardingStartFirstRitual,
             onPressed: _isLoading ? null : () => widget.onComplete(_summary ?? ''),
             icon: Icons.arrow_forward_rounded,
           ).animate().fadeIn(delay: 200.ms),
+          const SizedBox(height: AppSpacing.sm),
+          Center(
+            child: Text(
+              'We\'ll take you straight to your first daily ritual.',
+              style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted),
+              textAlign: TextAlign.center,
+            ),
+          ).animate().fadeIn(delay: 250.ms),
           const SizedBox(height: AppSpacing.xxl),
         ],
       ),
@@ -189,57 +199,32 @@ class _LoadingCard extends StatelessWidget {
   }
 }
 
-class _BlueprintSummary extends StatelessWidget {
-  final MindsetBlueprint blueprint;
+class _IdentityRecap extends StatelessWidget {
+  final String statement;
 
-  const _BlueprintSummary({required this.blueprint});
+  const _IdentityRecap({required this.statement});
 
   @override
   Widget build(BuildContext context) {
-    final traits = [
-      ('Confidence', blueprint.confidence),
-      ('Discipline', blueprint.discipline),
-      ('Abundance', blueprint.abundanceThinking),
-      ('Resilience', blueprint.resilience),
-      ('Decisiveness', blueprint.decisiveness),
-    ];
-
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Your Mindset Blueprint', style: AppTextStyles.labelLarge),
-          const SizedBox(height: AppSpacing.md),
-          ...traits.map((t) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 100,
-                      child: Text(
-                        t.$1,
-                        style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-                      ),
-                    ),
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: t.$2 / 10,
-                          backgroundColor: AppColors.border,
-                          valueColor: AlwaysStoppedAnimation(AppColors.primary),
-                          minHeight: 6,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Text(
-                      t.$2.toStringAsFixed(0),
-                      style: AppTextStyles.labelMedium.copyWith(color: AppColors.primary),
-                    ),
-                  ],
-                ),
-              )),
+          Row(
+            children: [
+              const Icon(Icons.bolt_rounded, color: AppColors.secondary, size: 18),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                'Who you\'re becoming',
+                style: AppTextStyles.labelLarge.copyWith(color: AppColors.secondary),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            '"$statement"',
+            style: AppTextStyles.bodyLarge.copyWith(height: 1.6),
+          ),
         ],
       ),
     );

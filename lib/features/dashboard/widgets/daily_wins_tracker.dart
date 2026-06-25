@@ -262,7 +262,7 @@ class _DailyWinsTrackerState extends ConsumerState<DailyWinsTracker> {
               .where((a) => a.isActive)
               .toList();
           if (active.isEmpty) {
-            context.go('/mindset?tab=1');
+            context.push('/affirmations');
           } else {
             launchAffirmationSession(
               context: context,
@@ -278,7 +278,7 @@ class _DailyWinsTrackerState extends ConsumerState<DailyWinsTracker> {
               .where((a) => a.isActive)
               .toList();
           if (active.isEmpty) {
-            context.go('/mindset?tab=1');
+            context.push('/affirmations');
           } else {
             launchAffirmationSession(
               context: context,
@@ -706,6 +706,7 @@ class _SessionProgressRow extends StatelessWidget {
       opacity: isTeaser ? 0.5 : 1.0,
       child: AppCard(
         padding: EdgeInsets.zero,
+        borderColor: expanded ? accentColor.withValues(alpha: 0.35) : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -779,6 +780,7 @@ class _SessionProgressRow extends StatelessWidget {
                         requiredItems[i].field,
                         getField(completion, requiredItems[i].field),
                       ),
+                      accentColor: accentColor,
                     ),
                   ],
                   // Bonus items shown in expanded state
@@ -793,6 +795,7 @@ class _SessionProgressRow extends StatelessWidget {
                           item.field,
                           getField(completion, item.field),
                         ),
+                        accentColor: accentColor,
                         showBonusChip: true,
                       ),
                   ],
@@ -845,12 +848,14 @@ class _WinRow extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onToggle;
   final bool showBonusChip;
+  final Color accentColor;
 
   const _WinRow({
     required this.item,
     required this.done,
     required this.onTap,
     required this.onToggle,
+    required this.accentColor,
     this.showBonusChip = false,
   });
 
@@ -873,14 +878,14 @@ class _WinRow extends StatelessWidget {
               height: 36,
               decoration: BoxDecoration(
                 color: done
-                    ? AppColors.primaryContainer
+                    ? accentColor.withValues(alpha: 0.1)
                     : AppColors.surfaceElevated,
                 borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
               ),
               child: Icon(
                 item.icon,
                 size: 18,
-                color: done ? AppColors.primary : AppColors.textMuted,
+                color: done ? accentColor : AppColors.textMuted,
               ),
             ),
 
@@ -941,9 +946,9 @@ class _WinRow extends StatelessWidget {
                   height: 24,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: done ? AppColors.primary : Colors.transparent,
+                    color: done ? accentColor : Colors.transparent,
                     border: Border.all(
-                      color: done ? AppColors.primary : AppColors.border,
+                      color: done ? accentColor : AppColors.border,
                       width: 2,
                     ),
                   ),
@@ -965,9 +970,9 @@ class _WinRow extends StatelessWidget {
                     height: 24,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: done ? AppColors.primary : Colors.transparent,
+                      color: done ? accentColor : Colors.transparent,
                       border: Border.all(
-                        color: done ? AppColors.primary : AppColors.border,
+                        color: done ? accentColor : AppColors.border,
                         width: 2,
                       ),
                     ),

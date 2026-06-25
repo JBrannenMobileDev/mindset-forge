@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
@@ -9,7 +10,7 @@ import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../providers/auth_provider.dart';
-import '../../core/firebase/accountability_service.dart';
+import '../../providers/accountability_provider.dart';
 
 class AccountabilityScreen extends ConsumerStatefulWidget {
   const AccountabilityScreen({super.key});
@@ -36,10 +37,6 @@ class _AccountabilityScreenState extends ConsumerState<AccountabilityScreen> {
   Future<void> _sendInvite() async {
     final email = _emailCtrl.text.trim();
     final name = _nameCtrl.text.trim();
-    if (email.isEmpty) {
-      setState(() => _errorMessage = 'Please enter an email address.');
-      return;
-    }
 
     setState(() {
       _isSending = true;
@@ -48,13 +45,26 @@ class _AccountabilityScreenState extends ConsumerState<AccountabilityScreen> {
     });
 
     try {
-      await ref.read(accountabilityServiceProvider).sendPartnerInvite(
-            partnerEmail: email,
-            partnerName: name,
-          );
+      final link = await ref
+          .read(accountabilityProvider.notifier)
+          .createInvite(partnerEmail: email, partnerName: name);
+
+      if (link.isEmpty) {
+        if (mounted) {
+          setState(() => _errorMessage = 'Could not create invite. Please try again.');
+        }
+        return;
+      }
+
+      final partnerLabel = name.isNotEmpty ? name : 'there';
+      final shareText =
+          'Hey $partnerLabel, I\'m using MindsetForge to build a stronger mindset and I\'d love you as my accountability partner. Tap to join (it\'s free for partners): $link';
+
+      await Share.share(shareText, subject: 'Be my accountability partner');
+
       if (mounted) {
         setState(() {
-          _successMessage = 'Invite sent to $email!';
+          _successMessage = 'Invite link created! Share it with your partner.';
           _showInviteForm = false;
           _emailCtrl.clear();
           _nameCtrl.clear();
@@ -62,10 +72,73 @@ class _AccountabilityScreenState extends ConsumerState<AccountabilityScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _errorMessage = 'Failed to send invite. Please try again.');
+        setState(() => _errorMessage = 'Failed to create invite. Please try again.');
       }
     } finally {
       if (mounted) setState(() => _isSending = false);
+    }
+  }
+
+  Future<void> _confirmRemove(String relationshipId, String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierColor: AppColors.scrim,
+      builder: (_) => Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
+          side: BorderSide(color: AppColors.error.withValues(alpha: 0.25)),
+        ),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Remove partner?', style: AppTextStyles.headlineSmall),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'This ends your accountability partnership with $name. They will no longer see your progress, and you won\'t see theirs.',
+                style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: Text(
+                      'Cancel',
+                      style: AppTextStyles.labelLarge.copyWith(color: AppColors.textSecondary),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: Text(
+                      'Remove',
+                      style: AppTextStyles.labelLarge.copyWith(color: AppColors.error),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+    try {
+      await ref.read(accountabilityProvider.notifier).removePartner(relationshipId);
+      if (mounted) {
+        setState(() => _successMessage = 'Partnership with $name ended.');
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _errorMessage = 'Could not remove partner. Please try again.');
+      }
     }
   }
 
@@ -208,6 +281,11 @@ class _AccountabilityScreenState extends ConsumerState<AccountabilityScreen> {
                               onPressed: () => context.push('/partner-view/${r.primaryUid}'),
                               tooltip: 'View their progress',
                             ),
+                          IconButton(
+                            icon: const Icon(Icons.more_vert_rounded, color: AppColors.textMuted),
+                            onPressed: () => _confirmRemove(r.id, r.otherUserName),
+                            tooltip: 'Remove partner',
+                          ),
                         ],
                       ),
                     ).animate().fadeIn(delay: Duration(milliseconds: e.key * 60)),
@@ -253,7 +331,7 @@ class _InviteForm extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Your partner gets free app access and can view your progress, send encouragement, and keep you on track.',
+            'Create a free invite link and share it with anyone. Your partner gets free app access and can view your progress, send encouragement, and keep you on track.',
             style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: AppSpacing.md),
@@ -272,7 +350,7 @@ class _InviteForm extends StatelessWidget {
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => onSend(),
-            decoration: _inputDecoration('Partner\'s email *'),
+            decoration: _inputDecoration('Partner\'s email (optional)'),
           ),
           if (errorMessage != null) ...[
             const SizedBox(height: AppSpacing.sm),
@@ -283,7 +361,7 @@ class _InviteForm extends StatelessWidget {
             children: [
               Expanded(
                 child: AppPrimaryButton(
-                  label: 'Send Invite',
+                  label: 'Create & Share Link',
                   onPressed: isSending ? null : onSend,
                   isLoading: isSending,
                 ),

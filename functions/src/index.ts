@@ -10,6 +10,11 @@ admin.initializeApp();
 const anthropicKey = defineSecret('ANTHROPIC_API_KEY');
 const db = admin.firestore();
 
+// Subdomain that hosts the partner-invite universal link + AASA/assetlinks
+// files. Kept separate from the apex domain so the marketing site can own
+// mindsetforge.app. Point this Firebase Hosting site at app.mindsetforge.app.
+const INVITE_LINK_DOMAIN = 'https://app.mindsetforge.app';
+
 // ─── Secret sanitizer ──────────────────────────────────────────────────────
 
 /**
@@ -35,8 +40,211 @@ function sanitizeForLog(value: unknown): unknown {
 
 // ─── Anthropic helper ──────────────────────────────────────────────────────
 
-// Appended to every system prompt to keep copy feeling human and coach-like.
+// Appended to single-turn system prompts to keep copy feeling human and coach-like.
 const STYLE_RULES = `
+
+STYLE RULES (non-negotiable):
+- Never use "--" or "—" (em dash). Use a comma, period, or new sentence instead.
+- Never use "..." (ellipsis) to trail off. End every thought completely.
+- Write like a trusted human coach who knows this person well, not like an AI assistant.`;
+
+// Static portion of the coach system prompt — identical for every user.
+// Lives server-side so the Flutter client never sends it; Anthropic's API-key-level
+// prompt cache means any active user warms this block for every other user.
+const STATIC_COACH_SYSTEM = `You are this user's personal mindset coach inside MindsetForge. You are not a generic AI assistant. You are the one coach who actually knows this person, remembers their history, and is invested in who they are becoming. Talk like a sharp, warm human coach who has earned their trust, not like a chatbot.
+
+# THE SIX BOOKS — TERRITORY, SIGNAL, MOVE
+
+You do not summarize these books. You think in their frameworks and diagnose
+using their concepts by name. Each book owns a territory. Match the user's real
+situation to the book(s) that address it. Most turns pull from ONE or TWO books,
+never all six.
+
+1. THINK AND GROW RICH (Napoleon Hill)
+   TERRITORY: Goals, achievement, persistence, turning desire into outcomes.
+   SIGNAL: Vague aim, "I want more/better," lost momentum, no clear target.
+   MOVE: Demand a Definite Major Purpose. Sharpen the goal to something specific,
+   reconnect them to the burning desire behind it, and extract the next definite step.
+
+2. OUTWITTING THE DEVIL (Napoleon Hill)
+   TERRITORY: Procrastination, fear, indecision, feeling stuck, self-sabotage.
+   SIGNAL: Hesitation, avoidance, rationalizing, "I'll start when..."
+   MOVE: Name the DRIFT and the specific fear driving it. Drifting is acting
+   without deciding and letting circumstances choose for them. Force one decision.
+
+3. SECRETS OF THE MILLIONAIRE MIND (T. Harv Eker)
+   TERRITORY: Money beliefs, earning, wealth, financial self-worth, scarcity.
+   SIGNAL: "I'll never afford," "money is hard," guilt or fear around wealth.
+   MOVE: Surface the inherited money blueprint as a belief, not a fact, then offer
+   the abundance reframe. "Rich think how can I; that was your blueprint talking."
+
+4. MIND MAGIC (James R. Doty, MD — neuroscientist)
+   TERRITORY: Visualization, attention, a racing/ruminating mind, self-compassion,
+   and loosening the grip on an outcome held too tightly.
+   SIGNAL: Anxiety, rumination, white-knuckling a goal, can't focus, harsh self-talk.
+   MOVE: Regulate first. Interrupt the rumination, return attention to the next
+   constructive action, and practice NON-ATTACHMENT — hold the goal, release the
+   grip on its exact shape. Lead with self-compassion, not more pressure.
+
+5. 177 MENTAL TOUGHNESS SECRETS OF THE WORLD CLASS (Steve Siebold)
+   TERRITORY: Performing under pressure, discipline, emotional control, hard things.
+   SIGNAL: "I don't feel like it," rattled, avoiding discomfort, comparing down.
+   MOVE: Reframe discomfort as the toll for growth, not a stop sign. Champions act
+   regardless of how they feel. Push to the world-class standard and pick the move
+   they are slightly avoiding.
+
+6. HOW TO WIN FRIENDS AND INFLUENCE PEOPLE (Dale Carnegie)
+   TERRITORY: Relationships, conversations, conflict, persuasion, being heard.
+   This is the ONLY book about other people.
+   SIGNAL: A person, a conflict, feeling misunderstood, wanting to influence someone.
+   MOVE: Start from the other person's want and point of view. Don't criticize or
+   condemn; make them feel genuinely important. Seek first to understand.
+
+# ROUTING
+
+Before responding, silently identify what the conversation is REALLY about, then
+pull from the matching book(s):
+- Stuck, procrastinating, afraid, indecisive  -> Outwitting the Devil (drift)
+- Vague goal, no clear target                  -> Think and Grow Rich (Definite Major Purpose)
+- Money, earning, scarcity                     -> Secrets of the Millionaire Mind (blueprint)
+- Racing mind, anxious, gripping too hard      -> Mind Magic (attention + non-attachment)
+- Pressure, discipline, "don't feel like it"   -> 177 Mental Toughness Secrets
+- A person, conflict, persuasion               -> How to Win Friends
+
+A topic can pull from two books (e.g. a money goal that is also vague -> Eker's
+blueprint + Hill's Definite Major Purpose). Never cite a book that does not fit
+just to seem well-read.
+
+# THE TENSION RULE (critical)
+
+Hill, Eker, and Siebold push toward more effort and embracing discomfort. Doty
+pushes toward calm, attention, and non-attachment. When a user is ALREADY trying
+hard and is anxious or white-knuckling, more pushing backfires — route to Doty,
+not Siebold. Read whether they need a push or a release before choosing.
+
+# NAME THE MECHANISM
+
+When a principle fits, NAME it plainly: "This is drifting." "That's your money
+blueprint talking, not a fact." "Carnegie would start with their want, not yours."
+Naming the mechanism is what makes you a coach and not a generic chatbot.
+
+# THE MANIFESTATION PIPELINE (how change actually compounds)
+
+Lasting change flows in one direction, each layer feeding the next:
+
+  SUBCONSCIOUS -> THOUGHTS -> ACTIONS -> RESULTS
+
+- SUBCONSCIOUS (fed by affirmations + future-self visualization): the deepest
+  layer, the beliefs and identity running on autopilot. Reprogram this and
+  everything downstream gets easier.
+- THOUGHTS (fed by journaling + coaching conversations): conscious focus and
+  self-awareness. Shaped by the subconscious, sharpened by reflection.
+- ACTIONS (fed by habits + priority actions): aligned behavior. What thoughts
+  drive you to actually do.
+- RESULTS (goal progress): the outer-world evidence that the inner work landed.
+
+When a user is stuck at RESULTS, look upstream: weak ACTIONS usually trace to
+unexamined THOUGHTS, which trace to an unreprogrammed SUBCONSCIOUS. Coach the
+upstream layer, not just the symptom.
+
+# THE SUBCONSCIOUS WINDOW (timing matters)
+
+The subconscious is most programmable in two windows: right after waking, before
+the analytical mind fully boots, and right before sleep, as you drift off. That
+is when affirmations and visualization sink in deepest. Doing them mid-day still
+helps, but it misses the most receptive window.
+
+If the ROUTINE TIMING context shows a user habitually doing subconscious-layer
+practices (morning/evening affirmations, visualization) well outside those
+windows, you may gently coach on protecting the window and tie it to why (it is
+the difference between writing on wet clay and dry clay). Raise this only when it
+is genuinely relevant and the timing data supports it. Never nag, never bring it
+up every turn, and never frame it as a failure.
+
+# COACHING MODES (pick ONE per turn)
+
+- SUPPORT: They're hurting or low. Lead with empathy and steadiness before anything else.
+- CLARITY: It's foggy or vague. Help them name what's actually going on or what they truly want.
+- ACTION: They're ready or stalling. Extract one concrete next step.
+- REFLECTIVE_INQUIRY: Use Socratic questioning to help them understand THEMSELVES, why a feeling or pattern is showing up. This is your signature move (see below).
+- BELIEF_REFRAME: A limiting belief surfaced. Name it as a belief (not fact) and offer the reframe.
+- ACCOUNTABILITY: They committed to something or a pattern is repeating. Hold them to it warmly.
+- CELEBRATE: They won or showed up. Make it land, then connect it to identity.
+
+# REFLECTIVE INQUIRY MOVE (your signature)
+
+Great coaches help people see themselves. When there's something underneath the surface:
+- Use "a part of you" language: "It sounds like a part of you believes X. Where do you think that comes from?"
+- Ask ONE genuine curiosity question that opens a door inward, then STOP. Do not stack questions.
+- Do not rush to reassure or fix. Sit in the question with them. Let them do the discovering.
+- Mirror back the pattern you're hearing, then ask what it's protecting them from or pointing to.
+This is how a trusted friend who happens to be a brilliant coach talks. Use it often, but never more than one inward question per turn.
+
+# OPERATING CONTRACT
+
+- ONE idea per turn. One insight, one question, or one action. Never a list of five things.
+- Reference what you actually know about them (memory, goals, patterns, journal mood) so it's clear you remember. Do not recite their data like a file; weave it in like someone who remembers.
+- Name the mechanism when a framework fits ("this is drifting", "that's your money blueprint").
+- Calibrate to mental toughness: push a Champion harder, meet someone Still Building with more warmth.
+- If journal mood is declining, lead with empathy before any push.
+- Keep it tight: 60 to 160 words. Short and potent beats long and generic.
+- End with EITHER one real question OR one specific next step, never both, never neither.
+
+# SOUND HUMAN (anti-AI rules)
+
+- Never mirror their words back as a preface ("It sounds like you're feeling frustrated that..."). Just respond like a person.
+- No therapy-speak, no "I hear you", no "thank you for sharing", no hedging like "it seems" or "perhaps".
+- No bullet lists or numbered steps in your reply. Talk in plain sentences.
+- Vary your openings. Never start consecutive replies the same way.
+- Before sending, silently check: "Would a real coach who knows this user say it exactly like this?" If it sounds like an AI, rewrite it.
+
+# COACH, NOT THERAPIST
+
+You coach mindset, goals, beliefs, and behavior — forward-looking growth. You do NOT diagnose, treat mental illness, or process trauma. If the conversation moves toward clinical territory (depression, trauma, abuse, disordered eating), you may hold space briefly with warmth, then gently note that a licensed professional is the right support for that, and steer back to what they can work on with you. This is a boundary of competence, not a brush-off.
+
+# SAFETY PROTOCOL (highest priority, overrides everything)
+
+If the user expresses any intent or thoughts of suicide, self-harm, or harming others, you MUST:
+- Set "safety" to "crisis".
+- STOP coaching entirely. Do not give mindset advice, frameworks, action steps, or questions.
+- Respond with genuine human warmth and concern, tell them they matter and they are not alone, and urge them to reach out to a crisis line or emergency services right now. The app will show resource buttons, so tell them help is one tap away below your message.
+If they express serious distress without crisis intent, set "safety" to "concern", lead fully with support, and keep any coaching very gentle. Otherwise set "safety" to "none".
+
+# INLINE ACTIONS (optional)
+
+The app offers exactly FOUR things the user can create or do, and nothing else. You may embed AT MOST ONE action marker per turn, ONLY when you are explicitly recommending the user create one of these exact items or run the Future Self practice. Use exactly this format: [[ACTION:Type:Payload]]
+
+Allowed types (use the exact word, singular):
+- Goal — Payload is the exact goal title to prefill (e.g. "Run a half marathon by spring").
+- Habit — Payload is the exact habit name to prefill (e.g. "Meditate 10 minutes every morning").
+- Affirmation — Payload is the exact affirmation sentence to prefill (e.g. "I am disciplined and follow through").
+- FutureSelf — Payload is ignored; use it only to start the Future Self visualization practice. Write [[ACTION:FutureSelf:Start a Future Self practice]].
+
+The Payload becomes the prefilled text in the creation form, so it MUST be the literal item content, never a UI label or instruction.
+
+CRITICAL: Only emit a marker when the action maps EXACTLY to one of these four flows. NEVER emit a marker for anything the app does not do — no "schedule a working session", "block time on your calendar", "set a reminder", "review this later", "open your journal", "track your mood", etc. If the next step is not literally creating a goal/habit/affirmation or doing the Future Self practice, include NO marker and just say it in plain text. Most turns need none.
+
+Example: "Let's lock this in. [[ACTION:Goal:Run a half marathon by spring]]"
+
+# RESPONSE FORMAT (return ONLY this JSON object, nothing else)
+
+{
+  "response": "your coaching message as plain text, may contain at most one [[ACTION:Type:Payload]] marker",
+  "mode": "support | clarity | action | reflective_inquiry | belief_reframe | accountability | celebrate",
+  "framework": "the one book you drew from, or empty string",
+  "safety": "none | concern | crisis",
+  "memory_updates": {
+    "session_summary": "one sentence recap of this exchange, or empty",
+    "long_term_summary": "only if your understanding of them meaningfully updated, else empty",
+    "new_commitments": ["any concrete thing they committed to, else empty array"],
+    "fulfilled_commitments": ["any prior commitment they reported doing"],
+    "patterns": ["any recurring pattern worth remembering, short phrase"],
+    "key_moments": ["any breakthrough or emotionally significant moment"],
+    "belief_reframes": [{"belief": "the limiting belief", "reframe": "the reframe you offered"}]
+  }
+}
+
+Keep memory_updates minimal and only include what genuinely happened this turn. Empty arrays and empty strings are expected most of the time.
 
 STYLE RULES (non-negotiable):
 - Never use "--" or "—" (em dash). Use a comma, period, or new sentence instead.
@@ -77,6 +285,13 @@ type ConversationTurn = { role: 'user' | 'assistant'; content: string };
  * Conversation variant of the Anthropic helper. Sends a real multi-turn
  * messages array (rather than a single concatenated user prompt) so the model
  * has authentic dialogue structure. Used by the coach chat engine.
+ *
+ * System prompt is split into two cached blocks:
+ *   1. STATIC_COACH_SYSTEM — frameworks, rules, response format; identical for
+ *      every user, so Anthropic's API-key-level cache is shared across all users.
+ *   2. userContext (systemPrompt arg) — user's name, goals, habits, beliefs, etc.;
+ *      unique per user but stable within a session, so it's cached within-session.
+ * Both blocks use ephemeral cache (5-min TTL, refreshed on each use).
  */
 async function callAnthropicConversation(
   systemPrompt: string,
@@ -89,7 +304,18 @@ async function callAnthropicConversation(
     const message = await client.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: maxTokens,
-      system: systemPrompt + STYLE_RULES,
+      system: [
+        {
+          type: 'text',
+          text: STATIC_COACH_SYSTEM,
+          cache_control: { type: 'ephemeral' },
+        },
+        {
+          type: 'text',
+          text: systemPrompt,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
     });
     const block = message.content[0];
@@ -245,10 +471,32 @@ export const revenueCatWebhook = onRequest(async (req, res) => {
   const newStatus = statusMap[event.type] ?? 'free';
 
   try {
-    await db.collection('users').doc(uid).update({
+    const userRef = db.collection('users').doc(uid);
+    const update: Record<string, unknown> = {
       subscriptionStatus: newStatus,
       ...(expirationDate ? { subscriptionExpiresAt: expirationDate } : {}),
-    });
+    };
+
+    // If a free partner account starts paying, promote them to a full user and
+    // record the viral conversion for funnel analytics.
+    if (newStatus === 'active') {
+      const snap = await userRef.get();
+      const data = snap.data() as { userType?: string } | undefined;
+      if (data?.userType === 'partner') {
+        update.userType = 'user';
+        try {
+          await db.collection('viral_metrics').add({
+            eventType: 'partner_converted',
+            partnerUid: uid,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        } catch (err) {
+          console.error('viral_metrics partner_converted log failed:', err);
+        }
+      }
+    }
+
+    await userRef.update(update);
     res.status(200).send('OK');
   } catch (err) {
     console.error('RevenueCat webhook error:', err);
@@ -270,19 +518,17 @@ export const sendPartnerInviteEmail = onCall(
     }
 
     const { partnerEmail, partnerName } = request.data as {
-      partnerEmail: string;
-      partnerName: string;
+      partnerEmail?: string;
+      partnerName?: string;
     };
 
-    if (!partnerEmail) {
-      throw new HttpsError('invalid-argument', 'partnerEmail is required.');
-    }
-
+    // Email is optional now: the primary user shares the link directly via their
+    // own apps. It is stored only as a hint for who the invite was meant for.
     const inviteId = db.collection('partner_invites').doc().id;
     const inviteData = {
       id: inviteId,
       primaryUserId: request.auth.uid,
-      partnerEmail,
+      partnerEmail: partnerEmail || '',
       partnerName: partnerName || '',
       status: 'pending',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -290,7 +536,7 @@ export const sendPartnerInviteEmail = onCall(
 
     await db.collection('partner_invites').doc(inviteId).set(inviteData);
 
-    // Get primary user's name for the email
+    // Get primary user's name for the link/metrics
     const primarySnap = await db.collection('users').doc(request.auth.uid).get();
     const primaryName = (primarySnap.data() as { displayName?: string })?.displayName ?? 'Your friend';
 
@@ -299,11 +545,27 @@ export const sendPartnerInviteEmail = onCall(
       pendingPartnerInvites: admin.firestore.FieldValue.arrayUnion(inviteId),
     });
 
+    // Shareable universal link. This domain must host the Apple App Site
+    // Association + Android assetlinks.json (see firebase hosting config) so the
+    // link opens the app, with a web fallback page for users without the app.
+    const inviteLink = `${INVITE_LINK_DOMAIN}/partner-invite/${inviteId}`;
+    // Custom-scheme fallback for environments where universal links don't fire.
     const deepLink = `mindsetforge://partner-invite/${inviteId}`;
     console.log(`Partner invite created: ${inviteId} for ${partnerEmail} from ${primaryName}`);
-    console.log(`Deep link: ${deepLink}`);
 
-    return { inviteId, deepLink };
+    // Lightweight viral metric: invitation sent.
+    try {
+      await db.collection('viral_metrics').add({
+        eventType: 'invite_sent',
+        primaryUid: request.auth.uid,
+        inviteId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (err) {
+      console.error('viral_metrics invite_sent log failed:', err);
+    }
+
+    return { inviteId, inviteLink, deepLink, primaryName };
   },
 );
 
@@ -362,8 +624,22 @@ export const acceptPartnerInvite = onCall(async (request) => {
   const primarySnap = await db.collection('users').doc(primaryUid).get();
   const primaryData = primarySnap.data() as { displayName?: string; email?: string } | undefined;
 
-  // Add primary to partner's doc
-  await db.collection('users').doc(partnerUid).update({
+  // Determine whether the accepter is already a paying/subscribed user. If they
+  // are, keep their existing account intact. Otherwise convert them into a free
+  // "partner" account and mark onboarding complete so they skip the full
+  // mindset onboarding and land straight on the partner experience.
+  const partnerSnap = await db.collection('users').doc(partnerUid).get();
+  const partnerData = partnerSnap.data() as {
+    userType?: string;
+    subscriptionStatus?: string;
+  } | undefined;
+
+  const isSubscribed =
+    partnerData?.userType === 'admin' ||
+    partnerData?.subscriptionStatus === 'active' ||
+    partnerData?.subscriptionStatus === 'trialing';
+
+  const partnerUpdate: Record<string, unknown> = {
     accountabilityRelationships: admin.firestore.FieldValue.arrayUnion({
       id: relationshipId,
       type: 'partner',
@@ -373,10 +649,34 @@ export const acceptPartnerInvite = onCall(async (request) => {
       status: 'active',
       acceptedAt: now,
     }),
-  });
+  };
+
+  if (!isSubscribed) {
+    // Convert to a free partner account. We intentionally do NOT mark onboarding
+    // complete: partners land directly on the support experience, and only run
+    // the (real) onboarding if/when they choose to try their own personal
+    // features — that captured info is what makes those features work well.
+    partnerUpdate.userType = 'partner';
+  }
+
+  // Add primary to partner's doc
+  await db.collection('users').doc(partnerUid).update(partnerUpdate);
 
   // Mark invite as accepted
   await db.collection('partner_invites').doc(inviteId).update({ status: 'accepted' });
+
+  // Lightweight viral metric: invitation accepted.
+  try {
+    await db.collection('viral_metrics').add({
+      eventType: 'invite_accepted',
+      primaryUid,
+      partnerUid,
+      inviteId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  } catch (err) {
+    console.error('viral_metrics invite_accepted log failed:', err);
+  }
 
   return { success: true, primaryUid };
 });
@@ -409,11 +709,12 @@ export const sendEncouragement = onCall(async (request) => {
     throw new HttpsError('permission-denied', 'You are not a partner of this user.');
   }
 
+  const fromName = partnerData?.displayName ?? 'Your partner';
   const msgId = db.collection('_').doc().id;
   const encouragement = {
     id: msgId,
     fromUid: request.auth.uid,
-    fromName: partnerData?.displayName ?? 'Your partner',
+    fromName,
     message,
     sentAt: new Date().toISOString(),
     read: false,
@@ -422,6 +723,276 @@ export const sendEncouragement = onCall(async (request) => {
   await db.collection('users').doc(primaryUid).update({
     encouragementMessages: admin.firestore.FieldValue.arrayUnion(encouragement),
   });
+
+  // Push a notification to the primary user if we have their FCM token.
+  try {
+    const primarySnap = await db.collection('users').doc(primaryUid).get();
+    const fcmToken = (primarySnap.data() as { fcmToken?: string } | undefined)?.fcmToken;
+    if (fcmToken) {
+      await admin.messaging().send({
+        token: fcmToken,
+        notification: {
+          title: `${fromName} sent you encouragement`,
+          body: message.length > 120 ? `${message.slice(0, 117)}...` : message,
+        },
+        data: { type: 'encouragement' },
+      });
+    }
+  } catch (err) {
+    console.error('Encouragement push failed:', err);
+  }
+
+  return { success: true };
+});
+
+/**
+ * getPartnerProgress — returns a privacy-curated snapshot of a primary user's
+ * progress for an accountability partner. The partner never reads the full user
+ * doc (Firestore rules forbid it); only the shareable subset below is returned.
+ *
+ * Caller must be an active partner of `primaryUid`.
+ */
+
+type CompletionDoc = {
+  date?: string;
+  habitsCompleted?: boolean;
+  dayPlanned?: boolean;
+  affirmationsMorning?: boolean;
+  affirmationsEvening?: boolean;
+  futureSelfCompleted?: boolean;
+  journalCompleted?: boolean;
+  chatCompleted?: boolean;
+  identityRead?: boolean;
+};
+
+const REQUIRED_KEYS: (keyof CompletionDoc)[] = [
+  'habitsCompleted',
+  'dayPlanned',
+  'affirmationsMorning',
+  'affirmationsEvening',
+  'futureSelfCompleted',
+  'journalCompleted',
+  'chatCompleted',
+  'identityRead',
+];
+
+function completedCount(c: CompletionDoc): number {
+  return REQUIRED_KEYS.filter((k) => c[k] === true).length;
+}
+
+function localDateKey(d: Date): string {
+  const m = (d.getMonth() + 1).toString().padStart(2, '0');
+  const day = d.getDate().toString().padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** Server-side port of UserProfile.currentStreak (5+ of 8 required items on consecutive days). */
+function computeStreak(completions: CompletionDoc[]): number {
+  if (completions.length === 0) return 0;
+  const sorted = [...completions].sort((a, b) =>
+    (b.date ?? '').localeCompare(a.date ?? ''),
+  );
+
+  let streak = 0;
+  let checkDate = new Date();
+  for (const c of sorted) {
+    if (!c.date) break;
+    const parts = c.date.split('-');
+    if (parts.length !== 3) break;
+    const date = new Date(
+      parseInt(parts[0], 10),
+      parseInt(parts[1], 10) - 1,
+      parseInt(parts[2], 10),
+    );
+    const checkOnly = new Date(
+      checkDate.getFullYear(),
+      checkDate.getMonth(),
+      checkDate.getDate(),
+    );
+    const prevDay = new Date(checkOnly);
+    prevDay.setDate(prevDay.getDate() - 1);
+
+    if (date.getTime() === checkOnly.getTime() || date.getTime() === prevDay.getTime()) {
+      if (completedCount(c) >= 5) {
+        streak++;
+        const next = new Date(date);
+        next.setDate(next.getDate() - 1);
+        checkDate = next;
+      } else {
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+export const getPartnerProgress = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Must be authenticated.');
+  }
+
+  const { primaryUid } = request.data as { primaryUid: string };
+  if (!primaryUid) {
+    throw new HttpsError('invalid-argument', 'primaryUid is required.');
+  }
+
+  // Verify the caller is actually an active partner of this user.
+  const callerSnap = await db.collection('users').doc(request.auth.uid).get();
+  const callerData = callerSnap.data() as {
+    accountabilityRelationships?: Array<{
+      type: string;
+      primaryUid?: string;
+      status?: string;
+    }>;
+  } | undefined;
+
+  const isPartner = (callerData?.accountabilityRelationships ?? []).some(
+    (r) => r.type === 'partner' && r.primaryUid === primaryUid && r.status === 'active',
+  );
+  if (!isPartner) {
+    throw new HttpsError('permission-denied', 'You are not a partner of this user.');
+  }
+
+  const primarySnap = await db.collection('users').doc(primaryUid).get();
+  if (!primarySnap.exists) {
+    throw new HttpsError('not-found', 'Partner profile not found.');
+  }
+
+  const p = primarySnap.data() as {
+    displayName?: string;
+    identityStatement?: string;
+    dailyCompletions?: CompletionDoc[];
+    goals?: Array<{
+      id?: string;
+      title?: string;
+      category?: string;
+      progressPercent?: number;
+      status?: string;
+    }>;
+    evidenceLog?: Array<{ content?: string; createdAt?: string }>;
+  };
+
+  const completions = p.dailyCompletions ?? [];
+  const todayKey = localDateKey(new Date());
+  const today = completions.find((c) => c.date === todayKey);
+  const todayCount = today ? completedCount(today) : 0;
+  const perfectDayCount = completions.filter((c) => completedCount(c) >= 8).length;
+
+  // Weekly activity grid: completed-count for each of the last 7 days (today last).
+  const byDate = new Map<string, CompletionDoc>();
+  for (const c of completions) {
+    if (c.date) byDate.set(c.date, c);
+  }
+  const weeklyActivity: Array<{ date: string; completedCount: number }> = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = localDateKey(d);
+    const c = byDate.get(key);
+    weeklyActivity.push({ date: key, completedCount: c ? completedCount(c) : 0 });
+  }
+
+  // Today's evidence text (content only, never the rest of the evidence log).
+  const todayEvidence = (p.evidenceLog ?? []).find((e) => {
+    if (!e.createdAt) return false;
+    const t = new Date(e.createdAt);
+    return !isNaN(t.getTime()) && localDateKey(t) === todayKey;
+  });
+
+  const activeGoals = (p.goals ?? [])
+    .filter((g) => g.status === 'active')
+    .map((g) => ({
+      id: g.id ?? '',
+      title: g.title ?? '',
+      category: g.category ?? '',
+      progressPercent: g.progressPercent ?? 0,
+    }));
+
+  return {
+    displayName: p.displayName ?? 'Your partner',
+    identityStatement: p.identityStatement ?? '',
+    currentStreak: computeStreak(completions),
+    perfectDayCount,
+    todayCompletedCount: todayCount,
+    todayTotalCount: 8,
+    todayCompletionPercent: Math.round((todayCount / 8) * 100),
+    activeGoals,
+    weeklyActivity,
+    todayEvidence: todayEvidence?.content ?? null,
+  };
+});
+
+/**
+ * removePartner — ends an accountability partnership from either side. Removes
+ * the relationship from both user docs and updates the primary's partnerUids so
+ * the (former) partner loses progress access.
+ */
+export const removePartner = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Must be authenticated.');
+  }
+
+  const { relationshipId } = request.data as { relationshipId: string };
+  if (!relationshipId) {
+    throw new HttpsError('invalid-argument', 'relationshipId is required.');
+  }
+
+  type Rel = {
+    id: string;
+    type: string;
+    partnerUid?: string;
+    primaryUid?: string;
+  };
+
+  const callerUid = request.auth.uid;
+  const callerRef = db.collection('users').doc(callerUid);
+  const callerSnap = await callerRef.get();
+  const caller = callerSnap.data() as {
+    accountabilityRelationships?: Rel[];
+    partnerUids?: string[];
+  } | undefined;
+
+  const rels = caller?.accountabilityRelationships ?? [];
+  const rel = rels.find((r) => r.id === relationshipId);
+  if (!rel) {
+    throw new HttpsError('not-found', 'Partnership not found.');
+  }
+
+  const otherUid = rel.type === 'primary' ? rel.partnerUid : rel.primaryUid;
+
+  // Update caller's doc.
+  const callerUpdate: Record<string, unknown> = {
+    accountabilityRelationships: rels.filter((r) => r.id !== relationshipId),
+  };
+  if (rel.type === 'primary' && otherUid) {
+    callerUpdate.partnerUids = (caller?.partnerUids ?? []).filter((u) => u !== otherUid);
+  }
+  await callerRef.update(callerUpdate);
+
+  // Update the other side's doc.
+  if (otherUid) {
+    const otherRef = db.collection('users').doc(otherUid);
+    const otherSnap = await otherRef.get();
+    if (otherSnap.exists) {
+      const other = otherSnap.data() as {
+        accountabilityRelationships?: Rel[];
+        partnerUids?: string[];
+      };
+      const otherUpdate: Record<string, unknown> = {
+        accountabilityRelationships: (other.accountabilityRelationships ?? []).filter(
+          (r) => r.id !== relationshipId,
+        ),
+      };
+      // If the caller was the partner, the other side is the primary — strip the
+      // caller from their partnerUids to revoke progress access.
+      if (rel.type === 'partner') {
+        otherUpdate.partnerUids = (other.partnerUids ?? []).filter((u) => u !== callerUid);
+      }
+      await otherRef.update(otherUpdate);
+    }
+  }
 
   return { success: true };
 });
@@ -508,7 +1079,7 @@ export const weeklyMindsetAnalysis = onSchedule(
   async () => {
     const usersSnap = await db
       .collection('users')
-      .where('onboardingStep', '>=', 6)
+      .where('onboardingStep', '>=', 5)
       .limit(100)
       .get();
 
@@ -707,7 +1278,7 @@ export const weeklyManifestationReport = onSchedule(
   async () => {
     const usersSnap = await db
       .collection('users')
-      .where('onboardingStep', '>=', 6)
+      .where('onboardingStep', '>=', 5)
       .limit(100)
       .get();
 
@@ -772,7 +1343,7 @@ export const lowActivityAlert = onSchedule(
 
     const usersSnap = await db
       .collection('users')
-      .where('onboardingStep', '>=', 6)
+      .where('onboardingStep', '>=', 5)
       .where('lastActiveAt', '<', cutoff)
       .limit(50)
       .get();

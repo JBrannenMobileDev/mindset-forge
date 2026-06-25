@@ -4,7 +4,7 @@ import 'habit.dart';
 import 'affirmation.dart';
 import 'daily_completion.dart';
 import 'future_self_setup.dart';
-import 'future_self_practice.dart';
+import 'future_self_completion.dart';
 import 'belief_pattern.dart';
 import 'deep_dive.dart';
 import 'evidence_entry.dart';
@@ -25,6 +25,8 @@ class UserProfile {
   final MindsetBlueprint mindsetBlueprint;
   final MindsetBlueprint originalMindsetBaseline;
   final String identityStatement;
+  final String identitySituation;
+  final List<String> identityQualities;
   final List<IdentityReadLog> identityReadLog;
   final List<Goal> goals;
   final List<Habit> habits;
@@ -34,12 +36,15 @@ class UserProfile {
   final List<GratitudeEntry> gratitudeLog;
   final List<DailyCompletion> dailyCompletions;
   final List<String> limitingBeliefs;
-  final FutureSelfPractice? futureSelfPractice;
   final FutureSelfSetup? futureSelfSetup;
+  final List<FutureSelfCompletion> futureSelfCompletions;
   final List<BeliefPattern> beliefPatternHistory;
   final DeepDive deepDive;
   final List<String> fearsDrift;
   final double mentalToughnessScore;
+  /// Whether the user has finished the deferred, in-app mindset blueprint setup
+  /// (trait sliders, mental toughness, fear quiz) after the lightweight onboarding.
+  final bool blueprintCompleted;
   final String mindsetBlueprintSummary;
   final Map<String, String> dailyWisdom;
   final List<String> priorityActions;
@@ -53,6 +58,10 @@ class UserProfile {
   final List<AccountabilityRelationship> accountabilityRelationships;
   final List<EncouragementMessage> encouragementMessages;
   final List<String> partnerUids;
+
+  /// Weekly usage counters for free "partner" accounts (limited app access).
+  /// Shape: { 'weekStart': 'yyyy-MM-dd', 'chatMessages': int, 'journalEntries': int }.
+  final Map<String, dynamic> partnerUsage;
   final CoachMemory coachMemory;
   final DateTime? coachDisclaimerAcceptedAt;
   final String? fcmToken;
@@ -69,6 +78,8 @@ class UserProfile {
     required this.mindsetBlueprint,
     required this.originalMindsetBaseline,
     this.identityStatement = '',
+    this.identitySituation = '',
+    this.identityQualities = const [],
     this.identityReadLog = const [],
     this.goals = const [],
     this.habits = const [],
@@ -78,12 +89,13 @@ class UserProfile {
     this.gratitudeLog = const [],
     this.dailyCompletions = const [],
     this.limitingBeliefs = const [],
-    this.futureSelfPractice,
     this.futureSelfSetup,
+    this.futureSelfCompletions = const [],
     this.beliefPatternHistory = const [],
     required this.deepDive,
     this.fearsDrift = const [],
     this.mentalToughnessScore = 50.0,
+    this.blueprintCompleted = false,
     this.mindsetBlueprintSummary = '',
     this.dailyWisdom = const {},
     this.priorityActions = const [],
@@ -97,6 +109,7 @@ class UserProfile {
     this.accountabilityRelationships = const [],
     this.encouragementMessages = const [],
     this.partnerUids = const [],
+    this.partnerUsage = const {},
     this.coachMemory = const CoachMemory(),
     this.coachDisclaimerAcceptedAt,
     this.fcmToken,
@@ -106,6 +119,31 @@ class UserProfile {
 
   /// Whether the user has acknowledged the one-time coach disclaimer.
   bool get hasAcceptedCoachDisclaimer => coachDisclaimerAcceptedAt != null;
+
+  /// A free "partner" account: limited app access, joined via an accountability
+  /// partner invite, funneled toward starting their own subscription.
+  bool get isPartnerAccount => userType == 'partner';
+
+  /// True when the user has full, paid access (paying subscriber or in trial).
+  bool get hasActiveSubscription =>
+      subscriptionStatus == 'active' || subscriptionStatus == 'trialing';
+
+  /// For a partner account, the name of the primary user they are supporting
+  /// (used for social proof in upgrade prompts). Null if not applicable.
+  String? get supportingPersonName {
+    for (final r in accountabilityRelationships) {
+      if (r.type == 'partner' && (r.primaryName ?? '').isNotEmpty) {
+        return r.primaryName;
+      }
+    }
+    return null;
+  }
+
+  /// Onboarding has 5 steps (0–4): Welcome, Goal, Identity, Blocker, AI Analysis.
+  /// It is only complete once [onboardingStep] reaches the total set on the
+  /// final step. Deferred mindset data (blueprint, toughness, fears) is collected
+  /// in-app afterwards and tracked separately via [blueprintCompleted].
+  bool get hasCompletedOnboarding => onboardingStep >= 5;
 
   String get firstName =>
       displayName.isNotEmpty ? displayName.split(' ').first : 'there';
@@ -165,6 +203,8 @@ class UserProfile {
     MindsetBlueprint? mindsetBlueprint,
     MindsetBlueprint? originalMindsetBaseline,
     String? identityStatement,
+    String? identitySituation,
+    List<String>? identityQualities,
     List<IdentityReadLog>? identityReadLog,
     List<Goal>? goals,
     List<Habit>? habits,
@@ -174,12 +214,13 @@ class UserProfile {
     List<GratitudeEntry>? gratitudeLog,
     List<DailyCompletion>? dailyCompletions,
     List<String>? limitingBeliefs,
-    FutureSelfPractice? futureSelfPractice,
     FutureSelfSetup? futureSelfSetup,
+    List<FutureSelfCompletion>? futureSelfCompletions,
     List<BeliefPattern>? beliefPatternHistory,
     DeepDive? deepDive,
     List<String>? fearsDrift,
     double? mentalToughnessScore,
+    bool? blueprintCompleted,
     String? mindsetBlueprintSummary,
     Map<String, String>? dailyWisdom,
     List<String>? priorityActions,
@@ -193,6 +234,7 @@ class UserProfile {
     List<AccountabilityRelationship>? accountabilityRelationships,
     List<EncouragementMessage>? encouragementMessages,
     List<String>? partnerUids,
+    Map<String, dynamic>? partnerUsage,
     CoachMemory? coachMemory,
     DateTime? coachDisclaimerAcceptedAt,
     String? fcmToken,
@@ -210,6 +252,8 @@ class UserProfile {
       originalMindsetBaseline:
           originalMindsetBaseline ?? this.originalMindsetBaseline,
       identityStatement: identityStatement ?? this.identityStatement,
+      identitySituation: identitySituation ?? this.identitySituation,
+      identityQualities: identityQualities ?? this.identityQualities,
       identityReadLog: identityReadLog ?? this.identityReadLog,
       goals: goals ?? this.goals,
       habits: habits ?? this.habits,
@@ -220,12 +264,14 @@ class UserProfile {
       gratitudeLog: gratitudeLog ?? this.gratitudeLog,
       dailyCompletions: dailyCompletions ?? this.dailyCompletions,
       limitingBeliefs: limitingBeliefs ?? this.limitingBeliefs,
-      futureSelfPractice: futureSelfPractice ?? this.futureSelfPractice,
       futureSelfSetup: futureSelfSetup ?? this.futureSelfSetup,
+      futureSelfCompletions:
+          futureSelfCompletions ?? this.futureSelfCompletions,
       beliefPatternHistory: beliefPatternHistory ?? this.beliefPatternHistory,
       deepDive: deepDive ?? this.deepDive,
       fearsDrift: fearsDrift ?? this.fearsDrift,
       mentalToughnessScore: mentalToughnessScore ?? this.mentalToughnessScore,
+      blueprintCompleted: blueprintCompleted ?? this.blueprintCompleted,
       mindsetBlueprintSummary: mindsetBlueprintSummary ?? this.mindsetBlueprintSummary,
       dailyWisdom: dailyWisdom ?? this.dailyWisdom,
       priorityActions: priorityActions ?? this.priorityActions,
@@ -239,6 +285,7 @@ class UserProfile {
       accountabilityRelationships: accountabilityRelationships ?? this.accountabilityRelationships,
       encouragementMessages: encouragementMessages ?? this.encouragementMessages,
       partnerUids: partnerUids ?? this.partnerUids,
+      partnerUsage: partnerUsage ?? this.partnerUsage,
       coachMemory: coachMemory ?? this.coachMemory,
       coachDisclaimerAcceptedAt:
           coachDisclaimerAcceptedAt ?? this.coachDisclaimerAcceptedAt,
@@ -281,6 +328,9 @@ class UserProfile {
               json['originalMindsetBaseline'] as Map<String, dynamic>)
           : const MindsetBlueprint(),
       identityStatement: json['identityStatement'] as String? ?? '',
+      identitySituation: json['identitySituation'] as String? ?? '',
+      identityQualities:
+          List<String>.from(json['identityQualities'] as List<dynamic>? ?? []),
       identityReadLog: (json['identityReadLog'] as List<dynamic>?)
               ?.map((e) =>
                   IdentityReadLog.fromJson(e as Map<String, dynamic>))
@@ -319,14 +369,15 @@ class UserProfile {
           [],
       limitingBeliefs:
           List<String>.from(json['limitingBeliefs'] as List<dynamic>? ?? []),
-      futureSelfPractice: json['futureSelfPractice'] != null
-          ? FutureSelfPractice.fromJson(
-              json['futureSelfPractice'] as Map<String, dynamic>)
-          : null,
       futureSelfSetup: json['futureSelfSetup'] != null
           ? FutureSelfSetup.fromJson(
               json['futureSelfSetup'] as Map<String, dynamic>)
           : null,
+      futureSelfCompletions: (json['futureSelfCompletions'] as List<dynamic>?)
+              ?.map((e) =>
+                  FutureSelfCompletion.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
       beliefPatternHistory:
           (json['beliefPatternHistory'] as List<dynamic>?)
                   ?.map((e) =>
@@ -338,6 +389,7 @@ class UserProfile {
           : DeepDive.initial(),
       fearsDrift: List<String>.from(json['fearsDrift'] as List<dynamic>? ?? []),
       mentalToughnessScore: (json['mentalToughnessScore'] as num?)?.toDouble() ?? 50.0,
+      blueprintCompleted: json['blueprintCompleted'] as bool? ?? false,
       mindsetBlueprintSummary: json['mindsetBlueprintSummary'] as String? ?? '',
       dailyWisdom:
           Map<String, String>.from(json['dailyWisdom'] as Map? ?? {}),
@@ -366,6 +418,8 @@ class UserProfile {
                   .toList() ??
               [],
       partnerUids: List<String>.from(json['partnerUids'] as List<dynamic>? ?? []),
+      partnerUsage:
+          Map<String, dynamic>.from(json['partnerUsage'] as Map? ?? {}),
       coachMemory: json['coachMemory'] != null
           ? CoachMemory.fromJson(json['coachMemory'] as Map<String, dynamic>)
           : const CoachMemory(),
@@ -390,6 +444,8 @@ class UserProfile {
         'mindsetBlueprint': mindsetBlueprint.toJson(),
         'originalMindsetBaseline': originalMindsetBaseline.toJson(),
         'identityStatement': identityStatement,
+        'identitySituation': identitySituation,
+        'identityQualities': identityQualities,
         'identityReadLog': identityReadLog.map((e) => e.toJson()).toList(),
         'goals': goals.map((g) => g.toJson()).toList(),
         'habits': habits.map((h) => h.toJson()).toList(),
@@ -401,13 +457,15 @@ class UserProfile {
         'dailyCompletions':
             dailyCompletions.map((d) => d.toJson()).toList(),
         'limitingBeliefs': limitingBeliefs,
-        'futureSelfPractice': futureSelfPractice?.toJson(),
         'futureSelfSetup': futureSelfSetup?.toJson(),
+        'futureSelfCompletions':
+            futureSelfCompletions.map((c) => c.toJson()).toList(),
         'beliefPatternHistory':
             beliefPatternHistory.map((b) => b.toJson()).toList(),
         'deepDive': deepDive.toJson(),
         'fearsDrift': fearsDrift,
         'mentalToughnessScore': mentalToughnessScore,
+        'blueprintCompleted': blueprintCompleted,
         'mindsetBlueprintSummary': mindsetBlueprintSummary,
         'dailyWisdom': dailyWisdom,
         'priorityActions': priorityActions,
@@ -424,6 +482,7 @@ class UserProfile {
         'encouragementMessages':
             encouragementMessages.map((m) => m.toJson()).toList(),
         'partnerUids': partnerUids,
+        'partnerUsage': partnerUsage,
         'coachMemory': coachMemory.toJson(),
         'coachDisclaimerAcceptedAt': coachDisclaimerAcceptedAt?.toIso8601String(),
         'fcmToken': fcmToken,

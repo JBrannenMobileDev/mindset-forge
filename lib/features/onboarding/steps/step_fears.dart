@@ -30,7 +30,7 @@ class _StepFearsState extends State<StepFears> {
   final Map<String, int> _scores = {};
 
   List<String> _top2 = [];
-  bool _swapping = false; // whether user is in the swap-primary flow
+  bool _adjusting = false; // whether user is manually selecting their fears
 
   // ── Question data ──────────────────────────────────────────────────────────
 
@@ -42,7 +42,7 @@ class _StepFearsState extends State<StepFears> {
         _Answer('I worry what others will think', 'Fear of Judgment'),
         _Answer('I doubt I have what it takes', 'Imposter Syndrome'),
         _Answer('I\'m afraid to fail publicly', 'Fear of Failure'),
-        _Answer('I freeze — not sure what to do', 'Fear of Uncertainty'),
+        _Answer('I freeze and have no idea what to do', 'Fear of Uncertainty'),
         _Answer('I wait for the "right" moment', 'Fear of Failure'),
       ],
     ),
@@ -85,7 +85,7 @@ class _StepFearsState extends State<StepFears> {
     ),
     'Fear of Success': _FearMeta(
       'Fear of Success',
-      'Deep down, you fear what succeeding would demand of you — new responsibilities, expectations, or a changed identity.',
+      'Deep down, you fear the demands success would place on you. The new responsibilities, the higher expectations, the version of yourself you\'d have to become.',
       Icons.emoji_events_rounded,
     ),
     'Fear of Rejection': _FearMeta(
@@ -132,11 +132,16 @@ class _StepFearsState extends State<StepFears> {
     _phase = 'results';
   }
 
-  void _swapPrimary(String newPrimary) {
+  void _toggleManualSelect(String fear) {
     setState(() {
-      final other = _top2.firstWhere((f) => f != newPrimary, orElse: () => _top2[1]);
-      _top2 = [newPrimary, other];
-      _swapping = false;
+      if (_top2.contains(fear)) {
+        _top2 = List.from(_top2)..remove(fear);
+      } else if (_top2.length < 2) {
+        _top2 = [..._top2, fear];
+      } else {
+        // Replace the secondary (second item) with the new choice
+        _top2 = [_top2[0], fear];
+      }
     });
   }
 
@@ -230,13 +235,26 @@ class _StepFearsState extends State<StepFears> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(
+          padding: EdgeInsets.fromLTRB(
             AppSpacing.screenPaddingH, AppSpacing.md,
-            AppSpacing.screenPaddingH, AppSpacing.xl,
+            AppSpacing.screenPaddingH,
+            MediaQuery.of(context).padding.bottom + AppSpacing.md,
           ),
-          child: AppSecondaryButton(
-            label: 'Skip — I\'ll set this later',
-            onPressed: () => widget.onNext([]),
+          child: Row(
+            children: [
+              AppSecondaryButton(
+                label: 'Back',
+                width: 100,
+                onPressed: widget.onBack,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: AppSecondaryButton(
+                  label: 'Skip',
+                  onPressed: () => widget.onNext([]),
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -287,45 +305,73 @@ class _StepFearsState extends State<StepFears> {
                   const SizedBox(height: AppSpacing.xl),
                 ],
 
-                Text(
-                  'Does this feel accurate?',
-                  style: AppTextStyles.labelLarge,
-                ).animate().fadeIn(delay: 400.ms, duration: 300.ms),
-                const SizedBox(height: AppSpacing.sm),
-
-                if (_swapping) ...[
+                if (_adjusting) ...[
                   Text(
-                    'Select the fear that fits better as your primary:',
+                    'Pick up to two fears. Your first choice becomes primary.',
                     style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  ..._fearMeta.keys.map((f) => Padding(
-                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                        child: GestureDetector(
-                          onTap: () => _swapPrimary(f),
-                          child: Container(
-                            padding: const EdgeInsets.all(AppSpacing.md),
-                            decoration: BoxDecoration(
-                              color: _top2.first == f
-                                  ? AppColors.primaryContainer
-                                  : AppColors.surfaceElevated,
-                              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                              border: Border.all(
-                                color: _top2.first == f ? AppColors.primary : AppColors.border,
-                              ),
+                  ..._fearMeta.keys.map((f) {
+                    final idx = _top2.indexOf(f);
+                    final isSelected = idx != -1;
+                    final badgeLabel = idx == 0 ? 'Primary' : idx == 1 ? 'Secondary' : null;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                      child: GestureDetector(
+                        onTap: () => _toggleManualSelect(f),
+                        child: Container(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppColors.primaryContainer
+                                : AppColors.surfaceElevated,
+                            borderRadius:
+                                BorderRadius.circular(AppSpacing.radiusMd),
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : AppColors.border,
                             ),
-                            child: Text(f, style: AppTextStyles.bodyMedium),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                  child: Text(f, style: AppTextStyles.bodyMedium)),
+                              if (badgeLabel != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: AppSpacing.sm,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(
+                                        AppSpacing.radiusFull),
+                                  ),
+                                  child: Text(
+                                    badgeLabel,
+                                    style: AppTextStyles.labelSmall
+                                        .copyWith(color: AppColors.primary),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
-                      )),
-                ] else ...[
-                  Row(
-                    children: [
-                      AppSecondaryButton(
-                        label: 'Change primary',
-                        onPressed: () => setState(() => _swapping = true),
                       ),
-                    ],
+                    );
+                  }),
+                ] else ...[
+                  TextButton(
+                    onPressed: () => setState(() => _adjusting = true),
+                    child: Text(
+                      'This doesn\'t feel right',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textSecondary,
+                        decoration: TextDecoration.underline,
+                        decorationColor: AppColors.textSecondary,
+                      ),
+                    ),
                   ),
                 ],
               ],
@@ -333,14 +379,43 @@ class _StepFearsState extends State<StepFears> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(
+          padding: EdgeInsets.fromLTRB(
             AppSpacing.screenPaddingH, AppSpacing.md,
-            AppSpacing.screenPaddingH, AppSpacing.xl,
+            AppSpacing.screenPaddingH,
+            MediaQuery.of(context).padding.bottom + AppSpacing.md,
           ),
-          child: AppPrimaryButton(
-            label: 'This is accurate — Continue',
-            onPressed: () => widget.onNext(_top2),
-            icon: Icons.arrow_forward_rounded,
+          child: Row(
+            children: [
+              AppSecondaryButton(
+                label: _adjusting ? 'Cancel' : 'Back',
+                width: 100,
+                onPressed: () => setState(() {
+                  if (_adjusting) {
+                    _adjusting = false;
+                  } else {
+                    _phase = 'quiz';
+                    _currentQuestion = 0;
+                    _scores.clear();
+                  }
+                }),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: AppPrimaryButton(
+                  label: _adjusting ? 'Use these' : 'Continue',
+                  onPressed: _top2.isNotEmpty
+                      ? () {
+                          if (_adjusting) {
+                            setState(() => _adjusting = false);
+                          } else {
+                            widget.onNext(_top2);
+                          }
+                        }
+                      : null,
+                  icon: _adjusting ? Icons.check_rounded : Icons.arrow_forward_rounded,
+                ),
+              ),
+            ],
           ),
         ),
       ],

@@ -1,5 +1,6 @@
 import '../../models/user_profile.dart';
 import '../../models/deep_dive.dart';
+import '../../models/goal.dart';
 import '../utils/manifestation_scoring.dart';
 
 /// Builds structured, reusable context blocks from a [UserProfile].
@@ -38,9 +39,16 @@ abstract final class UserContextBuilder {
         ? '\nMindset Blueprint Summary: "${p.mindsetBlueprintSummary}"'
         : '';
 
+    final situationLine = p.identitySituation.isNotEmpty
+        ? '\nCurrent Situation: ${p.identitySituation}'
+        : '';
+    final qualitiesLine = p.identityQualities.isNotEmpty
+        ? '\nQualities They Aspire To: ${p.identityQualities.join(', ')}'
+        : '';
+
     return '''USER CONTEXT:
 Name: ${p.displayName}
-Identity Statement: "${p.identityStatement}"
+Identity Statement: "${p.identityStatement}"$situationLine$qualitiesLine
 Mindset Blueprint Scores (1–10):
   Confidence: ${b.confidence.toStringAsFixed(1)}
   Discipline: ${b.discipline.toStringAsFixed(1)}
@@ -55,21 +63,130 @@ Mental Toughness Score: ${p.mentalToughnessScore.toStringAsFixed(0)}/100 ($tough
 
   // ─── Goals block ──────────────────────────────────────────────────────────
 
-  /// Active goals with title, category, progress, and first action step.
+  /// Rich active-goal context: title, category, timeframe, progress, time left,
+  /// the identity the goal builds toward, why it matters, the next action, and
+  /// the milestone hierarchy (sub-goals nested under their parent). Completed
+  /// goals are excluded from the active list; instead a short "Recent wins" line
+  /// surfaces the most recently completed goals so the coach can celebrate them.
   static String goalsBlock(UserProfile p) {
     final active = p.goals.where((g) => g.status == 'active').toList();
-    if (active.isEmpty) return 'Active Goals: None set yet.';
+    final recentWins = _recentWinsLine(p);
 
-    final lines = active.take(5).map((g) {
-      final step = g.actionSteps.isNotEmpty
-          ? '\n    Next action: ${g.actionSteps.first.description}'
-          : '';
-      return '  • ${g.title} (${g.category}) — ${g.progressPercent.toStringAsFixed(0)}% complete$step';
-    }).join('\n');
+    if (active.isEmpty) {
+      return recentWins.isEmpty
+          ? 'Active Goals: None set yet.'
+          : 'Active Goals: None set yet.\n$recentWins';
+    }
 
-    final completed = p.goals.where((g) => g.status == 'completed').length;
-    return 'Active Goals (${active.length}):\n$lines'
-        '${completed > 0 ? '\nCompleted Goals: $completed' : ''}';
+    // Split into top-level goals and their active children (milestones).
+    final topLevel = active.where((g) => g.parentGoalId == null).toList();
+    final childrenByParent = <String, List<Goal>>{};
+    for (final g in active) {
+      if (g.parentGoalId != null) {
+        childrenByParent.putIfAbsent(g.parentGoalId!, () => []).add(g);
+      }
+    }
+
+    final renderedParentIds = <String>{};
+    final lines = <String>[];
+
+    for (final g in topLevel.take(6)) {
+      renderedParentIds.add(g.id);
+      lines.add(_goalLines(g, childrenByParent[g.id] ?? const []));
+    }
+
+    // Orphan milestones whose parent isn't active/visible — show as their own
+    // short-term group so the AI still sees them.
+    final orphans = active
+        .where((g) =>
+            g.parentGoalId != null && !renderedParentIds.contains(g.parentGoalId))
+        .toList();
+    if (orphans.isNotEmpty) {
+      final orphanLines = orphans
+          .take(5)
+          .map((g) =>
+              '  • ${g.title} (${g.category}) — ${g.progressPercent.toStringAsFixed(0)}% complete')
+          .join('\n');
+      lines.add('Short-term goals:\n$orphanLines');
+    }
+
+    final body = lines.join('\n');
+    return 'Active Goals (${active.length}):\n$body'
+        '${recentWins.isEmpty ? '' : '\n$recentWins'}';
+  }
+
+  /// Renders one top-level goal plus its nested active milestones.
+  static String _goalLines(Goal g, List<Goal> milestones) {
+    final buffer = StringBuffer();
+    buffer.write(
+      '  • ${g.title} (${g.category}, ${_goalTypeLabel(g.goalType)}) — '
+      '${g.progressPercent.toStringAsFixed(0)}% complete — ${_timeLeft(g.targetDate)}',
+    );
+    if (g.identityBecomes.isNotEmpty) {
+      buffer.write('\n    becomes: ${g.identityBecomes}');
+    }
+    if (g.description.isNotEmpty) {
+      buffer.write('\n    why: ${_truncate(g.description, 120)}');
+    }
+    if (g.actionSteps.isNotEmpty) {
+      buffer.write('\n    next action: ${g.actionSteps.first.description}');
+    }
+    for (final m in milestones.take(4)) {
+      buffer.write(
+        '\n    └ milestone: ${m.title} — '
+        '${m.progressPercent.toStringAsFixed(0)}% complete',
+      );
+    }
+    return buffer.toString();
+  }
+
+  /// One compact line listing the 1-2 most recently completed goals within the
+  /// last ~60 days. Empty string if none qualify.
+  static String _recentWinsLine(UserProfile p) {
+    final cutoff = DateTime.now().subtract(const Duration(days: 60));
+    final wins = p.goals
+        .where((g) =>
+            g.status == 'completed' &&
+            g.completedAt != null &&
+            g.completedAt!.isAfter(cutoff))
+        .toList()
+      ..sort((a, b) => b.completedAt!.compareTo(a.completedAt!));
+    if (wins.isEmpty) return '';
+    final titles = wins.take(2).map((g) => g.title).join(', ');
+    return 'Recent wins (completed): $titles';
+  }
+
+  static String _goalTypeLabel(String goalType) {
+    switch (goalType) {
+      case 'short_term':
+        return 'short-term';
+      case 'medium_term':
+        return 'medium-term';
+      case 'life_goal':
+        return 'life goal';
+      case 'long_term':
+      default:
+        return 'long-term';
+    }
+  }
+
+  /// Human-readable time remaining until a target date.
+  static String _timeLeft(DateTime target) {
+    final now = DateTime.now();
+    final days = target.difference(now).inDays;
+    if (days < 0) return 'overdue';
+    if (days == 0) return 'due today';
+    if (days <= 14) return '$days days left';
+    if (days < 60) return '~${(days / 7).round()} weeks left';
+    if (days < 365) return '~${(days / 30).round()} months left';
+    final years = days / 365;
+    return years < 1.5 ? '~1 year left' : '~${years.round()} years left';
+  }
+
+  static String _truncate(String text, int max) {
+    final clean = text.replaceAll('\n', ' ').trim();
+    if (clean.length <= max) return clean;
+    return '${clean.substring(0, max).trimRight()}…';
   }
 
   // ─── Habits block ─────────────────────────────────────────────────────────

@@ -3,6 +3,17 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "hosting": {
+    "public": "public",
+    "appAssociation": "NONE",
+    "ignore": ["firebase.json", "**/node_modules/**"],
+    "rewrites": [
+      {
+        "source": "/partner-invite/**",
+        "destination": "/partner-invite.html"
+      }
+    ]
+  },
   "functions": [
     {
       "source": "functions",

@@ -2,14 +2,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users can read/write their own profile.
-    // Accountability partners can read the primary user's doc if their uid
-    // is listed in the partnerUids array (populated by acceptPartnerInvite function).
+    // Users can read/write ONLY their own profile.
+    // Accountability partners do NOT get direct read access to the primary's
+    // doc (it holds private data: beliefs, fears, coach memory, etc). Partners
+    // read a privacy-curated subset via the getPartnerProgress callable instead.
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
-      allow read: if request.auth != null
-        && resource.data.partnerUids != null
-        && request.auth.uid in resource.data.partnerUids;
     }
 
     // Journal entries belong to their owner (field name is uid, not userId)

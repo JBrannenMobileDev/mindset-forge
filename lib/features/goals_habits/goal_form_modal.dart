@@ -5,21 +5,53 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/constants/goal_meta.dart';
 import '../../core/utils/app_date_utils.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_text_field.dart';
+import '../../core/widgets/partner_upgrade_sheet.dart';
 import '../../models/goal.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/claude_provider.dart';
 import '../../providers/goals_provider.dart';
+import '../../providers/partner_limits_provider.dart';
+import 'goal_setup_sheet.dart';
 import 'widgets/sheet_handle.dart';
 
 class GoalFormModal {
-  static void show(
+  static Future<void> show(
     BuildContext context,
     WidgetRef ref, {
     Goal? existing,
     String? initialTitle,
-  }) {
-    showModalBottomSheet<void>(
+  }) async {
+    // Free partner accounts must set up their journey first, then are capped on
+    // how many goals they can create before upgrading.
+    if (existing == null) {
+      final profile = ref.read(currentUserProfileProvider).valueOrNull;
+      if (profile != null && profile.isPartnerAccount) {
+        if (!profile.hasCompletedOnboarding) {
+          showPartnerSetupSheet(
+            context,
+            featureName: 'goal tracking',
+            partnerName: profile.supportingPersonName,
+          );
+          return;
+        }
+        if (!ref.read(partnerLimitsProvider).canUse(profile, PartnerFeature.goal)) {
+          showPartnerUpgradeSheet(
+            context,
+            featureName: 'goal tracking',
+            partnerName: profile.supportingPersonName,
+          );
+          return;
+        }
+      }
+    }
+
+    // The form sheet pops with the newly created goal (or null for edits/cancel)
+    // so we can chain the post-creation "build your plan" experience.
+    final created = await showModalBottomSheet<Goal?>(
       context: context,
       useRootNavigator: true,
       isScrollControlled: true,
@@ -32,6 +64,12 @@ class GoalFormModal {
         child: _GoalFormSheet(existing: existing, initialTitle: initialTitle),
       ),
     );
+
+    // For long-horizon goals, immediately guide the user into milestones and
+    // supporting habit/affirmation wiring.
+    if (created != null && created.isLongHorizon && context.mounted) {
+      await GoalSetupSheet.show(context, ref, created);
+    }
   }
 }
 
@@ -51,8 +89,11 @@ class _GoalFormSheetState extends ConsumerState<_GoalFormSheet> {
   late final TextEditingController _descCtrl;
   late final TextEditingController _identityCtrl;
   late String _category;
+  late String _goalType;
   late DateTime _targetDate;
+  bool _targetDateTouched = false;
   bool _isSaving = false;
+  bool _isRefining = false;
 
   static const _categories = [
     _Cat('career', AppStrings.categoryCareer, Icons.work_rounded, AppColors.categoryCareer),
@@ -71,7 +112,63 @@ class _GoalFormSheetState extends ConsumerState<_GoalFormSheet> {
     _descCtrl = TextEditingController(text: widget.existing?.description ?? '');
     _identityCtrl = TextEditingController(text: widget.existing?.identityBecomes ?? '');
     _category = widget.existing?.category ?? 'personal_growth';
-    _targetDate = widget.existing?.targetDate ?? DateTime.now().add(const Duration(days: 90));
+    _goalType = widget.existing?.goalType ?? kGoalTypeLongTerm;
+    if (widget.existing != null) {
+      _targetDate = widget.existing!.targetDate;
+      _targetDateTouched = true;
+    } else {
+      final defaultDays = kGoalTypeOptions
+          .firstWhere((o) => o.value == _goalType)
+          .defaultDays;
+      _targetDate = DateTime.now().add(Duration(days: defaultDays));
+    }
+  }
+
+  void _selectTimeframe(String value) {
+    setState(() {
+      _goalType = value;
+      // Re-seed the target date from the timeframe unless the user picked one.
+      if (!_targetDateTouched) {
+        final days =
+            kGoalTypeOptions.firstWhere((o) => o.value == value).defaultDays;
+        _targetDate = DateTime.now().add(Duration(days: days));
+      }
+    });
+  }
+
+  Future<void> _refineWithAI() async {
+    final draft = _titleCtrl.text.trim();
+    if (draft.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(AppStrings.goalTitleHint)),
+      );
+      return;
+    }
+    final profile = ref.read(currentUserProfileProvider).valueOrNull;
+    if (profile == null) return;
+
+    setState(() => _isRefining = true);
+    try {
+      final result = await ref
+          .read(claudeServiceProvider)
+          .refineGoal(draft, _category, profile);
+      if (!mounted) return;
+      setState(() {
+        _titleCtrl.text = result['title'] ?? draft;
+        final desc = result['description'] ?? '';
+        if (desc.isNotEmpty && _descCtrl.text.trim().isEmpty) {
+          _descCtrl.text = desc;
+        }
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(AppStrings.errorAI)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isRefining = false);
+    }
   }
 
   @override
@@ -91,20 +188,30 @@ class _GoalFormSheetState extends ConsumerState<_GoalFormSheet> {
         id: widget.existing?.id ?? const Uuid().v4(),
         title: _titleCtrl.text.trim(),
         category: _category,
+        goalType: _goalType,
         description: _descCtrl.text.trim(),
+        parentGoalId: widget.existing?.parentGoalId,
         targetDate: _targetDate,
         identityBecomes: _identityCtrl.text.trim(),
         progressPercent: widget.existing?.progressPercent ?? 0.0,
+        actionSteps: widget.existing?.actionSteps ?? const [],
+        status: widget.existing?.status ?? 'active',
+        completedAt: widget.existing?.completedAt,
         createdAt: widget.existing?.createdAt ?? DateTime.now(),
       );
 
-      if (widget.existing != null) {
-        await ref.read(goalsProvider.notifier).updateGoal(goal);
-      } else {
+      final isNew = widget.existing == null;
+      if (isNew) {
         await ref.read(goalsProvider.notifier).addGoal(goal);
+      } else {
+        await ref.read(goalsProvider.notifier).updateGoal(goal);
       }
 
-      if (mounted) Navigator.pop(context);
+      // Pop with the goal only for new top-level goals so the caller can chain
+      // the post-creation setup sheet. Edits and sub-goals close silently.
+      if (mounted) {
+        Navigator.pop(context, isNew && goal.isLongTerm ? goal : null);
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -152,6 +259,11 @@ class _GoalFormSheetState extends ConsumerState<_GoalFormSheet> {
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),
+
+              // 1. Intention — category + title (with AI refine)
+              Text(AppStrings.goalIntentionPrompt,
+                  style: AppTextStyles.headlineSmall),
+              const SizedBox(height: AppSpacing.md),
               Text(AppStrings.goalCategory, style: AppTextStyles.labelMedium),
               const SizedBox(height: AppSpacing.sm),
               Wrap(
@@ -198,20 +310,95 @@ class _GoalFormSheetState extends ConsumerState<_GoalFormSheet> {
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? AppStrings.fieldRequired : null,
               ),
-              const SizedBox(height: AppSpacing.md),
-              AppTextField(
-                label: AppStrings.goalDescription,
-                hint: AppStrings.goalDescriptionHint,
-                controller: _descCtrl,
-                maxLines: 3,
+              const SizedBox(height: AppSpacing.xs),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _isRefining ? null : _refineWithAI,
+                  icon: _isRefining
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppColors.primary),
+                        )
+                      : const Icon(Icons.auto_awesome_rounded,
+                          size: 16, color: AppColors.primary),
+                  label: Text(
+                    AppStrings.goalRefineWithAI,
+                    style: AppTextStyles.labelMedium
+                        .copyWith(color: AppColors.primary),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
               ),
               const SizedBox(height: AppSpacing.md),
+
+              // 2. Identity anchor — the heart of the experience
+              Text(AppStrings.goalIdentityPrompt,
+                  style: AppTextStyles.headlineSmall),
+              const SizedBox(height: AppSpacing.sm),
               AppTextField(
                 label: AppStrings.goalIdentityBecomes,
                 hint: AppStrings.goalIdentityHint,
                 controller: _identityCtrl,
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? AppStrings.fieldRequired : null,
+              ),
+              const SizedBox(height: AppSpacing.md),
+
+              // 3. Why it matters
+              Text(AppStrings.goalWhyMatters,
+                  style: AppTextStyles.headlineSmall),
+              const SizedBox(height: AppSpacing.sm),
+              AppTextField(
+                label: AppStrings.goalDescription,
+                hint: AppStrings.goalWhyMattersHint,
+                controller: _descCtrl,
+                maxLines: 3,
+              ),
+              const SizedBox(height: AppSpacing.md),
+
+              // 4. Timeframe + target date
+              Text(AppStrings.goalTimeframe, style: AppTextStyles.labelMedium),
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: kGoalTypeOptions.map((opt) {
+                  final selected = opt.value == _goalType;
+                  return GestureDetector(
+                    onTap: () => _selectTimeframe(opt.value),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm,
+                        vertical: AppSpacing.xs,
+                      ),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? AppColors.primaryContainer
+                            : AppColors.surfaceElevated,
+                        border: Border.all(
+                          color: selected ? AppColors.primary : AppColors.border,
+                        ),
+                        borderRadius:
+                            BorderRadius.circular(AppSpacing.radiusFull),
+                      ),
+                      child: Text(
+                        '${opt.label} · ${opt.subtitle}',
+                        style: AppTextStyles.labelSmall.copyWith(
+                          color: selected
+                              ? AppColors.primary
+                              : AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
               const SizedBox(height: AppSpacing.md),
               Text(AppStrings.goalTargetDate, style: AppTextStyles.labelMedium),
@@ -222,7 +409,7 @@ class _GoalFormSheetState extends ConsumerState<_GoalFormSheet> {
                     context: context,
                     initialDate: _targetDate,
                     firstDate: DateTime.now().add(const Duration(days: 1)),
-                    lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
+                    lastDate: DateTime.now().add(const Duration(days: 365 * 25)),
                     builder: (ctx, child) => Theme(
                       data: Theme.of(ctx).copyWith(
                         colorScheme: const ColorScheme.dark(primary: AppColors.primary),
@@ -230,7 +417,12 @@ class _GoalFormSheetState extends ConsumerState<_GoalFormSheet> {
                       child: child!,
                     ),
                   );
-                  if (picked != null) setState(() => _targetDate = picked);
+                  if (picked != null) {
+                    setState(() {
+                      _targetDate = picked;
+                      _targetDateTouched = true;
+                    });
+                  }
                 },
                 child: Container(
                   height: AppSpacing.inputHeight,

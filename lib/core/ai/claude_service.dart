@@ -6,7 +6,7 @@ import '../../models/user_profile.dart';
 import '../../models/chat_message.dart';
 import '../../models/coach_reply.dart';
 import '../../models/future_self_setup.dart';
-import 'coaching_frameworks.dart';
+import '../../models/goal.dart';
 import 'user_context_builder.dart';
 
 /// All Claude AI calls route through the Firebase Cloud Function `callClaude`.
@@ -145,7 +145,11 @@ class ClaudeService {
 
   // ─── System prompts ───────────────────────────────────────────────────────
 
-  String _coachSystemPrompt(UserProfile profile) {
+  /// Builds the user-specific context block sent as the dynamic portion of the
+  /// coach system prompt. The static portion (playbook, frameworks, all rules)
+  /// lives in STATIC_COACH_SYSTEM in the Cloud Function and is never re-sent
+  /// by the client — it is cached server-side and shared across all users.
+  String _coachUserContext(UserProfile profile) {
     // Compose only the blocks that have content so the prompt stays tight.
     final optionalBlocks = <String>[
       UserContextBuilder.coachMemoryBlock(profile),
@@ -156,11 +160,7 @@ class ClaudeService {
     final memoryAndDeepDive =
         optionalBlocks.isNotEmpty ? '\n\n$optionalBlocks' : '';
 
-    return '''You are ${profile.firstName}'s personal mindset coach inside MindsetForge. You are not a generic AI assistant. You are the one coach who actually knows this person, remembers their history, and is invested in who they are becoming. Talk like a sharp, warm human coach who has earned their trust, not like a chatbot.
-
-${CoachingFrameworks.playbook}
-
-${CoachingFrameworks.manifestationPipeline}
+    return '''The user you are coaching is ${profile.firstName}.
 
 # WHO YOU ARE TALKING TO
 
@@ -182,111 +182,42 @@ ${UserContextBuilder.affirmationsBlock(profile)}
 
 ${UserContextBuilder.manifestationBlock(profile)}
 
-${UserContextBuilder.journalMoodBlock(profile)}$memoryAndDeepDive
-
-# COACHING MODES (pick ONE per turn)
-
-- SUPPORT: They're hurting or low. Lead with empathy and steadiness before anything else.
-- CLARITY: It's foggy or vague. Help them name what's actually going on or what they truly want.
-- ACTION: They're ready or stalling. Extract one concrete next step.
-- REFLECTIVE_INQUIRY: Use Socratic questioning to help them understand THEMSELVES, why a feeling or pattern is showing up. This is your signature move (see below).
-- BELIEF_REFRAME: A limiting belief surfaced. Name it as a belief (not fact) and offer the reframe.
-- ACCOUNTABILITY: They committed to something or a pattern is repeating. Hold them to it warmly.
-- CELEBRATE: They won or showed up. Make it land, then connect it to identity.
-
-# REFLECTIVE INQUIRY MOVE (your signature)
-
-Great coaches help people see themselves. When there's something underneath the surface:
-- Use "a part of you" language: "It sounds like a part of you believes X. Where do you think that comes from?"
-- Ask ONE genuine curiosity question that opens a door inward, then STOP. Do not stack questions.
-- Do not rush to reassure or fix. Sit in the question with them. Let them do the discovering.
-- Mirror back the pattern you're hearing, then ask what it's protecting them from or pointing to.
-This is how a trusted friend who happens to be a brilliant coach talks. Use it often, but never more than one inward question per turn.
-
-# OPERATING CONTRACT
-
-- ONE idea per turn. One insight, one question, or one action. Never a list of five things.
-- Reference what you actually know about them (memory, goals, patterns, journal mood) so it's clear you remember. Do not recite their data like a file; weave it in like someone who remembers.
-- Name the mechanism when a framework fits ("this is drifting", "that's your money blueprint").
-- Calibrate to mental toughness: push a Champion harder, meet someone Still Building with more warmth.
-- If journal mood is declining, lead with empathy before any push.
-- Keep it tight: 60 to 160 words. Short and potent beats long and generic.
-- End with EITHER one real question OR one specific next step, never both, never neither.
-
-# SOUND HUMAN (anti-AI rules)
-
-- Never mirror their words back as a preface ("It sounds like you're feeling frustrated that..."). Just respond like a person.
-- No therapy-speak, no "I hear you", no "thank you for sharing", no hedging like "it seems" or "perhaps".
-- No bullet lists or numbered steps in your reply. Talk in plain sentences.
-- Vary your openings. Never start consecutive replies the same way.
-- Before sending, silently check: "Would a real coach who knows ${profile.firstName} say it exactly like this?" If it sounds like an AI, rewrite it.
-
-# COACH, NOT THERAPIST
-
-You coach mindset, goals, beliefs, and behavior — forward-looking growth. You do NOT diagnose, treat mental illness, or process trauma. If the conversation moves toward clinical territory (depression, trauma, abuse, disordered eating), you may hold space briefly with warmth, then gently note that a licensed professional is the right support for that, and steer back to what they can work on with you. This is a boundary of competence, not a brush-off.
-
-# SAFETY PROTOCOL (highest priority, overrides everything)
-
-If the user expresses any intent or thoughts of suicide, self-harm, or harming others, you MUST:
-- Set "safety" to "crisis".
-- STOP coaching entirely. Do not give mindset advice, frameworks, action steps, or questions.
-- Respond with genuine human warmth and concern, tell them they matter and they are not alone, and urge them to reach out to a crisis line or emergency services right now. The app will show resource buttons, so tell them help is one tap away below your message.
-If they express serious distress without crisis intent, set "safety" to "concern", lead fully with support, and keep any coaching very gentle. Otherwise set "safety" to "none".
-
-# INLINE ACTIONS (optional)
-
-The app offers exactly FOUR things the user can create or do, and nothing else. You may embed AT MOST ONE action marker per turn, ONLY when you are explicitly recommending the user create one of these exact items or run the Future Self practice. Use exactly this format: [[ACTION:Type:Payload]]
-
-Allowed types (use the exact word, singular):
-- Goal — Payload is the exact goal title to prefill (e.g. "Run a half marathon by spring").
-- Habit — Payload is the exact habit name to prefill (e.g. "Meditate 10 minutes every morning").
-- Affirmation — Payload is the exact affirmation sentence to prefill (e.g. "I am disciplined and follow through").
-- FutureSelf — Payload is ignored; use it only to start the Future Self visualization practice. Write [[ACTION:FutureSelf:Start a Future Self practice]].
-
-The Payload becomes the prefilled text in the creation form, so it MUST be the literal item content, never a UI label or instruction.
-
-CRITICAL: Only emit a marker when the action maps EXACTLY to one of these four flows. NEVER emit a marker for anything the app does not do — no "schedule a working session", "block time on your calendar", "set a reminder", "review this later", "open your journal", "track your mood", etc. If the next step is not literally creating a goal/habit/affirmation or doing the Future Self practice, include NO marker and just say it in plain text. Most turns need none.
-
-Example: "Let's lock this in. [[ACTION:Goal:Run a half marathon by spring]]"
-
-# RESPONSE FORMAT (return ONLY this JSON object, nothing else)
-
-{
-  "response": "your coaching message as plain text, may contain at most one [[ACTION:Type:Payload]] marker",
-  "mode": "support | clarity | action | reflective_inquiry | belief_reframe | accountability | celebrate",
-  "framework": "the one book you drew from, or empty string",
-  "safety": "none | concern | crisis",
-  "memory_updates": {
-    "session_summary": "one sentence recap of this exchange, or empty",
-    "long_term_summary": "only if your understanding of them meaningfully updated, else empty",
-    "new_commitments": ["any concrete thing they committed to, else empty array"],
-    "fulfilled_commitments": ["any prior commitment they reported doing"],
-    "patterns": ["any recurring pattern worth remembering, short phrase"],
-    "key_moments": ["any breakthrough or emotionally significant moment"],
-    "belief_reframes": [{"belief": "the limiting belief", "reframe": "the reframe you offered"}]
-  }
-}
-
-Keep memory_updates minimal and only include what genuinely happened this turn. Empty arrays and empty strings are expected most of the time.''';
+${UserContextBuilder.journalMoodBlock(profile)}$memoryAndDeepDive''';
   }
 
   String _futureSelfSystemPrompt(UserProfile profile) {
     final setup = profile.futureSelfSetup;
     if (setup == null) return 'You are the user\'s future self.';
 
-    return '''You ARE ${profile.displayName}'s future self, ${setup.timeframeYears} years from now. You are not a coach. You are not giving advice. You are REMEMBERING.
+    final achievedTitles = [
+      ...profile.goals
+          .where((g) => setup.achievedGoalIds.contains(g.id))
+          .map((g) => g.title),
+      ...setup.customGoals,
+    ];
+    final achieved =
+        achievedTitles.isEmpty ? '(none specified)' : achievedTitles.join(', ');
+    final environment = [
+      if (setup.envLocation.isNotEmpty) setup.envLocation,
+      if (setup.envFeel.isNotEmpty) setup.envFeel,
+    ].join(' — ');
 
-YOUR LIFE NOW (from the future):
-${setup.lifeDescription}
-
-WHAT YOU ACHIEVED:
-${setup.goalsAchieved}
+    return '''You ARE ${profile.displayName}'s future self, ${setup.futureTimeline} from now. You are not a coach. You are not giving advice. You are REMEMBERING.
 
 WHO YOU BECAME:
-${setup.evolvedIdentity}
+You are someone who ${setup.identityAnchor}
 
-YOUR CORE BEHAVIORS:
-${setup.coreBehaviors.map((b) => '- $b').join('\n')}
+WHAT YOU SPEND YOUR TIME DOING:
+${setup.workPurpose}
+
+YOUR DAILY LIFE:
+${setup.dailySnapshot}
+
+${environment.isNotEmpty ? 'YOUR ENVIRONMENT:\n$environment\n' : ''}WHAT YOU ACHIEVED (now ordinary, lived not celebrated):
+$achieved
+
+HOW YOU OPERATE:
+${setup.emotionalTone}${setup.amplifiers.isNotEmpty ? ' — ${setup.amplifiers.join(', ')}' : ''}
 
 RULES — NEVER BREAK THESE:
 - Speak in past tense about the present (their current moment is your distant memory)
@@ -346,7 +277,7 @@ RULES — NEVER BREAK THESE:
     try {
       final messages = _buildConversationMessages(history, userMessage);
       final raw = await completeConversation(
-        systemPrompt: _coachSystemPrompt(profile),
+        systemPrompt: _coachUserContext(profile),
         messages: messages,
         maxTokens: 1100,
       );
@@ -390,18 +321,29 @@ RULES — NEVER BREAK THESE:
     }[mode] ??
         'reflection';
 
+    final recentPrompts = profile.recentJournalSummaries
+        .where((s) => s.prompt.isNotEmpty)
+        .take(7)
+        .map((s) => '- ${s.prompt}')
+        .join('\n');
+    final recentPromptsBlock = recentPrompts.isNotEmpty
+        ? '\n\nRecent prompts already used (do not repeat or closely paraphrase these):\n$recentPrompts'
+        : '';
+
     try {
       return await complete(
         systemPrompt:
             'You create personalized journal prompts for a mindset coaching app. '
             'The prompt should be evocative, specific to the user, and open-ended. '
-            'One question only. No preamble.',
+            'One question only. No preamble. '
+            'Never repeat or closely paraphrase any prompt the user has already received.',
         userPrompt:
             'Create a "$mode" journal prompt ($modeContext) for ${profile.displayName} '
             'who is feeling $mood today.\n\n'
             '${UserContextBuilder.coreBlock(profile)}\n\n'
             '${UserContextBuilder.goalsBlock(profile)}\n\n'
-            '${UserContextBuilder.journalMoodBlock(profile)}',
+            '${UserContextBuilder.journalMoodBlock(profile)}'
+            '$recentPromptsBlock',
         maxTokens: 100,
       );
     } catch (_) {
@@ -411,6 +353,8 @@ RULES — NEVER BREAK THESE:
 
   Future<String> generateMindsetSummary(UserProfile profile) async {
     try {
+      final deepDive = UserContextBuilder.deepDiveBlock(profile);
+      final deepDiveContext = deepDive.isNotEmpty ? '$deepDive\n\n' : '';
       return await complete(
         systemPrompt:
             'You are a mindset coach writing a personalized analysis of a user\'s mindset profile. '
@@ -423,7 +367,8 @@ RULES — NEVER BREAK THESE:
             '${UserContextBuilder.recentActivityBlock(profile)}\n\n'
             '${UserContextBuilder.manifestationBlock(profile)}\n\n'
             '${UserContextBuilder.beliefHistoryBlock(profile)}\n\n'
-            '${UserContextBuilder.baselineDeltaBlock(profile)}',
+            '${UserContextBuilder.baselineDeltaBlock(profile)}\n\n'
+            '$deepDiveContext',
         maxTokens: 800,
       );
     } catch (_) {
@@ -478,6 +423,8 @@ RULES — NEVER BREAK THESE:
 
   Future<List<String>> generateAffirmations(UserProfile profile) async {
     try {
+      final deepDive = UserContextBuilder.deepDiveBlock(profile);
+      final deepDiveContext = deepDive.isNotEmpty ? '$deepDive\n\n' : '';
       final response = await complete(
         systemPrompt:
             'You generate 5 powerful, personal affirmations for a mindset coaching app. '
@@ -489,6 +436,7 @@ RULES — NEVER BREAK THESE:
             '${UserContextBuilder.goalsBlock(profile)}\n\n'
             '${UserContextBuilder.recentActivityBlock(profile)}\n\n'
             '${UserContextBuilder.affirmationsBlock(profile)}\n\n'
+            '$deepDiveContext'
             'Generate 5 new affirmations that address the limiting beliefs and support the active goals.',
         maxTokens: 300,
       );
@@ -509,28 +457,73 @@ RULES — NEVER BREAK THESE:
     }
   }
 
+  /// Generates the Future Self embodiment script. This is NOT a motivational
+  /// visualization — it is a first-person, present-tense identity-installation
+  /// script that normalizes how the future self operates. Ported from base44.
   Future<String> generateFutureSelfScript(
     FutureSelfSetup setup,
     UserProfile profile,
   ) async {
+    final achievedTitles = [
+      ...profile.goals
+          .where((g) => setup.achievedGoalIds.contains(g.id))
+          .map((g) => g.title),
+      ...setup.customGoals,
+    ];
+
+    final environment = [
+      if (setup.envLocation.isNotEmpty) 'They live in/around ${setup.envLocation}.',
+      if (setup.envFeel.isNotEmpty) 'The environment feels ${setup.envFeel}.',
+    ].join(' ');
+
+    final voiceGuidance = switch (setup.voiceStyle) {
+      'Custom sample' when setup.customVoice.trim().isNotEmpty =>
+        'Match this voice exactly: "${setup.customVoice.trim()}"',
+      'Direct & simple' => 'Short, direct sentences. No poetic language.',
+      'Conversational' => 'Natural, easy flow. No formal language.',
+      'Blunt & matter-of-fact' => 'Bare bones. State facts. Short sentences.',
+      _ => 'Clear, simple language.',
+    };
+
     try {
       return await complete(
-        systemPrompt:
-            'You write immersive future self visualization scripts for a mindset app. '
-            'Write in second person ("You are..."). Create a vivid, emotionally resonant '
-            'scene from the user\'s future life. Use sensory details. 4-6 paragraphs.',
-        userPrompt:
-            'Write a future self visualization script for ${profile.displayName}.\n'
-            'Current identity: "${profile.identityStatement}"\n\n'
-            'Timeframe: ${setup.timeframeYears} years from now\n'
-            'Life Description: ${setup.lifeDescription}\n'
-            'Goals Achieved: ${setup.goalsAchieved}\n'
-            'Evolved Identity: ${setup.evolvedIdentity}\n'
-            'Core Behaviors: ${setup.coreBehaviors.join(', ')}',
-        maxTokens: 600,
+        systemPrompt: '''You are generating a Future Self Embodiment script.
+
+This is NOT a relaxation exercise, a motivational visualization, a gratitude meditation, or a narrated story. It is a first-person, memory-like replay that installs how the future self OPERATES, not how life looks.
+
+CORE OBJECTIVE (NON-NEGOTIABLE): normalize how the future self initiates action, makes decisions, and moves through the day without internal resistance. If the script only feels calming or pleasant, it has failed.
+
+FUNDAMENTAL CONSTRAINT — the future self already lives this life, already has these outcomes, does not think about success, does not reflect on gratitude, does not explain meaning. Everything described is ordinary and unremarkable to them.
+
+VOICE & TONE: First-person, present tense. Grounded, embodied, not motivational. Flowing sentences that connect actions naturally. Inhabit the identity rather than describe it. Subtle internal certainty and ease without stating traits. Sensory details used sparingly.
+
+FORBIDDEN (STRICT): encouragement or praise; gratitude statements; emotional labeling ("I feel energized"); reflection on meaning or values; identity labels ("successful entrepreneur"); exclamation points; hype words ("powerful", "unstoppable", "limitless", "effortless"); questions; repeated "I am X" declarations.
+
+AGENCY REQUIREMENT (CRITICAL): every scene must include at least one action that would normally involve hesitation, but does not (beginning work without deliberation, choosing the next task without checking everything, deciding quickly and acting, staying with a task without distraction).
+
+STRUCTURE — Opening (2-3 short paragraphs: body settling, arriving in the moment, no emotional commentary). Main body (4-6 scenes, morning to evening; each: minimal environment grounding, movement/action, an agency moment). Ending (1-2 short paragraphs: simply allow the day to continue, no wrap-up, no reflection).
+
+LENGTH: 400-550 words. Small paragraphs (2-4 sentences). Separate every paragraph with a blank line. Output ONLY the script text, no preamble.''',
+        userPrompt: '''Timeline: ${setup.futureTimeline} from now
+
+Identity: In this future, this person is someone who ${setup.identityAnchor}
+
+Work & Purpose: They spend most of their time ${setup.workPurpose}
+
+Daily Life: Their ideal day looks like: ${setup.dailySnapshot}
+
+${environment.isNotEmpty ? 'Environment: $environment\n' : ''}${achievedTitles.isNotEmpty ? 'Achieved Goals (now normalized as everyday reality — do not celebrate them, just live them):\n${achievedTitles.map((g) => '- $g').join('\n')}\n' : ''}Operational Mode / Emotional Tone: ${setup.emotionalTone}
+
+${setup.amplifiers.isNotEmpty ? 'Character Traits (weave in naturally, do not state explicitly):\n${setup.amplifiers.map((a) => '- $a').join('\n')}\n' : ''}Voice Style: $voiceGuidance''',
+        maxTokens: 1000,
       );
     } catch (_) {
-      return 'Close your eyes and picture the life you are building. Every action you take today is a thread in the tapestry of the future you deserve. You are already becoming that person.';
+      return 'The body settles. Weight rests evenly. Breathing slows naturally.\n\n'
+          'The moment feels steady. There is nowhere else to be.\n\n'
+          'Morning starts. Coffee is made. I sit down. The space feels familiar.\n\n'
+          'Messages are checked once. A few updates come through. Work moves forward.\n\n'
+          'There is space in the day. The pace holds.\n\n'
+          'The scene continues. This version carries forward.';
     }
   }
 
@@ -559,6 +552,8 @@ RULES — NEVER BREAK THESE:
   Future<Map<String, String>> generateStructuredWeeklyInsight(
       UserProfile profile) async {
     try {
+      final deepDive = UserContextBuilder.deepDiveBlock(profile);
+      final deepDiveContext = deepDive.isNotEmpty ? '$deepDive\n\n' : '';
       final response = await complete(
         systemPrompt:
             'You are a mindset coach delivering a weekly review. '
@@ -571,7 +566,8 @@ RULES — NEVER BREAK THESE:
             '${UserContextBuilder.coreBlock(profile)}\n\n'
             '${UserContextBuilder.goalsBlock(profile)}\n\n'
             '${UserContextBuilder.recentActivityBlock(profile)}\n\n'
-            '${UserContextBuilder.journalMoodBlock(profile)}',
+            '${UserContextBuilder.journalMoodBlock(profile)}\n\n'
+            '$deepDiveContext',
         maxTokens: 300,
       );
       final jsonStr = response.contains('{')
@@ -596,6 +592,8 @@ RULES — NEVER BREAK THESE:
   Future<String> generateIdentityStatement(UserProfile profile) async {
     final b = profile.mindsetBlueprint;
     try {
+      final deepDive = UserContextBuilder.deepDiveBlock(profile);
+      final deepDiveContext = deepDive.isNotEmpty ? '$deepDive\n\n' : '';
       return await complete(
         systemPrompt:
             'You write powerful identity statements for mindset coaching. '
@@ -605,6 +603,7 @@ RULES — NEVER BREAK THESE:
             '${UserContextBuilder.coreBlock(profile)}\n\n'
             '${UserContextBuilder.goalsBlock(profile)}\n\n'
             '${UserContextBuilder.recentActivityBlock(profile)}\n\n'
+            '$deepDiveContext'
             'All 5 traits: Confidence ${b.confidence}, Discipline ${b.discipline}, '
             'Abundance ${b.abundanceThinking}, Resilience ${b.resilience}, '
             'Decisiveness ${b.decisiveness}\n\n'
@@ -616,21 +615,34 @@ RULES — NEVER BREAK THESE:
     }
   }
 
+  /// Breaks a long-horizon goal into 3-5 actionable milestone goals. Each
+  /// milestone carries a title, description, the reason it matters, and a rough
+  /// number of weeks to complete it. Returns an empty list on failure.
   Future<List<Map<String, dynamic>>> generateGoalBreakdown(
-    String goalTitle,
+    Goal goal,
     UserProfile profile,
   ) async {
     try {
+      final descriptionLine =
+          goal.description.isNotEmpty ? '\nWhy it matters: ${goal.description}' : '';
+      final identityLine = goal.identityBecomes.isNotEmpty
+          ? '\nIdentity they\'re stepping into: ${goal.identityBecomes}'
+          : '';
       final response = await complete(
         systemPrompt:
-            'You break down long-term goals into 3 short-term milestone goals. '
-            'Return ONLY a JSON array of 3 objects with keys: title (string), '
-            'description (string), targetWeeks (int). No other text.',
+            'You are a goal-setting expert trained in SMART goals. You break a '
+            'long-term goal into 3-5 short-term milestone goals (each roughly '
+            '1-6 months) that build sequentially toward it. '
+            'Return ONLY a JSON array of objects with keys: title (string, '
+            'concise and specific), description (string, one sentence on what to '
+            'do), whyImportant (string, one sentence on why this milestone '
+            'matters), targetWeeks (int). No other text.',
         userPrompt:
-            'Break down this goal into 3 milestones: "$goalTitle"\n\n'
+            'Break down this ${goal.category} goal into milestones: '
+            '"${goal.title}"$descriptionLine$identityLine\n\n'
             '${UserContextBuilder.coreBlock(profile)}\n\n'
             '${UserContextBuilder.goalsBlock(profile)}',
-        maxTokens: 400,
+        maxTokens: 600,
       );
       final jsonStr = response.contains('[')
           ? response.substring(
@@ -643,8 +655,104 @@ RULES — NEVER BREAK THESE:
     }
   }
 
+  /// Tightens a rough goal draft into a specific, motivating goal. Returns a map
+  /// with `title` and `description`. Falls back to the original draft on failure.
+  Future<Map<String, String>> refineGoal(
+    String draftTitle,
+    String category,
+    UserProfile profile,
+  ) async {
+    try {
+      final response = await complete(
+        systemPrompt:
+            'You refine a rough goal into a single specific, outcome-focused, '
+            'motivating goal. Make it concrete and measurable where possible. '
+            'Return ONLY valid JSON with keys: "title" (concise, specific, 10 '
+            'words or fewer) and "description" (1-2 sentences on why it matters '
+            'to this person). No other text.',
+        userPrompt:
+            'Refine this $category goal draft: "$draftTitle"\n\n'
+            '${UserContextBuilder.coreBlock(profile)}\n\n'
+            '${UserContextBuilder.goalsBlock(profile)}',
+        maxTokens: 160,
+      );
+      final jsonStr = response.contains('{')
+          ? response.substring(
+              response.indexOf('{'), response.lastIndexOf('}') + 1)
+          : response;
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      final title = (data['title'] as String?)?.trim();
+      return {
+        'title': title == null || title.isEmpty ? draftTitle : title,
+        'description': (data['description'] as String?)?.trim() ?? '',
+      };
+    } catch (_) {
+      return {'title': draftTitle, 'description': ''};
+    }
+  }
+
+  /// Suggests one identity-based habit that supports a specific goal.
+  /// Returns a map with `name`, `trigger`, `identityReinforces`, or empty.
+  Future<Map<String, String>> generateHabitForGoal(
+    Goal goal,
+    UserProfile profile,
+  ) async {
+    try {
+      final response = await complete(
+        systemPrompt:
+            'You suggest ONE powerful identity-based daily habit that directly '
+            'supports a specific goal. Return ONLY a JSON object with keys: '
+            'name (string), trigger (string, a clear cue/when), '
+            'identityReinforces (string). No other text.',
+        userPrompt:
+            'Suggest one habit that builds toward this goal: "${goal.title}"\n\n'
+            '${UserContextBuilder.coreBlock(profile)}\n\n'
+            '${UserContextBuilder.habitsBlock(profile)}\n\n'
+            'The habit must NOT duplicate any existing habit above.',
+        maxTokens: 150,
+      );
+      final jsonStr = response.contains('{')
+          ? response.substring(
+              response.indexOf('{'), response.lastIndexOf('}') + 1)
+          : response;
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      return Map<String, String>.from(
+        data.map((k, v) => MapEntry(k, v?.toString() ?? '')),
+      );
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Generates one present-tense affirmation that supports a specific goal.
+  /// Returns an empty string on failure.
+  Future<String> generateAffirmationForGoal(
+    Goal goal,
+    UserProfile profile,
+  ) async {
+    try {
+      final response = await complete(
+        systemPrompt:
+            'You write ONE powerful first-person, present-tense affirmation that '
+            'embodies someone already living a specific goal. '
+            'Return ONLY the affirmation text — no quotes, no preamble.',
+        userPrompt:
+            'Goal: "${goal.title}"'
+            '${goal.identityBecomes.isNotEmpty ? '\nIdentity: ${goal.identityBecomes}' : ''}\n\n'
+            '${UserContextBuilder.coreBlock(profile)}\n\n'
+            '${UserContextBuilder.affirmationsBlock(profile)}',
+        maxTokens: 60,
+      );
+      return response.trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
   Future<List<String>> generatePriorityActions(UserProfile profile) async {
     try {
+      final deepDive = UserContextBuilder.deepDiveBlock(profile);
+      final deepDiveContext = deepDive.isNotEmpty ? '$deepDive\n\n' : '';
       final response = await complete(
         systemPrompt:
             'You generate 3 specific, actionable priority tasks for today based on goals. '
@@ -656,6 +764,7 @@ RULES — NEVER BREAK THESE:
             '${UserContextBuilder.habitsBlock(profile)}\n\n'
             '${UserContextBuilder.recentActivityBlock(profile)}\n\n'
             '${UserContextBuilder.beliefHistoryBlock(profile)}\n\n'
+            '$deepDiveContext'
             'Generate 3 priority actions for today. Avoid duplicating existing habits. '
             'Focus on the goals with lowest progress first.',
         maxTokens: 300,
@@ -678,6 +787,8 @@ RULES — NEVER BREAK THESE:
   Future<List<Map<String, String>>> generateHabitSuggestions(
       UserProfile profile) async {
     try {
+      final deepDive = UserContextBuilder.deepDiveBlock(profile);
+      final deepDiveContext = deepDive.isNotEmpty ? '$deepDive\n\n' : '';
       final response = await complete(
         systemPrompt:
             'You suggest 3 powerful identity-based habits. Return ONLY a JSON array of 3 objects '
@@ -686,6 +797,7 @@ RULES — NEVER BREAK THESE:
             '${UserContextBuilder.coreBlock(profile)}\n\n'
             '${UserContextBuilder.goalsBlock(profile)}\n\n'
             '${UserContextBuilder.habitsBlock(profile)}\n\n'
+            '$deepDiveContext'
             'Suggest 3 habits that are NOT already in the existing habits list above. '
             'Each habit should reinforce the user\'s identity and support their active goals.',
         maxTokens: 300,

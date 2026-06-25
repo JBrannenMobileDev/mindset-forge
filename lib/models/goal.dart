@@ -1,12 +1,26 @@
 import 'action_step.dart';
 
+/// Valid timeframe values for [Goal.goalType].
+const String kGoalTypeShortTerm = 'short_term';
+const String kGoalTypeMediumTerm = 'medium_term';
+const String kGoalTypeLongTerm = 'long_term';
+const String kGoalTypeLifeGoal = 'life_goal';
+
 class Goal {
   final String id;
   final String title;
   final String category;
+
+  /// Timeframe horizon: short_term | medium_term | long_term | life_goal.
+  /// Independent of [parentGoalId] (which expresses the milestone hierarchy).
+  final String goalType;
   final String description;
   final String? parentGoalId;
   final DateTime targetDate;
+
+  /// Deprecated: visualization now lives exclusively in the Future Self
+  /// Practice. Kept only for backward-compatible deserialization; never set
+  /// by any creation flow.
   final String visualizationText;
   final String identityBecomes;
   final double progressPercent;
@@ -19,6 +33,7 @@ class Goal {
     required this.id,
     required this.title,
     required this.category,
+    this.goalType = kGoalTypeLongTerm,
     this.description = '',
     this.parentGoalId,
     required this.targetDate,
@@ -34,10 +49,16 @@ class Goal {
   bool get isLongTerm => parentGoalId == null;
   bool get isCompleted => status == 'completed';
 
+  /// Whether this goal sits on a long enough horizon to benefit from an AI
+  /// milestone breakdown at creation time.
+  bool get isLongHorizon =>
+      goalType == kGoalTypeLongTerm || goalType == kGoalTypeLifeGoal;
+
   Goal copyWith({
     String? id,
     String? title,
     String? category,
+    String? goalType,
     String? description,
     String? parentGoalId,
     DateTime? targetDate,
@@ -53,6 +74,7 @@ class Goal {
       id: id ?? this.id,
       title: title ?? this.title,
       category: category ?? this.category,
+      goalType: goalType ?? this.goalType,
       description: description ?? this.description,
       parentGoalId: parentGoalId ?? this.parentGoalId,
       targetDate: targetDate ?? this.targetDate,
@@ -71,6 +93,10 @@ class Goal {
       id: json['id'] as String? ?? '',
       title: json['title'] as String? ?? '',
       category: json['category'] as String? ?? 'personal',
+      // Back-compat: older goals have no goalType. Infer from the hierarchy —
+      // sub-goals are short-term milestones, top-level goals are long-term.
+      goalType: json['goalType'] as String? ??
+          (json['parentGoalId'] != null ? kGoalTypeShortTerm : kGoalTypeLongTerm),
       description: json['description'] as String? ?? '',
       parentGoalId: json['parentGoalId'] as String?,
       targetDate: DateTime.tryParse(json['targetDate'] as String? ?? '') ??
@@ -94,6 +120,7 @@ class Goal {
         'id': id,
         'title': title,
         'category': category,
+        'goalType': goalType,
         'description': description,
         'parentGoalId': parentGoalId,
         'targetDate': targetDate.toIso8601String(),

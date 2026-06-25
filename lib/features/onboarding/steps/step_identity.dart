@@ -17,7 +17,11 @@ class StepIdentity extends ConsumerStatefulWidget {
   final String initial;
   final MindsetBlueprint blueprint;
   final List<Goal> goals;
-  final void Function(String) onNext;
+  /// Returns the final identity statement plus the raw inputs used to craft it
+  /// (resolved situation text and selected future-self qualities) so they can be
+  /// persisted and reused to enrich AI personalization.
+  final void Function(String statement, String situation, List<String> qualities)
+      onNext;
   final VoidCallback onBack;
 
   const StepIdentity({
@@ -73,6 +77,14 @@ class _StepIdentityState extends ConsumerState<StepIdentity> {
     super.dispose();
   }
 
+  /// Human-readable situation, resolving the free-text option to its custom value.
+  String get _situationText => _situation == 'other'
+      ? _customSituationCtrl.text.trim()
+      : _situations
+          .firstWhere((s) => s.id == _situation,
+              orElse: () => const _Situation('', '', Icons.more_horiz_rounded))
+          .label;
+
   Future<void> _generate() async {
     setState(() {
       _isGenerating = true;
@@ -80,9 +92,7 @@ class _StepIdentityState extends ConsumerState<StepIdentity> {
     });
 
     try {
-      final situationText = _situation == 'other'
-          ? _customSituationCtrl.text.trim()
-          : _situations.firstWhere((s) => s.id == _situation).label;
+      final situationText = _situationText;
 
       final result = await ref.read(claudeServiceProvider).complete(
         systemPrompt:
@@ -190,7 +200,11 @@ class _StepIdentityState extends ConsumerState<StepIdentity> {
                     setState(() => _wizardPart = 2);
                   },
                   onNext: _identityStatement.trim().length >= 10
-                      ? () => widget.onNext(_identityStatement.trim())
+                      ? () => widget.onNext(
+                            _identityStatement.trim(),
+                            _situationText,
+                            _qualities.toList(),
+                          )
                       : null,
                   onBack: () => setState(() => _wizardPart = 2),
                 ),
@@ -236,7 +250,7 @@ class _Part1 extends StatelessWidget {
                     .animate().fadeIn(duration: 400.ms),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  'Be honest — this helps us craft an identity statement that meets you where you are.',
+                  'Be honest. This helps us craft an identity statement that meets you where you are.',
                   style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
                 ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
                 const SizedBox(height: AppSpacing.xl),
@@ -312,23 +326,31 @@ class _Part1 extends StatelessWidget {
             ),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.screenPaddingH, AppSpacing.md,
-            AppSpacing.screenPaddingH, AppSpacing.xl,
-          ),
-          child: Row(
-            children: [
-              AppSecondaryButton(label: 'Back', onPressed: onBack),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: AppPrimaryButton(
-                  label: 'Continue',
-                  onPressed: selected.isNotEmpty ? onNext : null,
-                  icon: Icons.arrow_forward_rounded,
-                ),
+        AnimatedOpacity(
+          opacity: MediaQuery.of(context).viewInsets.bottom > 0 ? 0.0 : 1.0,
+          duration: const Duration(milliseconds: 200),
+          child: IgnorePointer(
+            ignoring: MediaQuery.of(context).viewInsets.bottom > 0,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.screenPaddingH, AppSpacing.md,
+                AppSpacing.screenPaddingH,
+                MediaQuery.of(context).padding.bottom + AppSpacing.md,
               ),
-            ],
+              child: Row(
+                children: [
+                  AppSecondaryButton(label: 'Back', width: 100, onPressed: onBack),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: AppPrimaryButton(
+                      label: 'Continue',
+                      onPressed: selected.isNotEmpty ? onNext : null,
+                      icon: Icons.arrow_forward_rounded,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ],
@@ -431,24 +453,32 @@ class _Part2 extends StatelessWidget {
             ),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.screenPaddingH, AppSpacing.md,
-            AppSpacing.screenPaddingH, AppSpacing.xl,
-          ),
-          child: Row(
-            children: [
-              AppSecondaryButton(label: 'Back', onPressed: onBack),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: AppPrimaryButton(
-                  label: isGenerating ? 'Crafting your identity...' : 'Generate My Identity',
-                  onPressed: canGenerate && !isGenerating ? onNext : null,
-                  isLoading: isGenerating,
-                  icon: Icons.auto_awesome_rounded,
-                ),
+        AnimatedOpacity(
+          opacity: MediaQuery.of(context).viewInsets.bottom > 0 ? 0.0 : 1.0,
+          duration: const Duration(milliseconds: 200),
+          child: IgnorePointer(
+            ignoring: MediaQuery.of(context).viewInsets.bottom > 0,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.screenPaddingH, AppSpacing.md,
+                AppSpacing.screenPaddingH,
+                MediaQuery.of(context).padding.bottom + AppSpacing.md,
               ),
-            ],
+              child: Row(
+                children: [
+                  AppSecondaryButton(label: 'Back', width: 100, onPressed: onBack),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: AppPrimaryButton(
+                      label: isGenerating ? 'Crafting your identity...' : 'Generate My Identity',
+                      onPressed: canGenerate && !isGenerating ? onNext : null,
+                      isLoading: isGenerating,
+                      icon: Icons.auto_awesome_rounded,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ],
@@ -540,7 +570,7 @@ class _Part3 extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     if (isEditing)
-                      AppSecondaryButton(label: 'Save', onPressed: onSaveEdit)
+                      AppSecondaryButton(label: 'Save', width: 120, onPressed: onSaveEdit)
                     else ...[
                       AppTextButton(label: 'Edit', onPressed: onEdit),
                       const SizedBox(width: AppSpacing.md),
@@ -552,23 +582,31 @@ class _Part3 extends StatelessWidget {
             ),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.screenPaddingH, AppSpacing.md,
-            AppSpacing.screenPaddingH, AppSpacing.xl,
-          ),
-          child: Row(
-            children: [
-              AppSecondaryButton(label: 'Back', onPressed: onBack),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: AppPrimaryButton(
-                  label: 'Continue',
-                  onPressed: onNext,
-                  icon: Icons.arrow_forward_rounded,
-                ),
+        AnimatedOpacity(
+          opacity: MediaQuery.of(context).viewInsets.bottom > 0 ? 0.0 : 1.0,
+          duration: const Duration(milliseconds: 200),
+          child: IgnorePointer(
+            ignoring: MediaQuery.of(context).viewInsets.bottom > 0,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.screenPaddingH, AppSpacing.md,
+                AppSpacing.screenPaddingH,
+                MediaQuery.of(context).padding.bottom + AppSpacing.md,
               ),
-            ],
+              child: Row(
+                children: [
+                  AppSecondaryButton(label: 'Back', width: 100, onPressed: onBack),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: AppPrimaryButton(
+                      label: 'Continue',
+                      onPressed: onNext,
+                      icon: Icons.arrow_forward_rounded,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ],

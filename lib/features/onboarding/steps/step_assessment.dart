@@ -154,6 +154,7 @@ class _StepAssessmentState extends State<StepAssessment> {
 
   @override
   Widget build(BuildContext context) {
+    final keyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
     return Column(
       children: [
         Expanded(
@@ -352,25 +353,32 @@ class _StepAssessmentState extends State<StepAssessment> {
         ),
 
         // Footer
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.screenPaddingH,
-            AppSpacing.md,
-            AppSpacing.screenPaddingH,
-            AppSpacing.xl,
-          ),
-          child: Row(
-            children: [
-              AppSecondaryButton(label: 'Back', onPressed: widget.onBack),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: AppPrimaryButton(
-                  label: AppStrings.onboardingNext,
-                  onPressed: _tryNext,
-                  icon: Icons.arrow_forward_rounded,
-                ),
+        AnimatedOpacity(
+          opacity: keyboardVisible ? 0.0 : 1.0,
+          duration: const Duration(milliseconds: 200),
+          child: IgnorePointer(
+            ignoring: keyboardVisible,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.screenPaddingH,
+                AppSpacing.md,
+                AppSpacing.screenPaddingH,
+                MediaQuery.of(context).padding.bottom + AppSpacing.md,
               ),
-            ],
+              child: Row(
+                children: [
+                  AppSecondaryButton(label: 'Back', width: 100, onPressed: widget.onBack),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: AppPrimaryButton(
+                      label: AppStrings.onboardingNext,
+                      onPressed: _tryNext,
+                      icon: Icons.arrow_forward_rounded,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ],

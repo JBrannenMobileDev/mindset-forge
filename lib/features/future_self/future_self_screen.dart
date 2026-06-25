@@ -1,287 +1,260 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:just_audio/just_audio.dart';
-import 'dart:async';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
-import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
-import '../../core/widgets/app_button.dart';
-import '../../models/future_self_practice.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/claude_provider.dart';
-import '../../providers/daily_completion_provider.dart';
+import '../../core/constants/app_text_styles.dart';
+import '../../models/future_self_setup.dart';
+import '../../providers/future_self_provider.dart';
+import 'future_self_wizard.dart';
+import 'future_self_player_screen.dart';
+import 'widgets/future_self_how_to.dart';
 
-class FutureSelfScreen extends ConsumerStatefulWidget {
+/// Future Self Practice detail screen, the visualization half of the
+/// Subconscious (Foundation) layer. Explains the practice, shows today's
+/// status, and routes to the setup wizard and the guided player.
+class FutureSelfScreen extends ConsumerWidget {
   const FutureSelfScreen({super.key});
 
-  @override
-  ConsumerState<FutureSelfScreen> createState() => _FutureSelfScreenState();
-}
-
-class _FutureSelfScreenState extends ConsumerState<FutureSelfScreen> {
-  final _audioPlayer = AudioPlayer();
-  int _selectedHz = 10;
-  int _elapsedSeconds = 0;
-  Timer? _timer;
-  bool _sessionActive = false;
-  bool _isLoadingScript = false;
-  List<String> _paragraphs = [];
-  int _visibleParagraphs = 0;
-
-  static const _frequencies = [7, 10, 14];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadScript();
+  Future<void> _openWizard(BuildContext context) {
+    return Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const FutureSelfWizard()),
+    );
   }
 
-  @override
-  void dispose() {
-    _timer?.cancel();
-    _audioPlayer.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadScript() async {
-    final profile = ref.read(currentUserProfileProvider).valueOrNull;
-    final setup = profile?.futureSelfSetup;
-    if (setup == null) return;
-
-    if (setup.generatedScript != null && setup.generatedScript!.isNotEmpty) {
-      _setScript(setup.generatedScript!);
-      return;
-    }
-
-    setState(() => _isLoadingScript = true);
-    try {
-      final script = await ref.read(claudeServiceProvider).generateFutureSelfScript(setup, profile!);
-      _setScript(script);
-
-      final uid = ref.read(authStateProvider).valueOrNull?.uid;
-      if (uid != null) {
-        final updatedSetup = setup.copyWith(generatedScript: script);
-        await ref.read(firestoreServiceProvider).updateUserField(uid, {
-          'futureSelfSetup': updatedSetup.toJson(),
-        });
-      }
-    } catch (_) {
-    } finally {
-      if (mounted) setState(() => _isLoadingScript = false);
-    }
-  }
-
-  void _setScript(String script) {
-    setState(() {
-      _paragraphs = script.split('\n').where((p) => p.trim().isNotEmpty).toList();
-    });
-  }
-
-  Future<void> _startSession() async {
-    setState(() {
-      _sessionActive = true;
-      _elapsedSeconds = 0;
-      _visibleParagraphs = 0;
-    });
-
-    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
-      setState(() => _elapsedSeconds++);
-    });
-
-    _revealParagraphs();
-  }
-
-  void _revealParagraphs() {
-    if (_paragraphs.isEmpty) return;
-    for (int i = 0; i < _paragraphs.length; i++) {
-      Future.delayed(Duration(seconds: i * 8), () {
-        if (mounted && _sessionActive) {
-          setState(() => _visibleParagraphs = i + 1);
-        }
-      });
-    }
-  }
-
-  Future<void> _endSession() async {
-    _timer?.cancel();
-    setState(() => _sessionActive = false);
-
-    await _audioPlayer.stop();
-
-    await ref.read(dailyCompletionProvider.notifier).toggle('futureSelfCompleted', true);
-
-    final uid = ref.read(authStateProvider).valueOrNull?.uid;
-    if (uid != null) {
-      final practice = FutureSelfPractice(
-        sessionDate: DateTime.now(),
-        durationSeconds: _elapsedSeconds,
-        binauralFrequencyHz: _selectedHz,
+  Future<void> _openPlayer(BuildContext context, WidgetRef ref) async {
+    final setup = ref.read(futureSelfProvider);
+    // Show the one-time "how to practice" primer before the first session.
+    if (setup != null && !setup.hasSeenHowTo) {
+      final begin = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => const FutureSelfHowToScreen()),
       );
-      await ref.read(firestoreServiceProvider).updateUserField(uid, {
-        'futureSelfPractice': practice.toJson(),
-      });
+      await ref.read(futureSelfProvider.notifier).markHowToSeen();
+      if (begin != true) return;
     }
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Session complete — ${(_elapsedSeconds / 60).toStringAsFixed(1)} minutes with your future self.',
-          ),
-        ),
-      );
-    }
-  }
-
-  String _formatTime(int seconds) {
-    final m = seconds ~/ 60;
-    final s = seconds % 60;
-    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    if (!context.mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const FutureSelfPlayerScreen()),
+    );
   }
 
   @override
-  Widget build(BuildContext context) {
-    final profile = ref.watch(currentUserProfileProvider).valueOrNull;
-    final setup = profile?.futureSelfSetup;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final setup = ref.watch(futureSelfProvider);
+    final completedToday = ref.watch(futureSelfCompletedTodayProvider);
+    final hasPractice = setup?.hasPractice ?? false;
 
     return Scaffold(
       backgroundColor: AppColors.futureSelfBackground,
-      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.futureSelfBackground,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.futureSelfAccent),
-          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: AppColors.futureSelfAccent),
+          onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
           AppStrings.futureSelf,
-          style: AppTextStyles.headlineSmall.copyWith(color: AppColors.futureSelfAccent),
+          style: AppTextStyles.headlineSmall
+              .copyWith(color: AppColors.futureSelfAccent),
         ),
       ),
-      body: setup == null
-          ? Center(
-              child: Text(
-                'Set up your Future Self profile in the Chat tab.',
-                style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
-                textAlign: TextAlign.center,
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.screenPaddingH,
+              AppSpacing.md, AppSpacing.screenPaddingH, AppSpacing.xxl),
+          children: [
+            _Hero().animate().fadeIn(duration: 400.ms),
+            const SizedBox(height: AppSpacing.xl),
+            if (hasPractice) ...[
+              _TodayStatus(
+                completed: completedToday,
+                onStart: () => _openPlayer(context, ref),
               ),
-            )
-          : SafeArea(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.screenPaddingH),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: AppSpacing.lg),
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        gradient: const RadialGradient(colors: [AppColors.futureSelfAccent, AppColors.warning]),
-                        shape: BoxShape.circle,
-                        boxShadow: [BoxShadow(color: AppColors.futureSelfGlow, blurRadius: 30, spreadRadius: 10)],
-                      ),
-                      child: const Icon(Icons.self_improvement_rounded, color: Colors.white, size: 40),
-                    ).animate().fadeIn(duration: 600.ms).scale(begin: const Offset(0.8, 0.8)),
-                    const SizedBox(height: AppSpacing.lg),
-                    Text(
-                      '${setup.timeframeYears} Years From Now',
-                      style: AppTextStyles.displaySmall.copyWith(color: AppColors.futureSelfAccent),
-                    ).animate().fadeIn(delay: 200.ms),
-                    const SizedBox(height: AppSpacing.xl),
-                    if (_sessionActive) ...[
-                      Text(
-                        _formatTime(_elapsedSeconds),
-                        style: AppTextStyles.statNumber.copyWith(color: AppColors.futureSelfAccent),
-                      ).animate().fadeIn(),
-                      const SizedBox(height: AppSpacing.xl),
-                      if (_isLoadingScript)
-                        const CircularProgressIndicator(color: AppColors.futureSelfAccent)
-                      else
-                        Column(
-                          children: List.generate(
-                            _visibleParagraphs.clamp(0, _paragraphs.length),
-                            (i) => Padding(
-                              padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-                              child: Text(
-                                _paragraphs[i],
-                                style: AppTextStyles.bodyLarge.copyWith(height: 1.9, color: AppColors.textPrimary),
-                                textAlign: TextAlign.center,
-                              ).animate().fadeIn(duration: 1500.ms).slideY(begin: 0.05, end: 0),
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: AppSpacing.xl),
-                      AppSecondaryButton(
-                        label: AppStrings.endSession,
-                        onPressed: _endSession,
-                      ),
-                    ] else ...[
-                      if (_isLoadingScript)
-                        Column(
-                          children: [
-                            const CircularProgressIndicator(color: AppColors.futureSelfAccent),
-                            const SizedBox(height: AppSpacing.md),
-                            Text(
-                              'Generating your future self script...',
-                              style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-                            ),
-                          ],
-                        )
-                      else
-                        _SessionPreview(setup: setup),
-                      const SizedBox(height: AppSpacing.xl),
-                      _BinauralSelector(
-                        selected: _selectedHz,
-                        onSelect: (hz) => setState(() => _selectedHz = hz),
-                        frequencies: _frequencies,
-                      ),
-                      const SizedBox(height: AppSpacing.xl),
-                      AppPrimaryButton(
-                        label: AppStrings.startSession,
-                        onPressed: _isLoadingScript ? null : _startSession,
-                        icon: Icons.play_arrow_rounded,
-                      ),
-                    ],
-                    const SizedBox(height: 100),
-                  ],
-                ),
+              const SizedBox(height: AppSpacing.md),
+              _ActionButton(
+                label: completedToday
+                    ? AppStrings.futureSelfPracticeAgain
+                    : AppStrings.futureSelfStartToday,
+                icon: Icons.play_arrow_rounded,
+                filled: true,
+                onTap: () => _openPlayer(context, ref),
               ),
-            ),
+              const SizedBox(height: AppSpacing.sm),
+              _ActionButton(
+                label: AppStrings.futureSelfRefine,
+                icon: Icons.tune_rounded,
+                filled: false,
+                onTap: () => _openWizard(context),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              _PracticeSummary(setup: setup!),
+            ] else ...[
+              _ActionButton(
+                label: AppStrings.futureSelfCreate,
+                icon: Icons.auto_awesome_rounded,
+                filled: true,
+                onTap: () => _openWizard(context),
+              ),
+            ],
+            const SizedBox(height: AppSpacing.xl),
+            const _HowToSection(),
+            const SizedBox(height: AppSpacing.md),
+            const _AboutSection(),
+          ],
+        ),
+      ),
     );
   }
 }
 
-class _SessionPreview extends StatelessWidget {
-  final dynamic setup;
+/// Always-available, collapsible "How to practice" guide reusing the shared
+/// method content from the primer.
+class _HowToSection extends StatefulWidget {
+  const _HowToSection();
 
-  const _SessionPreview({required this.setup});
+  @override
+  State<_HowToSection> createState() => _HowToSectionState();
+}
+
+class _HowToSectionState extends State<_HowToSection> {
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.xl),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: AppColors.futureSelfSurface,
         borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-        border: Border.all(color: AppColors.futureSelfAccent.withValues(alpha: 0.2)),
+        border: Border.all(
+            color: AppColors.futureSelfAccent.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Your Future Self',
-            style: AppTextStyles.labelLarge.copyWith(color: AppColors.futureSelfAccent),
+          GestureDetector(
+            onTap: () => setState(() => _expanded = !_expanded),
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              children: [
+                const Icon(Icons.self_improvement_rounded,
+                    color: AppColors.futureSelfAccent, size: 18),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(AppStrings.futureSelfHowToTitle,
+                      style: AppTextStyles.headlineSmall),
+                ),
+                AnimatedRotation(
+                  turns: _expanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: const Icon(Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.textSecondary),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            setup.evolvedIdentity as String,
-            style: AppTextStyles.bodyLarge.copyWith(
-              color: AppColors.textPrimary,
-              fontStyle: FontStyle.italic,
-              height: 1.7,
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOut,
+            alignment: Alignment.topCenter,
+            child: _expanded
+                ? const Padding(
+                    padding: EdgeInsets.only(top: AppSpacing.lg),
+                    child: FutureSelfHowToContent(showIntro: false),
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Hero extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: 72,
+          height: 72,
+          decoration: const BoxDecoration(
+            gradient: RadialGradient(
+                colors: [AppColors.futureSelfAccent, AppColors.warning]),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                  color: AppColors.futureSelfGlow,
+                  blurRadius: 28,
+                  spreadRadius: 6),
+            ],
+          ),
+          child: const Icon(Icons.visibility_rounded,
+              color: Colors.white, size: 34),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Text(AppStrings.futureSelfPracticeTitle,
+            style: AppTextStyles.headlineMedium
+                .copyWith(color: AppColors.futureSelfAccent),
+            textAlign: TextAlign.center),
+        const SizedBox(height: AppSpacing.xs),
+        Text(AppStrings.futureSelfPracticeSubtitle,
+            style: AppTextStyles.bodyMedium
+                .copyWith(color: AppColors.textSecondary),
+            textAlign: TextAlign.center),
+      ],
+    );
+  }
+}
+
+class _TodayStatus extends StatelessWidget {
+  final bool completed;
+  final VoidCallback onStart;
+
+  const _TodayStatus({required this.completed, required this.onStart});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: completed
+            ? AppColors.success.withValues(alpha: 0.10)
+            : AppColors.futureSelfSurface,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        border: Border.all(
+          color: completed
+              ? AppColors.success.withValues(alpha: 0.4)
+              : AppColors.border,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            completed
+                ? Icons.check_circle_rounded
+                : Icons.visibility_outlined,
+            color: completed ? AppColors.success : AppColors.textMuted,
+            size: 24,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Today\'s Practice', style: AppTextStyles.labelLarge),
+                const SizedBox(height: 2),
+                Text(
+                  completed
+                      ? 'Completed, nicely done.'
+                      : 'Not completed yet.',
+                  style: AppTextStyles.bodySmall
+                      .copyWith(color: AppColors.textSecondary),
+                ),
+              ],
             ),
           ),
         ],
@@ -290,70 +263,168 @@ class _SessionPreview extends StatelessWidget {
   }
 }
 
-class _BinauralSelector extends StatelessWidget {
-  final int selected;
-  final void Function(int) onSelect;
-  final List<int> frequencies;
+class _PracticeSummary extends StatelessWidget {
+  final FutureSelfSetup setup;
 
-  const _BinauralSelector({
-    required this.selected,
-    required this.onSelect,
-    required this.frequencies,
-  });
-
-  String _label(int hz) {
-    return switch (hz) {
-      7 => 'Theta 7Hz\nDeep Focus',
-      10 => 'Alpha 10Hz\nRelaxed',
-      14 => 'Beta 14Hz\nAlertness',
-      _ => '$hz Hz',
-    };
-  }
+  const _PracticeSummary({required this.setup});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          AppStrings.binauralFrequency,
-          style: AppTextStyles.labelLarge.copyWith(color: AppColors.futureSelfAccent),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Row(
-          children: frequencies.map((hz) {
-            final sel = hz == selected;
-            return Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(right: hz == frequencies.last ? 0 : AppSpacing.sm),
-                child: GestureDetector(
-                  onTap: () => onSelect(hz),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: sel
-                          ? AppColors.futureSelfAccent.withValues(alpha: 0.15)
-                          : AppColors.futureSelfSurface,
-                      border: Border.all(
-                        color: sel ? AppColors.futureSelfAccent : AppColors.border,
-                      ),
-                      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                    ),
-                    child: Text(
-                      _label(hz),
-                      style: AppTextStyles.labelSmall.copyWith(
-                        color: sel ? AppColors.futureSelfAccent : AppColors.textSecondary,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.futureSelfSurface,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Your Practice',
+              style: AppTextStyles.headlineSmall
+                  .copyWith(color: AppColors.futureSelfAccent)),
+          const SizedBox(height: AppSpacing.md),
+          _row('Future Timeline', '${setup.futureTimeline} from now'),
+          if (setup.identityAnchor.isNotEmpty)
+            _row('Identity', 'I am someone who ${setup.identityAnchor}'),
+          if (setup.emotionalTone.isNotEmpty)
+            _row('Emotional Tone', setup.emotionalTone),
+          const SizedBox(height: AppSpacing.sm),
+          Text(AppStrings.futureSelfRefineNote,
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.textMuted, fontStyle: FontStyle.italic)),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: AppTextStyles.labelSmall),
+          const SizedBox(height: 2),
+          Text(value, style: AppTextStyles.bodyMedium),
+        ],
+      ),
+    );
+  }
+}
+
+class _AboutSection extends StatelessWidget {
+  const _AboutSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.futureSelfSurface,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        border: Border.all(
+            color: AppColors.futureSelfAccent.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome_rounded,
+                  color: AppColors.futureSelfAccent, size: 18),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(AppStrings.futureSelfWhatTitle,
+                    style: AppTextStyles.headlineSmall),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(AppStrings.futureSelfWhatBody,
+              style: AppTextStyles.bodyMedium.copyWith(
+                  color: AppColors.textSecondary, height: 1.6)),
+          const SizedBox(height: AppSpacing.lg),
+          Text(AppStrings.futureSelfPrinciplesTitle,
+              style: AppTextStyles.labelLarge
+                  .copyWith(color: AppColors.futureSelfAccent)),
+          const SizedBox(height: AppSpacing.sm),
+          ...AppStrings.futureSelfPrinciples.map(
+            (p) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Icon(Icons.circle, size: 6, color: AppColors.futureSelfAccent),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                      child: Text(p,
+                          style: AppTextStyles.bodySmall
+                              .copyWith(color: AppColors.textSecondary))),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Text(AppStrings.futureSelfBestTimeTitle,
+              style: AppTextStyles.labelLarge
+                  .copyWith(color: AppColors.futureSelfAccent)),
+          const SizedBox(height: AppSpacing.xs),
+          Text(AppStrings.futureSelfBestTimeBody,
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.textSecondary, height: 1.5)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool filled;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.label,
+    required this.icon,
+    required this.filled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: AppSpacing.buttonHeight,
+      child: filled
+          ? ElevatedButton.icon(
+              onPressed: onTap,
+              icon: Icon(icon, size: AppSpacing.iconMd),
+              label: Text(label,
+                  style: AppTextStyles.button.copyWith(color: Colors.black)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.futureSelfAccent,
+                foregroundColor: Colors.black,
+                elevation: 0,
+                minimumSize: const Size.fromHeight(AppSpacing.buttonHeight),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                 ),
               ),
-            );
-          }).toList(),
-        ),
-      ],
+            )
+          : OutlinedButton.icon(
+              onPressed: onTap,
+              icon: Icon(icon, size: AppSpacing.iconMd),
+              label: Text(label, style: AppTextStyles.button),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.textPrimary,
+                side: const BorderSide(color: AppColors.border),
+                minimumSize: const Size.fromHeight(AppSpacing.buttonHeight),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                ),
+              ),
+            ),
     );
   }
 }

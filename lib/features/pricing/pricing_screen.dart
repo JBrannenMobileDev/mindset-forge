@@ -30,6 +30,17 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
   }
 
   Future<void> _loadOfferings() async {
+    // Guard: a native Swift fatalError fires if getOfferings() is called before
+    // Purchases.configure(). This cannot be caught in Dart, so check first.
+    if (!await Purchases.isConfigured) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Subscription service is unavailable. Please try again later.';
+        });
+      }
+      return;
+    }
     try {
       final offerings = await Purchases.getOfferings();
       if (mounted) {
@@ -221,6 +232,35 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
           style: AppTextStyles.bodyLarge.copyWith(color: AppColors.textSecondary),
           textAlign: TextAlign.center,
         ).animate().fadeIn(delay: 200.ms),
+        const SizedBox(height: AppSpacing.lg),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+          decoration: BoxDecoration(
+            color: AppColors.warning.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+            border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.lock_rounded, size: 14, color: AppColors.warning),
+              const SizedBox(width: 6),
+              Text(
+                'Founding Member Rate',
+                style: AppTextStyles.labelSmall.copyWith(
+                  color: AppColors.warning,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ],
+          ),
+        ).animate().fadeIn(delay: 300.ms),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          'Price will increase as we grow — lock in your rate today',
+          style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(delay: 350.ms),
       ],
     );
   }

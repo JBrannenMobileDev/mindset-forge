@@ -75,6 +75,13 @@ class GoalsNotifier extends StateNotifier<List<Goal>> {
     ));
   }
 
+  /// Manually sets a goal's progress (0-100). Used by the detail-screen slider
+  /// for goals without action steps. Clamps to valid range.
+  Future<void> setProgress(String goalId, double percent) async {
+    final goal = state.firstWhere((g) => g.id == goalId);
+    await updateGoal(goal.copyWith(progressPercent: percent.clamp(0.0, 100.0)));
+  }
+
   Future<void> completeGoal(String goalId) async {
     final goal = state.firstWhere((g) => g.id == goalId);
     await updateGoal(goal.copyWith(

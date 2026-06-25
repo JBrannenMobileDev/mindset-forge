@@ -16,6 +16,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/claude_provider.dart';
 import '../../providers/journal_provider.dart';
 import '../../providers/daily_completion_provider.dart';
+import '../../providers/partner_limits_provider.dart';
 
 class NewJournalEntryScreen extends ConsumerStatefulWidget {
   const NewJournalEntryScreen({super.key});
@@ -88,6 +89,13 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
 
   Future<void> _save() async {
     if (_contentCtrl.text.trim().isEmpty) return;
+
+    // Free partner accounts get a limited number of journal entries per week.
+    final allowed = await ref
+        .read(partnerLimitsProvider)
+        .tryConsume(context, PartnerFeature.journal);
+    if (!allowed || !mounted) return;
+
     setState(() => _isSaving = true);
 
     try {
@@ -117,6 +125,7 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
           mood: _mood,
           mode: _mode,
           snippet: content.length > 100 ? content.substring(0, 100) : content,
+          prompt: _prompt,
         );
         final updated = [newSummary, ...profile.recentJournalSummaries]
             .take(14)
@@ -146,7 +155,13 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
         backgroundColor: AppColors.background,
         leading: IconButton(
           icon: const Icon(Icons.close_rounded),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/dashboard');
+            }
+          },
         ),
         title: Text(
           _step == 0
@@ -191,6 +206,7 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
               selectedBeliefs: _beliefsShifted,
               selectedFears: _fearsOutwitted,
               mode: _mode,
+              prompt: _prompt,
               content: _contentCtrl.text.trim(),
               isSaving: _isSaving,
               isSaved: _isSaved,
@@ -213,9 +229,15 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
                 });
               },
               onSave: _save,
-              onDone: () => context.pop(),
-              onDiscuss: (content) => context.push('/chat',
-                  extra: {'journalContext': content}),
+              onDone: () {
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go('/dashboard');
+                }
+              },
+              onDiscuss: (content, prompt) => context.push('/chat',
+                  extra: {'journalContext': content, 'journalPrompt': prompt}),
             ),
         },
       ),
@@ -341,7 +363,7 @@ class _MoodSelector extends StatelessWidget {
   }
 }
 
-class _WritingStep extends StatelessWidget {
+class _WritingStep extends StatefulWidget {
   final String prompt;
   final bool isGenerating;
   final TextEditingController controller;
@@ -357,81 +379,146 @@ class _WritingStep extends StatelessWidget {
   });
 
   @override
+  State<_WritingStep> createState() => _WritingStepState();
+}
+
+class _WritingStepState extends State<_WritingStep> {
+  @override
   Widget build(BuildContext context) {
+    final keyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    if (widget.isGenerating) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: AppColors.primary),
+            SizedBox(height: AppSpacing.md),
+            Text(
+              'Crafting your personalized prompt...',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Column(
       children: [
-        if (isGenerating)
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const CircularProgressIndicator(color: AppColors.primary),
-                  const SizedBox(height: AppSpacing.md),
-                  Text(
-                    'Crafting your personalized prompt...',
-                    style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.screenPaddingH),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (prompt.isNotEmpty)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryContainer,
-                        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                      ),
-                      child: Text(
-                        prompt,
-                        style: AppTextStyles.bodyLarge.copyWith(
-                          color: AppColors.primary,
-                          fontStyle: FontStyle.italic,
-                          height: 1.6,
-                        ),
-                      ),
-                    ).animate().fadeIn(duration: 500.ms),
-                  const SizedBox(height: AppSpacing.lg),
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      onChanged: onChanged,
-                      maxLines: null,
-                      expands: true,
-                      autofocus: true,
-                      style: AppTextStyles.bodyLarge.copyWith(height: 1.8),
-                      cursorColor: AppColors.primary,
-                      decoration: const InputDecoration(
-                        hintText: AppStrings.writeYourThoughts,
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        filled: false,
-                      ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(AppSpacing.screenPaddingH),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (widget.prompt.isNotEmpty)
+                  _CollapsiblePromptCard(prompt: widget.prompt)
+                      .animate()
+                      .fadeIn(duration: 500.ms),
+                const SizedBox(height: AppSpacing.lg),
+                ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: screenHeight * 0.5),
+                  child: TextField(
+                    controller: widget.controller,
+                    onChanged: widget.onChanged,
+                    maxLines: null,
+                    autofocus: true,
+                    style: AppTextStyles.bodyLarge.copyWith(height: 1.8),
+                    cursorColor: AppColors.primary,
+                    decoration: const InputDecoration(
+                      hintText: AppStrings.writeYourThoughts,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      filled: false,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.all(AppSpacing.screenPaddingH),
-          child: AppPrimaryButton(
-            label: 'Continue',
-            onPressed: controller.text.trim().isNotEmpty ? onNext : null,
-            icon: Icons.arrow_forward_rounded,
-          ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          child: keyboardVisible
+              ? const SizedBox.shrink()
+              : Padding(
+                  padding: const EdgeInsets.all(AppSpacing.screenPaddingH),
+                  child: AppPrimaryButton(
+                    label: 'Continue',
+                    onPressed: widget.controller.text.trim().isNotEmpty
+                        ? widget.onNext
+                        : null,
+                    icon: Icons.arrow_forward_rounded,
+                  ),
+                ),
         ),
       ],
+    );
+  }
+}
+
+class _CollapsiblePromptCard extends StatefulWidget {
+  final String prompt;
+
+  const _CollapsiblePromptCard({required this.prompt});
+
+  @override
+  State<_CollapsiblePromptCard> createState() => _CollapsiblePromptCardState();
+}
+
+class _CollapsiblePromptCardState extends State<_CollapsiblePromptCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.primaryContainer,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.prompt,
+            maxLines: _expanded ? null : 3,
+            overflow: _expanded ? TextOverflow.visible : TextOverflow.fade,
+            style: AppTextStyles.bodyLarge.copyWith(
+              color: AppColors.primary,
+              fontStyle: FontStyle.italic,
+              height: 1.6,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          GestureDetector(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _expanded ? 'Show less' : 'Show full prompt',
+                  style: AppTextStyles.labelSmall.copyWith(
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Icon(
+                  _expanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  color: AppColors.primary,
+                  size: 16,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -441,6 +528,7 @@ class _TagsStep extends StatefulWidget {
   final List<String> selectedBeliefs;
   final List<String> selectedFears;
   final String mode;
+  final String prompt;
   final String content;
   final bool isSaving;
   final bool isSaved;
@@ -448,13 +536,14 @@ class _TagsStep extends StatefulWidget {
   final void Function(String) onToggleFear;
   final VoidCallback onSave;
   final VoidCallback onDone;
-  final void Function(String content) onDiscuss;
+  final void Function(String content, String prompt) onDiscuss;
 
   const _TagsStep({
     required this.profile,
     required this.selectedBeliefs,
     required this.selectedFears,
     required this.mode,
+    required this.prompt,
     required this.content,
     required this.isSaving,
     required this.isSaved,
@@ -478,7 +567,7 @@ class _TagsStepState extends State<_TagsStep> {
       return _SavedView(
         content: widget.content,
         onDone: widget.onDone,
-        onDiscuss: () => widget.onDiscuss(widget.content),
+        onDiscuss: () => widget.onDiscuss(widget.content, widget.prompt),
       );
     }
 

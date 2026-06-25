@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MindsetForge — Accountability Partner Invite</title>
+  <style>
+    :root {
+      --bg: #0A0A0F;
+      --surface: #1C1C27;
+      --border: #2A2A3A;
+      --primary: #9B40FF;
+      --text: #F0EFF8;
+      --text-secondary: #8B8BA0;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+    }
+    .wrap {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 48px 24px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      justify-content: center;
+    }
+    .badge {
+      width: 84px;
+      height: 84px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #9B40FF, #00E5FF);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+      margin-bottom: 28px;
+      box-shadow: 0 0 40px rgba(155, 64, 255, 0.4);
+    }
+    h1 { font-size: 24px; line-height: 1.3; margin: 0 0 12px; }
+    p { color: var(--text-secondary); font-size: 16px; line-height: 1.6; margin: 0 0 32px; }
+    .btn {
+      display: block;
+      width: 100%;
+      max-width: 320px;
+      padding: 16px 24px;
+      border-radius: 16px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      margin-bottom: 12px;
+      box-shadow: 0 0 24px rgba(155, 64, 255, 0.3);
+    }
+    .btn.secondary {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      box-shadow: none;
+    }
+    .stores { display: flex; gap: 12px; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="badge">&#129309;</div>
+    <h1>You've been invited to be an accountability partner</h1>
+    <p>Open the invite in the MindsetForge app. If you don't have it yet, download it free and the invite will be waiting for you.</p>
+
+    <a class="btn" id="openApp" href="#">Open in MindsetForge</a>
+    <a class="btn secondary" href="https://apps.apple.com/app/mindsetforge">Download for iOS</a>
+    <a class="btn secondary" href="https://play.google.com/store/apps/details?id=com.mindsetforge.mindsetforge">Download for Android</a>
+  </div>
+
+  <script>
+    // Pull the invite id from /partner-invite/<id> and build the custom-scheme
+    // fallback so tapping "Open in MindsetForge" launches the app when present.
+    (function () {
+      var parts = window.location.pathname.split('/').filter(Boolean);
+      var inviteId = parts[parts.length - 1] || '';
+      var openApp = document.getElementById('openApp');
+      if (inviteId && inviteId !== 'partner-invite') {
+        openApp.href = 'mindsetforge://partner-invite/' + inviteId;
+      }
+    })();
+  </script>
+</body>
+</html>

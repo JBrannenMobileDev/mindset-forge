@@ -1,4 +1,3 @@
-import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -680,7 +679,6 @@ class _AffirmationSessionSheetState extends State<AffirmationSessionSheet>
     with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
   bool _completing = false;
-  late final ConfettiController _confettiCtrl;
   late final AnimationController _successCtrl;
   late final Animation<double> _successScale;
 
@@ -693,8 +691,6 @@ class _AffirmationSessionSheetState extends State<AffirmationSessionSheet>
   @override
   void initState() {
     super.initState();
-    _confettiCtrl =
-        ConfettiController(duration: const Duration(milliseconds: 1600));
     _successCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 400),
@@ -707,7 +703,6 @@ class _AffirmationSessionSheetState extends State<AffirmationSessionSheet>
 
   @override
   void dispose() {
-    _confettiCtrl.dispose();
     _successCtrl.dispose();
     super.dispose();
   }
@@ -724,7 +719,6 @@ class _AffirmationSessionSheetState extends State<AffirmationSessionSheet>
     if (_completing) return;
     setState(() => _completing = true);
     await widget.onComplete();
-    _confettiCtrl.play();
     _successCtrl.forward();
     await Future.delayed(const Duration(milliseconds: 1800));
     if (mounted) Navigator.of(context).pop();
@@ -985,22 +979,6 @@ class _AffirmationSessionSheetState extends State<AffirmationSessionSheet>
           ),
         ),
 
-        // ── Confetti (overlay, fires from top of dialog) ─────────────
-        Align(
-          alignment: Alignment.topCenter,
-          child: ConfettiWidget(
-            confettiController: _confettiCtrl,
-            blastDirectionality: BlastDirectionality.explosive,
-            colors: [
-              AppColors.primary,
-              _accent,
-              AppColors.secondary,
-              Colors.white,
-            ],
-            numberOfParticles: 50,
-            gravity: 0.25,
-          ),
-        ),
       ],
     );
   }

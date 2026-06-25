@@ -30,9 +30,17 @@ class DeepLinkService {
   void _handleUri(Uri uri) {
     debugPrint('Deep link received: $uri');
     final segments = uri.pathSegments;
+
+    // https://app.mindsetforge.app/partner-invite/{inviteId}
     if (segments.length >= 2 && segments[0] == 'partner-invite') {
-      final inviteId = segments[1];
-      _router.push('/partner-invite/$inviteId');
+      _router.push('/partner-invite/${segments[1]}');
+      return;
+    }
+
+    // mindsetforge://partner-invite/{inviteId}
+    // (custom scheme puts "partner-invite" in the host, the id in the path)
+    if (uri.host == 'partner-invite' && segments.isNotEmpty) {
+      _router.push('/partner-invite/${segments[0]}');
     }
   }
 }

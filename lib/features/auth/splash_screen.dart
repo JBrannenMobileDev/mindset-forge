@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_text_styles.dart';
-import '../../core/constants/app_strings.dart';
 import '../../providers/auth_provider.dart';
+import 'widgets/splash_view.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -21,7 +18,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(milliseconds: 2200), () {
+    // Minimum on-screen time so the brand moment never flickers past; runs in
+    // parallel with auth/profile resolution.
+    Future.delayed(const Duration(milliseconds: 1500), () {
       if (mounted) setState(() => _minDelayPassed = true);
     });
   }
@@ -49,7 +48,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         return;
       }
       final profile = ref.read(currentUserProfileProvider).valueOrNull;
-      if (profile == null || profile.onboardingStep < 6) {
+      if (profile == null || !profile.hasCompletedOnboarding) {
         context.go('/onboarding');
       } else {
         context.go('/dashboard');
@@ -64,68 +63,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     ref.watch(currentUserProfileProvider);
     _tryNavigate();
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _LogoMark()
-                .animate()
-                .fadeIn(duration: 600.ms)
-                .scale(begin: const Offset(0.8, 0.8), duration: 600.ms, curve: Curves.easeOut),
-            const SizedBox(height: 24),
-            Text(
-              AppStrings.appName,
-              style: AppTextStyles.displayMedium.copyWith(
-                color: AppColors.textPrimary,
-              ),
-            )
-                .animate()
-                .fadeIn(delay: 400.ms, duration: 600.ms)
-                .slideY(begin: 0.3, end: 0, delay: 400.ms, duration: 600.ms),
-            const SizedBox(height: 8),
-            Text(
-              AppStrings.appTagline,
-              style: AppTextStyles.bodyMedium.copyWith(
-                color: AppColors.textSecondary,
-              ),
-              textAlign: TextAlign.center,
-            )
-                .animate()
-                .fadeIn(delay: 600.ms, duration: 600.ms),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LogoMark extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 80,
-      height: 80,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primaryGlow,
-            blurRadius: 30,
-            spreadRadius: 4,
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Image.asset(
-          'assets/images/app_icon.png',
-          width: 80,
-          height: 80,
-          fit: BoxFit.cover,
-        ),
-      ),
-    );
+    return const SplashView();
   }
 }

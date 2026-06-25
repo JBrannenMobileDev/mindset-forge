@@ -1,13 +1,21 @@
 import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
+
+import 'core/constants/app_colors.dart';
+import 'core/constants/app_text_styles.dart';
 import 'core/router/app_router.dart';
+import 'core/services/deep_link_service.dart';
+import 'core/services/pending_invite_store.dart';
 import 'core/theme/app_theme.dart';
+import 'features/auth/widgets/splash_view.dart';
 import 'firebase_options.dart';
 import 'providers/fcm_provider.dart';
 
@@ -24,7 +32,10 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  // Hold the native splash on screen until the first Flutter frame paints so
+  // there is no gap between the OS launch screen and our SplashView.
+  FlutterNativeSplash.preserve(widgetsBinding: binding);
 
   // Catch all Flutter framework errors
   FlutterError.onError = (details) {
@@ -33,7 +44,9 @@ void main() async {
   };
 
   // Register FCM background handler before Firebase init
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  if (!kIsWeb) {
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  }
 
   runApp(const _InitApp());
 }
@@ -52,6 +65,11 @@ class _InitAppState extends State<_InitApp> {
   @override
   void initState() {
     super.initState();
+    // Remove the native splash once the first Flutter frame (our SplashView)
+    // has painted. The native and in-app visuals match, so removal is seamless.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => FlutterNativeSplash.remove(),
+    );
     _init();
   }
 
@@ -65,6 +83,9 @@ class _InitAppState extends State<_InitApp> {
       return;
     }
 
+    // Load any pending partner invite stashed before sign-in.
+    await PendingInviteStore.load();
+
     // Configure RevenueCat
     await _initRevenueCat();
 
@@ -72,18 +93,21 @@ class _InitAppState extends State<_InitApp> {
     await _initLocalNotifications();
 
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
-    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    if (!kIsWeb) {
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    }
 
     if (mounted) setState(() => _ready = true);
   }
 
   Future<void> _initRevenueCat() async {
+    if (kIsWeb) return; // RevenueCat doesn't support web
     final apiKey = Platform.isIOS ? _revenueCatApiKeyIos : _revenueCatApiKeyAndroid;
-    // Skip init if keys haven't been replaced yet — avoids iOS watchdog kills.
-    if (apiKey.startsWith('appl_REPLACE') || apiKey.startsWith('goog_REPLACE')) {
-      debugPrint('RevenueCat: placeholder key detected, skipping init.');
-      return;
-    }
+    // Always configure the SDK so that Purchases.shared is never nil.
+    // Skipping configuration causes a native Swift fatalError if PricingScreen
+    // calls getOfferings() before the SDK is configured — not catchable in Dart.
+    // With an invalid/placeholder key the configure() call itself succeeds; any
+    // subsequent network calls (getOfferings) will throw a catchable Dart error.
     try {
       await Purchases.setLogLevel(LogLevel.error);
       await Purchases.configure(PurchasesConfiguration(apiKey));
@@ -93,6 +117,7 @@ class _InitAppState extends State<_InitApp> {
   }
 
   Future<void> _initLocalNotifications() async {
+    if (kIsWeb) return; // flutter_local_notifications doesn't support web
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
@@ -108,19 +133,29 @@ class _InitAppState extends State<_InitApp> {
   Widget build(BuildContext context) {
     if (_error != null) {
       return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.dark,
         home: Scaffold(
-          backgroundColor: const Color(0xFF0A0A0F),
+          backgroundColor: AppColors.background,
           body: Center(
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(32),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                  const Icon(Icons.error_outline_rounded,
+                      color: AppColors.error, size: 48),
                   const SizedBox(height: 16),
                   Text(
+                    'Something went wrong',
+                    style: AppTextStyles.headlineSmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
                     _error!,
-                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: AppColors.textSecondary),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -132,13 +167,10 @@ class _InitAppState extends State<_InitApp> {
     }
 
     if (!_ready) {
-      return const MaterialApp(
-        home: Scaffold(
-          backgroundColor: Color(0xFF0A0A0F),
-          body: Center(
-            child: CircularProgressIndicator(color: Color(0xFF7B61FF)),
-          ),
-        ),
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.dark,
+        home: const SplashView(),
       );
     }
 
@@ -146,11 +178,28 @@ class _InitAppState extends State<_InitApp> {
   }
 }
 
-class MindsetForgeApp extends ConsumerWidget {
+class MindsetForgeApp extends ConsumerStatefulWidget {
   const MindsetForgeApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MindsetForgeApp> createState() => _MindsetForgeAppState();
+}
+
+class _MindsetForgeAppState extends ConsumerState<MindsetForgeApp> {
+  DeepLinkService? _deepLinkService;
+
+  @override
+  void initState() {
+    super.initState();
+    // Start listening for partner-invite deep links (cold + warm start).
+    if (!kIsWeb) {
+      _deepLinkService = DeepLinkService(ref.read(routerProvider));
+      _deepLinkService!.init();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
     // Eagerly activate FCM initialization whenever a user is signed in
     ref.watch(fcmInitProvider);

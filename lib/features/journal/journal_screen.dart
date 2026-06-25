@@ -170,8 +170,13 @@ class _MoodChart extends StatelessWidget {
     if (entries.isEmpty) return const SizedBox.shrink();
 
     final recent = entries.take(30).toList().reversed.toList();
-    final spots = recent.asMap().entries.map((e) => FlSpot(e.key.toDouble(), _moodToValue(e.value.mood))).toList();
-    final avg = spots.isEmpty ? 3.0 : spots.map((s) => s.y).reduce((a, b) => a + b) / spots.length;
+    // fl_chart needs ≥2 distinct X values to draw a line; duplicate the single
+    // point offset by 1 so the chart always has something to render.
+    final rawSpots = recent.asMap().entries.map((e) => FlSpot(e.key.toDouble(), _moodToValue(e.value.mood))).toList();
+    final spots = rawSpots.length == 1
+        ? [rawSpots.first, FlSpot(1.0, rawSpots.first.y)]
+        : rawSpots;
+    final avg = rawSpots.isEmpty ? 3.0 : rawSpots.map((s) => s.y).reduce((a, b) => a + b) / rawSpots.length;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.cardPadding),
@@ -226,7 +231,16 @@ class _MoodChart extends StatelessWidget {
                     isCurved: true,
                     color: AppColors.secondary,
                     barWidth: 2,
-                    dotData: const FlDotData(show: false),
+                    dotData: FlDotData(
+                      show: true,
+                      getDotPainter: (spot, percent, barData, index) =>
+                          FlDotCirclePainter(
+                        radius: 3,
+                        color: AppColors.secondary,
+                        strokeWidth: 1.5,
+                        strokeColor: AppColors.surface,
+                      ),
+                    ),
                     belowBarData: BarAreaData(
                       show: true,
                       gradient: LinearGradient(

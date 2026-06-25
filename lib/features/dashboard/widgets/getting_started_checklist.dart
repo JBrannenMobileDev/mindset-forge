@@ -86,27 +86,35 @@ class GettingStartedChecklist extends StatelessWidget {
       _ChecklistItem(
         label: 'Set your identity statement',
         isDone: profile.identityStatement.isNotEmpty,
-        onTap: () => context.push('/mindset'),
+        onTap: () => context.go('/mindset'),
+      ),
+      _ChecklistItem(
+        label: 'Complete your Mindset Blueprint',
+        isDone: profile.blueprintCompleted,
+        onTap: () => context.push('/blueprint-setup'),
       ),
       _ChecklistItem(
         label: 'Add your first goal',
         isDone: profile.goals.isNotEmpty,
-        onTap: () => context.push('/actions?tab=goals'),
+        onTap: () => context.go('/actions?tab=goals'),
       ),
       _ChecklistItem(
         label: 'Complete your first journal entry',
         isDone: profile.dailyCompletions.any((c) => c.journalCompleted),
-        onTap: () => context.push('/journal'),
+        onTap: () => context.go('/journal/new'),
       ),
       _ChecklistItem(
         label: 'Chat with your coach',
         isDone: profile.dailyCompletions.any((c) => c.chatCompleted),
-        onTap: () => context.push('/chat'),
+        onTap: () => context.go('/chat'),
       ),
       _ChecklistItem(
         label: 'Complete a Deep Dive module',
         isDone: profile.deepDive.modules.isNotEmpty,
-        onTap: () => context.push('/deep-dive'),
+        locked: !profile.blueprintCompleted,
+        onTap: () => context.push(
+          profile.blueprintCompleted ? '/deep-dive' : '/blueprint-setup',
+        ),
       ),
     ];
   }
@@ -115,11 +123,13 @@ class GettingStartedChecklist extends StatelessWidget {
 class _ChecklistItem {
   final String label;
   final bool isDone;
+  final bool locked;
   final VoidCallback onTap;
 
   const _ChecklistItem({
     required this.label,
     required this.isDone,
+    this.locked = false,
     required this.onTap,
   });
 }
@@ -132,6 +142,8 @@ class _ChecklistRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isLocked = item.locked && !item.isDone;
+
     return InkWell(
       onTap: item.isDone ? null : item.onTap,
       borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
@@ -152,14 +164,21 @@ class _ChecklistRow extends StatelessWidget {
                 color: item.isDone ? AppColors.primary : Colors.transparent,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: item.isDone ? AppColors.primary : AppColors.border,
+                  color: item.isDone
+                      ? AppColors.primary
+                      : isLocked
+                          ? AppColors.textDisabled
+                          : AppColors.border,
                   width: 2,
                 ),
               ),
               child: item.isDone
                   ? const Icon(Icons.check_rounded,
                       size: 13, color: Colors.white)
-                  : null,
+                  : isLocked
+                      ? const Icon(Icons.lock_rounded,
+                          size: 11, color: AppColors.textDisabled)
+                      : null,
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
@@ -168,16 +187,21 @@ class _ChecklistRow extends StatelessWidget {
                 style: AppTextStyles.bodySmall.copyWith(
                   color: item.isDone
                       ? AppColors.textMuted
-                      : AppColors.textPrimary,
+                      : isLocked
+                          ? AppColors.textDisabled
+                          : AppColors.textPrimary,
                   decoration:
                       item.isDone ? TextDecoration.lineThrough : null,
                   decorationColor: AppColors.textMuted,
                 ),
               ),
             ),
-            if (!item.isDone)
+            if (!item.isDone && !isLocked)
               const Icon(Icons.chevron_right_rounded,
                   color: AppColors.textMuted, size: 18),
+            if (isLocked)
+              const Icon(Icons.lock_outline_rounded,
+                  color: AppColors.textDisabled, size: 16),
           ],
         ),
       ),

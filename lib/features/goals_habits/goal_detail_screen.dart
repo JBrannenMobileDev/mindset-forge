@@ -62,12 +62,15 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
     final title = milestone['title'] as String? ?? '';
     if (title.isEmpty) return;
 
+    final targetWeeks = (milestone['targetWeeks'] as num?)?.toInt() ?? 4;
+
     final newGoal = Goal(
       id: const Uuid().v4(),
       title: title,
       description: milestone['description'] as String? ?? '',
       category: goal.category,
-      targetDate: DateTime.now().add(const Duration(days: 30)),
+      goalType: kGoalTypeShortTerm,
+      targetDate: DateTime.now().add(Duration(days: targetWeeks * 7)),
       parentGoalId: goal.id,
       createdAt: DateTime.now(),
     );
@@ -97,7 +100,7 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
 
       final breakdown = await ref
           .read(claudeServiceProvider)
-          .generateGoalBreakdown(goal.title, profile);
+          .generateGoalBreakdown(goal, profile);
       if (!mounted) return;
       setState(() => _breakdown = breakdown);
     } catch (_) {
@@ -405,27 +408,72 @@ class _GoalHeader extends StatelessWidget {
         const SizedBox(height: AppSpacing.sm),
         Text(goal.title, style: AppTextStyles.headlineLarge),
         const SizedBox(height: AppSpacing.md),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Text(
+            '${AppStrings.goalTargetPrefix} ${AppDateUtils.formatDate(goal.targetDate)}',
+            style: AppTextStyles.labelSmall,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        _ProgressSlider(goal: goal, color: _color),
+      ],
+    );
+  }
+}
+
+/// Draggable progress control. Updates optimistically on release rather than on
+/// every drag tick to avoid spamming Firestore.
+class _ProgressSlider extends ConsumerStatefulWidget {
+  final Goal goal;
+  final Color color;
+
+  const _ProgressSlider({required this.goal, required this.color});
+
+  @override
+  ConsumerState<_ProgressSlider> createState() => _ProgressSliderState();
+}
+
+class _ProgressSliderState extends ConsumerState<_ProgressSlider> {
+  double? _dragValue;
+
+  @override
+  Widget build(BuildContext context) {
+    final current =
+        (_dragValue ?? widget.goal.progressPercent).clamp(0.0, 100.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Row(
           children: [
             Text(
-              '${goal.progressPercent.toStringAsFixed(0)}%',
-              style: AppTextStyles.headlineSmall.copyWith(color: _color),
+              '${current.toStringAsFixed(0)}%',
+              style: AppTextStyles.headlineSmall.copyWith(color: widget.color),
             ),
             const Spacer(),
-            Text(
-              '${AppStrings.goalTargetPrefix} ${AppDateUtils.formatDate(goal.targetDate)}',
-              style: AppTextStyles.labelSmall,
-            ),
+            Text(AppStrings.goalProgressDrag, style: AppTextStyles.labelSmall),
           ],
         ),
-        const SizedBox(height: AppSpacing.sm),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: LinearProgressIndicator(
-            value: goal.progressPercent / 100,
-            backgroundColor: AppColors.border,
-            valueColor: AlwaysStoppedAnimation(_color),
-            minHeight: 8,
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 8,
+            activeTrackColor: widget.color,
+            inactiveTrackColor: AppColors.border,
+            thumbColor: widget.color,
+            overlayColor: widget.color.withValues(alpha: 0.15),
+            trackShape: const RoundedRectSliderTrackShape(),
+          ),
+          child: Slider(
+            value: current.toDouble(),
+            min: 0,
+            max: 100,
+            divisions: 20,
+            label: '${current.toStringAsFixed(0)}%',
+            onChanged: (v) => setState(() => _dragValue = v),
+            onChangeEnd: (v) {
+              ref.read(goalsProvider.notifier).setProgress(widget.goal.id, v);
+              setState(() => _dragValue = null);
+            },
           ),
         ),
       ],

@@ -16,6 +16,7 @@ import 'widgets/daily_habits_card.dart';
 import 'widgets/focus_mode_banner.dart';
 import 'widgets/progress_overview_card.dart';
 import 'widgets/getting_started_checklist.dart';
+import 'widgets/accountability_banner.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -40,6 +41,13 @@ class DashboardScreen extends ConsumerWidget {
             }
 
             final deepDiveComplete = profile.deepDive.isFullyComplete;
+            // Whether to surface the accountability banner (partner support card,
+            // or an invite nudge for settled-in subscribers without a partner).
+            final hasActivePartner = profile.accountabilityRelationships
+                .any((r) => r.type == 'primary' && r.status == 'active');
+            final showAccountabilityBanner = profile.isPartnerAccount ||
+                (!hasActivePartner &&
+                    DateTime.now().difference(profile.createdAt).inDays >= 3);
             final allOnboardingDone = profile.identityStatement.isNotEmpty &&
                 profile.goals.isNotEmpty &&
                 profile.dailyCompletions.any((c) => c.journalCompleted) &&
@@ -62,6 +70,20 @@ class DashboardScreen extends ConsumerWidget {
                       child: DashboardHeader(profile: profile),
                     ),
                   ),
+
+                  // ── Accountability (partner support banner / invite CTA) ──
+                  if (showAccountabilityBanner)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.screenPaddingH,
+                          AppSpacing.lg,
+                          AppSpacing.screenPaddingH,
+                          0,
+                        ),
+                        child: AccountabilityBanner(profile: profile),
+                      ),
+                    ),
 
                   // ── Getting Started (shown until all onboarding steps done) ──
                   if (!allOnboardingDone)
@@ -127,8 +149,8 @@ class DashboardScreen extends ConsumerWidget {
                     ),
                   ),
 
-                  // ── Deep Dive nudge (until all 5 modules complete) ───
-                  if (!deepDiveComplete)
+                  // ── Deep Dive nudge (after Blueprint, until all 5 modules complete) ───
+                  if (profile.blueprintCompleted && !deepDiveComplete)
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(
@@ -213,11 +235,11 @@ class _DeepDiveNudgeCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Complete Your Deep Dive',
+                  Text('Go Deeper with Your Coach',
                       style: AppTextStyles.labelLarge),
                   const SizedBox(height: 2),
                   Text(
-                    'Five modules to unlock your deepest patterns and tune your coach.',
+                    'Five modules to go deeper on your Blueprint and give your coach your full story.',
                     style: AppTextStyles.bodySmall
                         .copyWith(color: AppColors.textSecondary),
                   ),

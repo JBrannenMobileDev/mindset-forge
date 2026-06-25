@@ -6,7 +6,8 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/widgets/app_button.dart';
-import '../../core/firebase/accountability_service.dart';
+import '../../core/services/pending_invite_store.dart';
+import '../../providers/accountability_provider.dart';
 
 class PartnerInviteScreen extends ConsumerStatefulWidget {
   final String inviteId;
@@ -33,8 +34,8 @@ class _PartnerInviteScreenState extends ConsumerState<PartnerInviteScreen> {
   Future<void> _loadInviteInfo() async {
     try {
       final name = await ref
-          .read(accountabilityServiceProvider)
-          .getPartnerInviteInfo(widget.inviteId);
+          .read(accountabilityProvider.notifier)
+          .getInviteInfo(widget.inviteId);
       if (mounted) {
         setState(() {
           _primaryName = name ?? 'Someone';
@@ -55,12 +56,15 @@ class _PartnerInviteScreenState extends ConsumerState<PartnerInviteScreen> {
     setState(() => _isAccepting = true);
     try {
       await ref
-          .read(accountabilityServiceProvider)
-          .acceptPartnerInvite(widget.inviteId);
+          .read(accountabilityProvider.notifier)
+          .acceptInvite(widget.inviteId);
+      // Clear so the router stops resuming the invite flow.
+      await PendingInviteStore.clear();
       if (mounted) {
         setState(() => _accepted = true);
       }
     } catch (e) {
+      await PendingInviteStore.clear();
       if (mounted) {
         setState(() {
           _errorMessage = 'Failed to accept invite. ${e.toString()}';
@@ -68,6 +72,11 @@ class _PartnerInviteScreenState extends ConsumerState<PartnerInviteScreen> {
         });
       }
     }
+  }
+
+  Future<void> _decline() async {
+    await PendingInviteStore.clear();
+    if (mounted) context.go('/dashboard');
   }
 
   @override
@@ -130,7 +139,7 @@ class _PartnerInviteScreenState extends ConsumerState<PartnerInviteScreen> {
         ).animate().fadeIn(delay: 300.ms),
         const SizedBox(height: AppSpacing.md),
         TextButton(
-          onPressed: () => context.go('/dashboard'),
+          onPressed: _decline,
           child: Text(
             'Decline',
             style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
@@ -195,7 +204,7 @@ class _PartnerInviteScreenState extends ConsumerState<PartnerInviteScreen> {
         ),
         const SizedBox(height: AppSpacing.xxl),
         TextButton(
-          onPressed: () => context.go('/dashboard'),
+          onPressed: _decline,
           child: const Text('Go to Dashboard'),
         ),
       ],

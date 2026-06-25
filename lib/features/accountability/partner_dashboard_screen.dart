@@ -7,9 +7,9 @@ import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
-import '../../models/user_profile.dart';
+import '../../models/partner_progress.dart';
+import '../../providers/accountability_provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../core/firebase/accountability_service.dart';
 
 class PartnerDashboardScreen extends ConsumerStatefulWidget {
   final String partnerUid;
@@ -21,7 +21,7 @@ class PartnerDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _PartnerDashboardScreenState extends ConsumerState<PartnerDashboardScreen> {
-  UserProfile? _partnerProfile;
+  PartnerProgress? _progress;
   bool _isLoading = true;
   String? _errorMessage;
   final _messageCtrl = TextEditingController();
@@ -41,27 +41,19 @@ class _PartnerDashboardScreenState extends ConsumerState<PartnerDashboardScreen>
 
   Future<void> _loadPartner() async {
     try {
-      final profile = await ref
-          .read(firestoreServiceProvider)
-          .getUserProfile(widget.partnerUid);
+      final progress = await ref
+          .read(accountabilityProvider.notifier)
+          .getProgress(widget.partnerUid);
 
       if (!mounted) return;
-      if (profile == null) {
-        setState(() {
-          _errorMessage = 'Could not load partner\'s profile.';
-          _isLoading = false;
-        });
-        return;
-      }
-
       setState(() {
-        _partnerProfile = profile;
+        _progress = progress;
         _isLoading = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = 'Failed to load partner\'s profile. Check your connection.';
+        _errorMessage = 'Failed to load partner\'s progress. Check your connection.';
         _isLoading = false;
       });
     }
@@ -73,8 +65,8 @@ class _PartnerDashboardScreenState extends ConsumerState<PartnerDashboardScreen>
 
     setState(() => _isSending = true);
     try {
-      await ref.read(accountabilityServiceProvider).sendEncouragement(
-            partnerUid: widget.partnerUid,
+      await ref.read(accountabilityProvider.notifier).sendEncouragement(
+            primaryUid: widget.partnerUid,
             message: message,
           );
       _messageCtrl.clear();
@@ -105,7 +97,7 @@ class _PartnerDashboardScreenState extends ConsumerState<PartnerDashboardScreen>
           onPressed: () => context.pop(),
         ),
         title: Text(
-          _partnerProfile?.displayName ?? 'Partner Progress',
+          _progress?.displayName ?? 'Partner Progress',
           style: AppTextStyles.headlineMedium,
         ),
       ),
@@ -123,11 +115,67 @@ class _PartnerDashboardScreenState extends ConsumerState<PartnerDashboardScreen>
     );
   }
 
+  /// Conversion CTA for free partner accounts viewing their friend's progress:
+  /// invites them to start their own journey (onboarding if not set up, else the
+  /// trial). Hidden for full/subscribed users.
+  Widget _buildOwnJourneyCta() {
+    final me = ref.watch(currentUserProfileProvider).valueOrNull;
+    if (me == null || !me.isPartnerAccount) return const SizedBox.shrink();
+
+    final needsSetup = !me.hasCompletedOnboarding;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.lg),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppColors.primary.withValues(alpha: 0.16),
+              AppColors.secondary.withValues(alpha: 0.10),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.rocket_launch_rounded, color: AppColors.primary, size: 20),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    needsSetup ? 'Ready for your own journey?' : 'Go all in on your growth',
+                    style: AppTextStyles.labelLarge,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              needsSetup
+                  ? "You've seen ${_progress?.firstName ?? 'them'} grow — set up your free mindset profile and start yours."
+                  : 'Unlock unlimited coaching, goals, and more with a 7-day free trial.',
+              style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppPrimaryButton(
+              label: needsSetup ? 'Start My Journey' : 'Start Free Trial',
+              icon: Icons.arrow_forward_rounded,
+              onPressed: () => context.push(needsSetup ? '/onboarding' : '/pricing'),
+            ),
+          ],
+        ),
+      ),
+    ).animate().fadeIn(delay: 80.ms);
+  }
+
   Widget _buildContent() {
-    final profile = _partnerProfile!;
-    final today = profile.todayCompletion;
-    final streak = profile.currentStreak;
-    final activeGoals = profile.goals.where((g) => g.status == 'active').toList();
+    final progress = _progress!;
+    final streak = progress.currentStreak;
+    final activeGoals = progress.activeGoals;
+    final hasIdentity = progress.identityStatement.trim().isNotEmpty;
 
     return ListView(
       padding: const EdgeInsets.symmetric(
@@ -153,7 +201,7 @@ class _PartnerDashboardScreenState extends ConsumerState<PartnerDashboardScreen>
                     ),
                     child: Center(
                       child: Text(
-                        profile.firstName[0].toUpperCase(),
+                        progress.firstName[0].toUpperCase(),
                         style: AppTextStyles.headlineLarge.copyWith(color: Colors.white),
                       ),
                     ),
@@ -163,16 +211,17 @@ class _PartnerDashboardScreenState extends ConsumerState<PartnerDashboardScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(profile.displayName, style: AppTextStyles.headlineSmall),
-                        Text(
-                          '"${profile.identityStatement}"',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: AppColors.textSecondary,
-                            fontStyle: FontStyle.italic,
+                        Text(progress.displayName, style: AppTextStyles.headlineSmall),
+                        if (hasIdentity)
+                          Text(
+                            '"${progress.identityStatement}"',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.textSecondary,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
                       ],
                     ),
                   ),
@@ -181,6 +230,8 @@ class _PartnerDashboardScreenState extends ConsumerState<PartnerDashboardScreen>
             ],
           ),
         ).animate().fadeIn(),
+
+        _buildOwnJourneyCta(),
 
         const SizedBox(height: AppSpacing.lg),
 
@@ -199,7 +250,7 @@ class _PartnerDashboardScreenState extends ConsumerState<PartnerDashboardScreen>
             Expanded(
               child: _StatCard(
                 label: 'Today',
-                value: '${today.completionPercent.toStringAsFixed(0)}%',
+                value: '${progress.todayCompletionPercent}%',
                 icon: Icons.today_rounded,
                 color: AppColors.primary,
               ).animate().fadeIn(delay: 150.ms),
@@ -217,6 +268,33 @@ class _PartnerDashboardScreenState extends ConsumerState<PartnerDashboardScreen>
         ),
 
         const SizedBox(height: AppSpacing.lg),
+
+        // Today's evidence
+        if (progress.todayEvidence != null &&
+            progress.todayEvidence!.trim().isNotEmpty) ...[
+          Text('Today\'s Evidence', style: AppTextStyles.headlineSmall),
+          const SizedBox(height: AppSpacing.md),
+          AppCard(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.auto_awesome_rounded,
+                    color: AppColors.warning, size: 18),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    '"${progress.todayEvidence}"',
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: AppColors.textSecondary,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ).animate().fadeIn(delay: 250.ms),
+          const SizedBox(height: AppSpacing.lg),
+        ],
 
         // Active Goals
         if (activeGoals.isNotEmpty) ...[
@@ -263,7 +341,7 @@ class _PartnerDashboardScreenState extends ConsumerState<PartnerDashboardScreen>
                 style: AppTextStyles.bodyMedium,
                 cursorColor: AppColors.primary,
                 decoration: InputDecoration(
-                  hintText: 'Write something inspiring for ${profile.firstName}...',
+                  hintText: 'Write something inspiring for ${progress.firstName}...',
                   hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
                   filled: true,
                   fillColor: AppColors.surface,

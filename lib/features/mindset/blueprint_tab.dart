@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
@@ -78,6 +79,10 @@ class _BlueprintTabState extends ConsumerState<BlueprintTab> {
       children: [
         Text(AppStrings.blueprint, style: AppTextStyles.headlineSmall),
         const SizedBox(height: AppSpacing.md),
+        if (!widget.profile.blueprintCompleted) ...[
+          _BlueprintSetupCta(),
+          const SizedBox(height: AppSpacing.md),
+        ],
         AppCard(
           child: SizedBox(
             height: 240,
@@ -159,6 +164,43 @@ class _BlueprintTabState extends ConsumerState<BlueprintTab> {
         ],
       ),
     );
+  }
+}
+
+class _BlueprintSetupCta extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return AppGlowCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.tune_rounded, color: AppColors.primary, size: 20),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text('Calibrate your blueprint',
+                    style: AppTextStyles.labelLarge),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Rate your five core traits, mental toughness, and biggest fears so your coach can personalize everything to you.',
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppPrimaryButton(
+            label: 'Complete My Blueprint',
+            onPressed: () => context.push('/blueprint-setup'),
+            icon: Icons.arrow_forward_rounded,
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 400.ms);
   }
 }
 
@@ -288,7 +330,7 @@ class _FearsSection extends StatelessWidget {
     'Fear of Judgment':
         'The opinions of others weigh heavily on your decisions. You edit yourself to avoid criticism. Outwit it by recognizing that most people are too focused on themselves to notice your moves.',
     'Fear of Success':
-        'Deep down, you fear what succeeding would demand of you — new responsibilities, expectations, or a changed identity. Outwit it by pre-living your future self daily.',
+        'Deep down, you fear the demands success would place on you. The new responsibilities, the higher expectations, the version of yourself you\'d have to become. Outwit it by pre-living your future self daily.',
     'Fear of Rejection':
         'Asking or putting yourself forward feels risky because you anticipate being turned down. Outwit it by detaching your worth from any single person\'s response.',
     'Fear of Uncertainty':
@@ -315,7 +357,7 @@ class _FearsSection extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.xs),
         Text(
-          'From Outwitting the Devil — your drift patterns made visible.',
+          'Inspired by Outwitting the Devil. These are the patterns keeping you stuck.',
           style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
         ),
         const SizedBox(height: AppSpacing.md),
@@ -328,9 +370,14 @@ class _FearsSection extends StatelessWidget {
                     color: AppColors.textMuted, size: 32),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Complete the onboarding fear quiz to unlock your fear profile.',
+                  'Take the fear quiz to unlock your fear profile.',
                   style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted),
                   textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                AppSecondaryButton(
+                  label: 'Take the Fear Quiz',
+                  onPressed: () => context.push('/blueprint-setup'),
                 ),
               ],
             ),
