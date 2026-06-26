@@ -1,9 +1,12 @@
 abstract final class AppStrings {
   // App
   static const String appName = 'MindsetForge';
+  static const String appNamePrefix = 'Mindset';
+  static const String appNameAccent = 'Forge';
   static const String appTagline = 'Rewire your mindset. Forge your future.';
 
   // Auth
+  static const String getStarted = 'Get Started';
   static const String login = 'Log In';
   static const String signup = 'Create Account';
   static const String logout = 'Log Out';
@@ -172,6 +175,25 @@ abstract final class AppStrings {
   static const String focusCompletedSubtitle =
       'Your #1 priority is done. Keep the momentum going.';
 
+  // Today arc — phase labels + single-hero copy
+  static const String phaseMorning = 'Morning';
+  static const String phaseDaytime = 'Daytime';
+  static const String phaseEvening = 'Evening';
+  static const String heroSetFocusLabel = 'Set Your Focus';
+  static const String heroSetFocusSubtitle =
+      'Choose the #1 action that moves you closest to who you\'re becoming.';
+  static const String heroSetFocusButton = 'Plan My Day';
+  static const String heroFocusSessionLabel = "TODAY'S FOCUS";
+  static const String heroFocusButton = 'Mark Complete';
+  static const String heroOnTrackLabel = "You're On Track";
+  static const String heroOnTrackSubtitle =
+      'Your focus is done. Keep your habits rolling and ease into your evening.';
+  static const String focusStillOpenNote =
+      'Your #1 focus is still open — close it out before you wind down.';
+  static const String otherRoutineMorningLink = 'Morning recap';
+  static const String otherRoutineEveningLink = 'Evening routine';
+  static const String groupHabits = 'Habits';
+
   // Goals
   static const String goals = 'Goals';
   static const String habits = 'Habits';
@@ -261,6 +283,7 @@ abstract final class AppStrings {
       'Add the few actions that move you closest to who you want to become, or let your coach suggest some.';
   static const String priorityActionsHeader = "TODAY'S PRIORITIES";
   static const String priorityActionsFocusLabel = 'TOP PRIORITY';
+  static const String priorityActionsSetFocus = 'Set as top priority';
   static const String priorityActionsFocusHint =
       'Tap the star to set your #1 focus.';
   static const String priorityActionsGenerate = 'Generate ideas';
@@ -278,11 +301,33 @@ abstract final class AppStrings {
   static const String habitPause = 'Pause';
   static const String habitResume = 'Resume';
   static const String habitDelete = 'Delete';
-  static const String habitNameHint = 'e.g., Morning meditation';
-  static const String habitTriggerHint = 'e.g., After I wake up';
+  static const String habitNameHint = 'e.g., Read one page';
+  static const String habitTriggerHint = 'After I pour my morning coffee';
   static const String habitIdentityHint = 'e.g., I am a disciplined person';
   static const String habitSuggestionsTitle = 'Habit Suggestions';
   static const String habitWhenPrefix = 'When:';
+
+  // Habit guidance (proven habit-formation framing)
+  static const String habitLibraryTitle = 'Habit Library';
+  static const String habitGuidanceTitle = 'What makes a habit stick';
+  static const String habitGuidanceBody =
+      'Keep it tiny, anchor it to something you already do, and tie it to who you want to become.';
+  static const String habitNameLabel = 'Habit — what will you do?';
+  static const String habitNameGuidance =
+      'Start tiny — something you can do in under two minutes.';
+  static const String habitCueLabel = 'Cue — when will you do it?';
+  static const String habitCueGuidance =
+      'Anchor it to a routine you already have so it sticks.';
+  static const String habitIdentityLabel = 'Identity — who does this make you?';
+  static const String habitIdentityGuidance =
+      'Every time you do this, you cast a vote for this identity.';
+  static const List<String> habitCuePresets = [
+    'After I wake up',
+    'After my morning coffee',
+    'After lunch',
+    'When I sit at my desk',
+    'Before bed',
+  ];
 
   // Journal
   static const String journal = 'Journal';
@@ -310,7 +355,9 @@ abstract final class AppStrings {
   static const String typeMessage = 'Type a message...';
   static const String futureSelfPlaceholder = 'Ask your future self...';
   static const String quickPromptsLabel = 'Or start with one of these:';
-  static const String messageCopied = 'Message copied';
+  static const String futureSelfQuickPromptsLabel = 'Or ask your future self:';
+  static const String messageCopied = 'Copied!';
+  static const String coachErrorRetry = 'I\'m having trouble connecting right now.';
   static const String noSavedSessions = 'No saved sessions yet.';
   static const String coachIsTyping = 'Your coach is thinking...';
   static const String futureSelfIsTyping = 'Your future self is remembering...';
@@ -408,6 +455,12 @@ abstract final class AppStrings {
   static const String eveningSession = 'Evening Session';
   static const String addAffirmation = 'Add Affirmation';
   static const String generateAffirmations = 'Generate';
+  static const String browseLibrary = 'Browse Library';
+  static const String generateForMe = 'Generate for Me';
+  static const String writeMyOwn = 'Write My Own';
+  static const String affirmationLibraryTitle = 'Affirmation Library';
+  static const String affirmationFieldHint =
+      'I am confident and capable of achieving my goals';
   static const String tapNext = 'Tap to continue';
   static const String sessionComplete = 'Session Complete';
 
@@ -465,14 +518,18 @@ abstract final class AppStrings {
   // Empty states
   static const String noGoalsYet = 'No goals yet';
   static const String noGoalsSubtitle = 'Add your first goal to start forging your future.';
-  static const String noHabitsYet = 'No habits yet';
-  static const String noHabitsSubtitle = 'Build identity-based habits that stick.';
+  static const String noHabitsYet = 'Build your first habit';
+  static const String noHabitsSubtitle =
+      'Browse proven habits, generate ideas for your goals, or write your own.';
   static const String noJournalEntries = 'No journal entries yet';
   static const String noJournalSubtitle = 'Start reflecting to unlock your patterns.';
   static const String noSessions = 'No sessions yet';
   static const String noSessionsSubtitle = 'Start a conversation with your coach.';
-  static const String noAffirmations = 'No affirmations yet';
-  static const String noAffirmationsSubtitle = 'Create or generate affirmations tailored to your goals.';
+  static const String futureSelfNoSessionsSubtitle =
+      'Start a conversation with your future self.';
+  static const String noAffirmations = 'Build your affirmations';
+  static const String noAffirmationsSubtitle =
+      'Browse the library, generate with AI, or write your own to begin your daily reprogramming.';
 
   // Errors
   static const String errorGeneric = 'Something went wrong. Please try again.';
@@ -518,6 +575,8 @@ abstract final class AppStrings {
 
   static const String inviteCreatedSuccess =
       'Invite link created! Share it with your partner.';
+  static const String inviteLinkCopied =
+      'Invite link copied to clipboard. Paste it to your partner.';
   static const String inviteCreateError =
       'Could not create invite. Please try again.';
 

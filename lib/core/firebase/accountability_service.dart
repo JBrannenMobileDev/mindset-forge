@@ -16,7 +16,8 @@ class AccountabilityService {
       'partnerEmail': partnerEmail,
       'partnerName': partnerName,
     });
-    return result.data['inviteLink'] as String? ?? '';
+    final data = Map<String, dynamic>.from(result.data as Map);
+    return data['inviteLink'] as String? ?? '';
   }
 
   /// Fetches the privacy-curated progress snapshot for a primary user the
