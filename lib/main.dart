@@ -11,6 +11,7 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_text_styles.dart';
 import 'core/router/app_router.dart';
+import 'core/services/analytics_service.dart';
 import 'core/services/deep_link_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/pending_invite_store.dart';
@@ -23,6 +24,9 @@ import 'providers/notification_provider.dart';
 // RevenueCat API keys
 const _revenueCatApiKeyIos = 'appl_dKUUgDcXtEccZBfJkLEoToRdSri';
 const _revenueCatApiKeyAndroid = 'goog_REPLACE_WITH_ANDROID_KEY';
+
+// Mixpanel project token
+const _mixpanelToken = 'REPLACE_WITH_MIXPANEL_TOKEN';
 
 /// Handle background FCM messages
 @pragma('vm:entry-point')
@@ -90,6 +94,9 @@ class _InitAppState extends State<_InitApp> {
 
     // Configure local notifications
     await _initLocalNotifications();
+
+    // Initialise Mixpanel analytics
+    await AnalyticsService.init(_mixpanelToken);
 
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
     if (!kIsWeb) {
@@ -233,6 +240,13 @@ class _MindsetForgeAppState extends ConsumerState<MindsetForgeApp>
       next.whenData((profile) {
         if (profile != null && !kIsWeb) {
           ref.read(notificationSchedulerProvider).rescheduleAll(profile);
+        }
+        // Keep Mixpanel user profile in sync on every profile emission.
+        if (profile != null) {
+          final uid = ref.read(authStateProvider).valueOrNull?.uid;
+          if (uid != null) {
+            ref.read(analyticsServiceProvider).identify(uid, profile);
+          }
         }
       });
     });

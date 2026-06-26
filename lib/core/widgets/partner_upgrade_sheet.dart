@@ -232,7 +232,7 @@ class _PartnerUpgradeSheet extends StatelessWidget {
               icon: Icons.arrow_forward_rounded,
               onPressed: () {
                 Navigator.of(context).pop();
-                context.push('/pricing');
+                context.push('/pricing?source=partner_upgrade');
               },
             ),
             const SizedBox(height: AppSpacing.sm),

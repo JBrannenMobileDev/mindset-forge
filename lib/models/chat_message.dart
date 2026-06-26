@@ -12,6 +12,10 @@ class ChatMessage {
   /// Safety classification for assistant messages: 'none' | 'concern' | 'crisis'.
   final String? safety;
 
+  /// True when this assistant message represents a failed AI call. The bubble
+  /// renders a retry button so the user can re-send without retyping.
+  final bool isError;
+
   const ChatMessage({
     required this.id,
     required this.role,
@@ -20,6 +24,7 @@ class ChatMessage {
     this.feedback,
     this.mode,
     this.safety,
+    this.isError = false,
   });
 
   bool get isUser => role == 'user';
@@ -34,6 +39,7 @@ class ChatMessage {
     int? feedback,
     String? mode,
     String? safety,
+    bool? isError,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -43,6 +49,7 @@ class ChatMessage {
       feedback: feedback ?? this.feedback,
       mode: mode ?? this.mode,
       safety: safety ?? this.safety,
+      isError: isError ?? this.isError,
     );
   }
 
@@ -60,6 +67,7 @@ class ChatMessage {
       feedback: (json['feedback'] as num?)?.toInt(),
       mode: json['mode'] as String?,
       safety: json['safety'] as String?,
+      isError: json['isError'] as bool? ?? false,
     );
   }
 
@@ -71,5 +79,6 @@ class ChatMessage {
         'feedback': feedback,
         'mode': mode,
         'safety': safety,
+        'isError': isError,
       };
 }

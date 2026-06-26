@@ -39,15 +39,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         );
   }
 
-  Future<void> _signInWithGoogle() async {
-    ref.read(authNotifierProvider.notifier).signInWithGoogle();
-  }
-
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
     final isLoading = authState.isLoading;
-    final isGoogleLoading = authState.isGoogleLoading;
     final errorMessage = authState.errorMessage;
 
     return Scaffold(
@@ -147,27 +142,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           onPressed: _login,
                           isLoading: isLoading,
                         ),
-                        const SizedBox(height: AppSpacing.lg),
-                        Row(
-                          children: [
-                            const Expanded(child: Divider()),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.md,
-                              ),
-                              child: Text(
-                                AppStrings.orContinueWith,
-                                style: AppTextStyles.labelSmall,
-                              ),
-                            ),
-                            const Expanded(child: Divider()),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.lg),
-                        _GoogleSignInButton(
-                          onPressed: _signInWithGoogle,
-                          isLoading: isGoogleLoading,
-                        ),
                       ],
                     ),
                   ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
@@ -254,62 +228,6 @@ class _LogoMark extends StatelessWidget {
         ],
       ),
       child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 28),
-    );
-  }
-}
-
-class _GoogleSignInButton extends StatelessWidget {
-  final VoidCallback onPressed;
-  final bool isLoading;
-
-  const _GoogleSignInButton({
-    required this.onPressed,
-    this.isLoading = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: AppSpacing.buttonHeight,
-      child: OutlinedButton(
-        onPressed: isLoading ? null : onPressed,
-        style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: AppColors.border),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-          ),
-        ),
-        child: isLoading
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 20,
-                    height: 20,
-                    decoration: const BoxDecoration(shape: BoxShape.circle),
-                    child: const Text(
-                      'G',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  const Text(
-                    AppStrings.continueWithGoogle,
-                    style: TextStyle(color: AppColors.textPrimary),
-                  ),
-                ],
-              ),
-      ),
     );
   }
 }

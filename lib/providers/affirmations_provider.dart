@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/services/analytics_service.dart';
 import '../core/utils/app_date_utils.dart';
 import '../models/affirmation.dart';
 import '../models/user_profile.dart';
@@ -17,34 +19,52 @@ class AffirmationsNotifier extends StateNotifier<List<Affirmation>> {
   Future<void> _persist(List<Affirmation> items) async {
     final uid = _ref.read(authStateProvider).valueOrNull?.uid;
     if (uid == null) return;
-    await _ref.read(firestoreServiceProvider).updateUserField(uid, {
-      'affirmations': items.map((a) => a.toJson()).toList(),
-    });
+    try {
+      await _ref.read(firestoreServiceProvider).updateUserField(uid, {
+        'affirmations': items.map((a) => a.toJson()).toList(),
+      });
+    } catch (e) {
+      debugPrint('AffirmationsNotifier._persist failed: $e');
+      rethrow;
+    }
   }
 
   Future<void> addAffirmation(Affirmation affirmation) async {
+    final previous = state;
     final updated = [...state, affirmation];
     state = updated;
-    await _persist(updated);
+    try {
+      await _persist(updated);
+    } catch (_) {
+      state = previous;
+    }
   }
 
   Future<void> toggleActive(String id) async {
+    final previous = state;
     final updated = state.map((a) {
       if (a.id == id) return a.copyWith(isActive: !a.isActive);
       return a;
     }).toList();
     state = updated;
-    await _persist(updated);
+    try {
+      await _persist(updated);
+    } catch (_) {
+      state = previous;
+    }
   }
 
   Future<void> deleteAffirmation(String id) async {
+    final previous = state;
     final updated = state.where((a) => a.id != id).toList();
     state = updated;
-    await _persist(updated);
+    try {
+      await _persist(updated);
+    } catch (_) {
+      state = previous;
+    }
   }
 
-  /// Records a session completion for today (with grace period).
-  /// Upserts the `affirmation_completions` entry and updates daily completion flags.
   Future<void> recordSessionCompletion(String sessionType) async {
     final uid = _ref.read(authStateProvider).valueOrNull?.uid;
     if (uid == null) return;
@@ -80,14 +100,23 @@ class AffirmationsNotifier extends StateNotifier<List<Affirmation>> {
       completions.add(updated);
     }
 
-    await _ref.read(firestoreServiceProvider).updateUserField(uid, {
-      'affirmationCompletions': completions.map((c) => c.toJson()).toList(),
-    });
+    try {
+      await _ref.read(firestoreServiceProvider).updateUserField(uid, {
+        'affirmationCompletions': completions.map((c) => c.toJson()).toList(),
+      });
+    } catch (e) {
+      debugPrint('AffirmationsNotifier.recordSessionCompletion failed: $e');
+      rethrow;
+    }
 
-    // Update the per-session daily completion flag (for DailyWinsTracker)
     final field =
         sessionType == 'morning' ? 'affirmationsMorning' : 'affirmationsEvening';
     await _ref.read(dailyCompletionProvider.notifier).toggle(field, true);
+
+    _ref.read(analyticsServiceProvider).trackAffirmationSessionCompleted(
+          sessionType: sessionType,
+          affirmationCount: activeAffirmations.length,
+        );
   }
 
   List<Affirmation> get activeAffirmations =>

@@ -41,8 +41,13 @@ class DailyWisdomNotifier extends StateNotifier<DailyWisdomState> {
   /// Call once when the profile is available. Idempotent — subsequent calls
   /// are no-ops if generation is already in progress or complete for today.
   Future<void> loadForProfile(UserProfile profile) async {
-    // Skip partners (matches base44 `profile.user_type !== 'partner'` guard).
-    if (profile.userType == 'partner') return;
+    // Partner accounts have no onboarding data to personalize an AI quote from,
+    // so skip the Claude call and serve a static quote. Returning without
+    // setting state would leave the header stuck on its loading shimmer.
+    if (profile.userType == 'partner') {
+      state = state.copyWith(wisdom: _fallback, isLoading: false);
+      return;
+    }
 
     final today = AppDateUtils.todayString();
     final cached = profile.dailyWisdom[today];

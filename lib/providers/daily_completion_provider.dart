@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/daily_completion.dart';
+import '../core/services/analytics_service.dart';
 import '../core/utils/app_date_utils.dart';
+import '../models/daily_completion.dart';
 import 'auth_provider.dart';
 
 class DailyCompletionNotifier extends StateNotifier<DailyCompletion> {
@@ -21,6 +22,7 @@ class DailyCompletionNotifier extends StateNotifier<DailyCompletion> {
   }
 
   Future<void> toggle(String field, bool value) async {
+    final wasComplete = _fieldValue(field);
     final times = Map<String, String>.from(state.completionTimes);
     if (value) {
       times[field] = DateTime.now().toIso8601String();
@@ -30,6 +32,54 @@ class DailyCompletionNotifier extends StateNotifier<DailyCompletion> {
     final updated = _applyField(field, value).copyWith(completionTimes: times);
     state = updated;
     await _persist(updated);
+
+    // Only fire when flipping to true for the first time.
+    if (value && !wasComplete) {
+      final analytics = _ref.read(analyticsServiceProvider);
+      analytics.trackDailyWinCompleted(field);
+      if (field == 'gratitudeLogged') analytics.trackGratitudeLogged();
+      if (field == 'evidenceLogged') analytics.trackEvidenceLogged();
+      _checkPerfectDay(updated, analytics);
+      _checkStreakMilestone(analytics);
+    }
+  }
+
+  bool _fieldValue(String field) {
+    return switch (field) {
+      'habitsCompleted' => state.habitsCompleted,
+      'dayPlanned' => state.dayPlanned,
+      'priorityActionsCompleted' => state.priorityActionsCompleted,
+      'affirmationsMorning' => state.affirmationsMorning,
+      'affirmationsEvening' => state.affirmationsEvening,
+      'futureSelfCompleted' => state.futureSelfCompleted,
+      'journalCompleted' => state.journalCompleted,
+      'chatCompleted' => state.chatCompleted,
+      'identityRead' => state.identityRead,
+      'gratitudeLogged' => state.gratitudeLogged,
+      'evidenceLogged' => state.evidenceLogged,
+      _ => false,
+    };
+  }
+
+  void _checkPerfectDay(DailyCompletion updated, AnalyticsService analytics) {
+    if (!updated.isPerfectDay) return;
+    // Only fire once per day — if it was already a perfect day before this
+    // toggle, we already fired.
+    final wasAlreadyPerfect = state.isPerfectDay;
+    if (wasAlreadyPerfect) return;
+    final profile = _ref.read(currentUserProfileProvider).valueOrNull;
+    analytics.trackPerfectDayAchieved(profile?.currentStreak ?? 0);
+  }
+
+  static const _streakMilestones = {3, 7, 14, 30};
+
+  void _checkStreakMilestone(AnalyticsService analytics) {
+    final profile = _ref.read(currentUserProfileProvider).valueOrNull;
+    if (profile == null) return;
+    final streak = profile.currentStreak;
+    if (_streakMilestones.contains(streak)) {
+      analytics.trackStreakMilestoneReached(streak);
+    }
   }
 
   DailyCompletion _applyField(String field, bool value) {

@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/services/analytics_service.dart';
 import '../models/habit.dart';
 import '../models/user_profile.dart';
 import 'auth_provider.dart';
@@ -16,10 +18,6 @@ class HabitsNotifier extends StateNotifier<List<Habit>> {
     }
   }
 
-  /// Keeps the daily-win `habitsCompleted` flag in sync with the real habit
-  /// list, regardless of where a habit is checked off (dashboard card or the
-  /// Actions tab). When the user has no active habits the item is treated as
-  /// vacuously complete so it never blocks a perfect day / streak.
   void _syncDailyCompletion() {
     final active = state.where((h) => h.state == 'active').toList();
     final allDone = active.isEmpty || active.every((h) => h.isCompletedToday);
@@ -32,30 +30,53 @@ class HabitsNotifier extends StateNotifier<List<Habit>> {
   Future<void> _persist(List<Habit> habits) async {
     final uid = _ref.read(authStateProvider).valueOrNull?.uid;
     if (uid == null) return;
-    await _ref.read(firestoreServiceProvider).updateUserField(uid, {
-      'habits': habits.map((h) => h.toJson()).toList(),
-    });
+    try {
+      await _ref.read(firestoreServiceProvider).updateUserField(uid, {
+        'habits': habits.map((h) => h.toJson()).toList(),
+      });
+    } catch (e) {
+      debugPrint('HabitsNotifier._persist failed: $e');
+      rethrow;
+    }
   }
 
   Future<void> addHabit(Habit habit) async {
+    final previous = state;
     final updated = [...state, habit];
     state = updated;
     _syncDailyCompletion();
-    await _persist(updated);
+    try {
+      await _persist(updated);
+    } catch (_) {
+      state = previous;
+      _syncDailyCompletion();
+    }
   }
 
   Future<void> updateHabit(Habit habit) async {
+    final previous = state;
     final updated = state.map((h) => h.id == habit.id ? habit : h).toList();
     state = updated;
     _syncDailyCompletion();
-    await _persist(updated);
+    try {
+      await _persist(updated);
+    } catch (_) {
+      state = previous;
+      _syncDailyCompletion();
+    }
   }
 
   Future<void> deleteHabit(String habitId) async {
+    final previous = state;
     final updated = state.where((h) => h.id != habitId).toList();
     state = updated;
     _syncDailyCompletion();
-    await _persist(updated);
+    try {
+      await _persist(updated);
+    } catch (_) {
+      state = previous;
+      _syncDailyCompletion();
+    }
   }
 
   Future<void> completeHabit(String habitId) async {
@@ -68,6 +89,15 @@ class HabitsNotifier extends StateNotifier<List<Habit>> {
       completionHistory: [...habit.completionHistory, now],
     );
     await updateHabit(updated);
+
+    // Count how many active habits are done after this check-in.
+    final active = state.where((h) => h.state == 'active').toList();
+    final checkedCount = active.where((h) => h.isCompletedToday).length;
+    _ref.read(analyticsServiceProvider).trackHabitCheckedIn(
+          habitsChecked: checkedCount,
+          habitsTotal: active.length,
+          allComplete: checkedCount == active.length,
+        );
   }
 
   Future<void> toggleState(String habitId, String newState) async {

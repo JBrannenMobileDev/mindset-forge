@@ -11,11 +11,13 @@ import '../../core/widgets/app_button.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/responsive_layout.dart';
 import '../../core/widgets/shimmer_widget.dart';
+import '../../core/utils/breakpoints.dart';
 import '../../models/manifestation_alignment.dart';
 import '../../models/mindset_blueprint.dart';
 import '../../models/user_profile.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/future_self_provider.dart';
+import '../../providers/identity_provider.dart';
 import 'affirmations_tab.dart';
 import 'widgets/alignment_detail_sheet.dart';
 
@@ -42,8 +44,7 @@ class MindsetScreen extends ConsumerWidget {
                 const ErrorState(message: 'Failed to load mindset data.'),
             data: (profile) => profile == null
                 ? const Center(
-                    child:
-                        CircularProgressIndicator(color: AppColors.primary))
+                    child: CircularProgressIndicator(color: AppColors.primary))
                 : _HubBody(profile: profile),
           ),
         ),
@@ -76,57 +77,154 @@ class _HubBody extends ConsumerWidget {
     final fsDoneToday = ref.watch(futureSelfCompletedTodayProvider);
     final alignment = ManifestationScoring.calculate(profile);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(
-          AppSpacing.screenPaddingH, AppSpacing.lg, AppSpacing.screenPaddingH, 100),
-      children: [
-        Text(AppStrings.mindset, style: AppTextStyles.headlineLarge),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          AppStrings.mindsetHubSubtitle,
-          style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (Breakpoints.isWideWidth(constraints.maxWidth)) {
+          return _DesktopHub(
+            profile: profile,
+            fsHasPractice: fsSetup?.hasPractice ?? false,
+            fsDoneToday: fsDoneToday,
+            alignment: alignment,
+          );
+        }
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.screenPaddingH,
+              AppSpacing.lg, AppSpacing.screenPaddingH, 100),
+          children: [
+            Text(AppStrings.mindset, style: AppTextStyles.headlineLarge),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              AppStrings.mindsetHubSubtitle,
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+
+            _IdentityCard(statement: profile.identityStatement)
+                .animate()
+                .fadeIn(duration: 350.ms),
+            const SizedBox(height: AppSpacing.sectionGap),
+
+            // ── Subconscious practices ──────────────────────────────────────
+            Text(AppStrings.subconsciousPracticeTitle,
+                style: AppTextStyles.headlineSmall),
+            const SizedBox(height: AppSpacing.xs),
+            Text(AppStrings.subconsciousPracticeSubtitle,
+                style: AppTextStyles.bodySmall
+                    .copyWith(color: AppColors.textSecondary)),
+            const SizedBox(height: AppSpacing.md),
+            _AffirmationsCard(profile: profile)
+                .animate()
+                .fadeIn(delay: 80.ms, duration: 350.ms),
+            const SizedBox(height: AppSpacing.md),
+            _FutureSelfCard(
+              hasPractice: fsSetup?.hasPractice ?? false,
+              completedToday: fsDoneToday,
+            ).animate().fadeIn(delay: 160.ms, duration: 350.ms),
+            const SizedBox(height: AppSpacing.sectionGap),
+
+            // ── Blueprint ───────────────────────────────────────────────────
+            Text(AppStrings.blueprint, style: AppTextStyles.headlineSmall),
+            const SizedBox(height: AppSpacing.md),
+            _BlueprintCard(profile: profile)
+                .animate()
+                .fadeIn(delay: 80.ms, duration: 350.ms),
+            const SizedBox(height: AppSpacing.sectionGap),
+
+            // ── Alignment + Progress ────────────────────────────────────────
+            _AlignmentChip(
+              alignment: alignment,
+              onTap: () => showAlignmentDetailSheet(context, profile),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            _MomentumLink(onTap: () => context.push('/progress')),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Wide-screen Mindset hub: a full-width identity hero, the two Layer-1
+/// practices side by side, and the Blueprint paired with Alignment/Progress.
+class _DesktopHub extends StatelessWidget {
+  final UserProfile profile;
+  final bool fsHasPractice;
+  final bool fsDoneToday;
+  final ManifestationAlignment alignment;
+
+  const _DesktopHub({
+    required this.profile,
+    required this.fsHasPractice,
+    required this.fsDoneToday,
+    required this.alignment,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      child: WebContentFrame(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: AppSpacing.lg),
+            Text(AppStrings.mindset, style: AppTextStyles.headlineLarge),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              AppStrings.mindsetHubSubtitle,
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: AppSpacing.sectionGap),
+            _IdentityCard(statement: profile.identityStatement),
+            const SizedBox(height: AppSpacing.sectionGap),
+            Text(AppStrings.subconsciousPracticeTitle,
+                style: AppTextStyles.headlineSmall),
+            const SizedBox(height: AppSpacing.xs),
+            Text(AppStrings.subconsciousPracticeSubtitle,
+                style: AppTextStyles.bodySmall
+                    .copyWith(color: AppColors.textSecondary)),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _AffirmationsCard(profile: profile)),
+                const SizedBox(width: AppSpacing.lg),
+                Expanded(
+                  child: _FutureSelfCard(
+                    hasPractice: fsHasPractice,
+                    completedToday: fsDoneToday,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sectionGap),
+            Text(AppStrings.blueprint, style: AppTextStyles.headlineSmall),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _BlueprintCard(profile: profile)),
+                const SizedBox(width: AppSpacing.lg),
+                Expanded(
+                  child: Column(
+                    children: [
+                      _AlignmentChip(
+                        alignment: alignment,
+                        onTap: () => showAlignmentDetailSheet(context, profile),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _MomentumLink(onTap: () => context.push('/progress')),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xxl),
+          ],
         ),
-        const SizedBox(height: AppSpacing.lg),
-
-        _IdentityCard(statement: profile.identityStatement)
-            .animate()
-            .fadeIn(duration: 350.ms),
-        const SizedBox(height: AppSpacing.sectionGap),
-
-        // ── Subconscious practices ──────────────────────────────────────
-        Text(AppStrings.subconsciousPracticeTitle,
-            style: AppTextStyles.headlineSmall),
-        const SizedBox(height: AppSpacing.xs),
-        Text(AppStrings.subconsciousPracticeSubtitle,
-            style: AppTextStyles.bodySmall
-                .copyWith(color: AppColors.textSecondary)),
-        const SizedBox(height: AppSpacing.md),
-        _AffirmationsCard(profile: profile)
-            .animate()
-            .fadeIn(delay: 80.ms, duration: 350.ms),
-        const SizedBox(height: AppSpacing.md),
-        _FutureSelfCard(
-          hasPractice: fsSetup?.hasPractice ?? false,
-          completedToday: fsDoneToday,
-        ).animate().fadeIn(delay: 160.ms, duration: 350.ms),
-        const SizedBox(height: AppSpacing.sectionGap),
-
-        // ── Blueprint ───────────────────────────────────────────────────
-        Text(AppStrings.blueprint, style: AppTextStyles.headlineSmall),
-        const SizedBox(height: AppSpacing.md),
-        _BlueprintCard(profile: profile)
-            .animate()
-            .fadeIn(delay: 80.ms, duration: 350.ms),
-        const SizedBox(height: AppSpacing.sectionGap),
-
-        // ── Alignment + Progress ────────────────────────────────────────
-        _AlignmentChip(
-          alignment: alignment,
-          onTap: () => showAlignmentDetailSheet(context, profile),
-        ),
-        const SizedBox(height: AppSpacing.md),
-        _MomentumLink(onTap: () => context.push('/progress')),
-      ],
+      ),
     );
   }
 }
@@ -160,17 +258,27 @@ class _IdentityCardState extends ConsumerState<_IdentityCard> {
   }
 
   Future<void> _save() async {
-    final uid = ref.read(authStateProvider).valueOrNull?.uid;
-    if (uid == null) return;
     setState(() => _saving = true);
-    await ref.read(firestoreServiceProvider).updateUserField(uid, {
-      'identityStatement': _ctrl.text.trim(),
-    });
-    if (!mounted) return;
-    setState(() {
-      _saving = false;
-      _editing = false;
-    });
+    try {
+      await ref
+          .read(identityProvider.notifier)
+          .updateStatement(_ctrl.text.trim());
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _editing = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(AppStrings.errorGeneric),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override
@@ -236,7 +344,7 @@ class _IdentityCardState extends ConsumerState<_IdentityCard> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 AppTextButton(
-                  label: 'Cancel',
+                  label: AppStrings.cancel,
                   color: AppColors.textSecondary,
                   onPressed: _saving
                       ? null
@@ -247,7 +355,7 @@ class _IdentityCardState extends ConsumerState<_IdentityCard> {
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 AppTextButton(
-                  label: _saving ? 'Saving…' : 'Save',
+                  label: _saving ? AppStrings.saving : AppStrings.save,
                   onPressed: _saving ? null : _save,
                 ),
               ],
@@ -288,8 +396,8 @@ class _AffirmationsCard extends ConsumerWidget {
       iconColor: AppColors.primary,
       title: AppStrings.affirmations,
       subtitle: active.isEmpty
-          ? 'Add affirmations to start your daily reprogramming'
-          : '${active.length} active for morning and evening',
+          ? AppStrings.mindsetAffirmationsAddPrompt
+          : AppStrings.mindsetAffirmationsActiveCount(active.length),
       footer: active.isEmpty
           ? null
           : Row(
@@ -361,8 +469,7 @@ class _SessionButton extends StatelessWidget {
             Icon(done ? Icons.check_circle_rounded : icon,
                 color: color, size: 16),
             const SizedBox(width: AppSpacing.xs + 2),
-            Text(label,
-                style: AppTextStyles.labelSmall.copyWith(color: color)),
+            Text(label, style: AppTextStyles.labelSmall.copyWith(color: color)),
           ],
         ),
       ),
@@ -389,17 +496,17 @@ class _FutureSelfCard extends StatelessWidget {
       iconColor: AppColors.futureSelfAccent,
       title: AppStrings.futureSelf,
       subtitle: !hasPractice
-          ? 'Visualize the person you are becoming'
+          ? AppStrings.futureSelfVisualizePrompt
           : completedToday
-              ? 'Completed today, you returned to the scene'
-              : 'Return to your scene for today',
+              ? AppStrings.futureSelfCompletedTodayCard
+              : AppStrings.futureSelfReturnToScene,
       trailing: !hasPractice
           ? const _MiniPill(label: AppStrings.futureSelfCreate)
           : completedToday
               ? const Icon(Icons.check_circle_rounded,
                   color: AppColors.success, size: 22)
               : const _MiniPill(
-                  label: 'Start',
+                  label: AppStrings.start,
                   color: AppColors.futureSelfAccent,
                 ),
     );
@@ -420,9 +527,10 @@ class _BlueprintCard extends StatelessWidget {
         onTap: () => context.push('/blueprint-setup'),
         icon: Icons.architecture_rounded,
         iconColor: AppColors.secondary,
-        title: 'Complete your Blueprint',
-        subtitle: 'Map your mindset traits to personalize everything',
-        trailing: const _MiniPill(label: 'Start', color: AppColors.secondary),
+        title: AppStrings.mindsetCompleteBlueprintTitle,
+        subtitle: AppStrings.mindsetCompleteBlueprintSubtitle,
+        trailing: const _MiniPill(
+            label: AppStrings.start, color: AppColors.secondary),
       );
     }
 
@@ -436,7 +544,7 @@ class _BlueprintCard extends StatelessWidget {
       icon: Icons.architecture_rounded,
       iconColor: AppColors.secondary,
       title: AppStrings.blueprint,
-      subtitle: 'Strongest trait $strongest',
+      subtitle: AppStrings.mindsetStrongestTrait(strongest),
       trailing: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
@@ -449,7 +557,7 @@ class _BlueprintCard extends StatelessWidget {
               color: delta >= 0 ? AppColors.success : AppColors.warning,
             ),
           ),
-          Text('since start', style: AppTextStyles.labelSmall),
+          Text(AppStrings.mindsetSinceStart, style: AppTextStyles.labelSmall),
         ],
       ),
     );
@@ -471,8 +579,7 @@ class _BlueprintCard extends StatelessWidget {
       'Resilience': b.resilience,
       'Decisiveness': b.decisiveness,
     };
-    return (traits.entries.toList()
-          ..sort((a, b) => b.value.compareTo(a.value)))
+    return (traits.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))
         .first
         .key;
   }
@@ -519,16 +626,17 @@ class _AlignmentChip extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Manifestation Alignment',
+                  Text(AppStrings.mindsetAlignmentTitle,
                       style: AppTextStyles.labelLarge),
-                  Text('${alignment.masteryLevel}, tap for breakdown',
+                  Text(
+                      AppStrings.mindsetAlignmentSubtitle(
+                          alignment.masteryLevel),
                       style: AppTextStyles.bodySmall
                           .copyWith(color: AppColors.textSecondary)),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded,
-                color: AppColors.textMuted),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
           ],
         ),
       ),
@@ -569,16 +677,15 @@ class _MomentumLink extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Momentum & Progress',
+                  Text(AppStrings.mindsetMomentumTitle,
                       style: AppTextStyles.labelLarge),
-                  Text('Streaks, perfect days, and your activity heatmap',
+                  Text(AppStrings.mindsetMomentumSubtitle,
                       style: AppTextStyles.bodySmall
                           .copyWith(color: AppColors.textSecondary)),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded,
-                color: AppColors.textMuted),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
           ],
         ),
       ),
@@ -677,8 +784,8 @@ class _MiniPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
         border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
-      child: Text(label,
-          style: AppTextStyles.labelSmall.copyWith(color: color)),
+      child:
+          Text(label, style: AppTextStyles.labelSmall.copyWith(color: color)),
     );
   }
 }

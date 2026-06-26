@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../models/mindset_blueprint.dart';
+import '../../providers/analytics_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../onboarding/steps/step_assessment.dart';
 import '../onboarding/steps/step_mental_toughness.dart';
@@ -96,6 +97,7 @@ class _BlueprintSetupScreenState extends ConsumerState<BlueprintSetupScreen> {
 
     try {
       await ref.read(firestoreServiceProvider).updateUserProfile(updated);
+      ref.read(analyticsServiceProvider).trackBlueprintCompleted();
     } catch (_) {
       // Optimistic UX — the stream will reconcile; surface a soft failure.
     }

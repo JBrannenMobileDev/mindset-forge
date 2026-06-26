@@ -43,4 +43,12 @@ abstract final class AppSpacing {
   static const double tabletBreakpoint = 900.0;
   static const double desktopBreakpoint = 1280.0;
   static const double maxContentWidth = 480.0;
+
+  // Desktop / web shell geometry. The sidebar replaces the floating bottom nav
+  // at [tabletBreakpoint] and up; web content centers within
+  // [webContentMaxWidth] so the multi-column compositions never stretch
+  // edge-to-edge on ultra-wide monitors.
+  static const double sideNavWidth = 240.0;
+  static const double webContentMaxWidth = 1100.0;
+  static const double webContentPaddingH = xl; // 32
 }

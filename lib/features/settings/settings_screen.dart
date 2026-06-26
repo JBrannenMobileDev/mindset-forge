@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/firebase/accountability_service.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import '../../core/constants/app_colors.dart';
-import '../../core/widgets/app_card.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/firebase/accountability_service.dart';
+import '../../core/widgets/app_card.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/auth_notifier.dart';
 import '../../providers/claude_provider.dart';
@@ -95,7 +95,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (profile == null) return;
     setState(() => _isRefreshingBlueprint = true);
     try {
-      final insight = await ref.read(claudeServiceProvider).generateMindsetSummary(profile);
+      final insight =
+          await ref.read(claudeServiceProvider).generateMindsetSummary(profile);
       final uid = ref.read(authStateProvider).valueOrNull?.uid;
       if (uid != null) {
         await ref.read(firestoreServiceProvider).updateUserField(uid, {
@@ -124,7 +125,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surfaceElevated,
-        title: Text('Delete Account', style: AppTextStyles.headlineSmall.copyWith(color: AppColors.error)),
+        title: Text('Delete Account',
+            style: AppTextStyles.headlineSmall
+                .copyWith(color: AppColors.error)),
         content: Text(
           'This will permanently delete all your data including goals, habits, journal entries, and chat history. This action cannot be undone.',
           style: AppTextStyles.bodyMedium,
@@ -148,12 +151,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _isDeletingAccount = true);
     try {
       await ref.read(accountabilityServiceProvider).deleteUserAccount();
-      // Auth state change will redirect to login automatically
     } catch (_) {
       if (!mounted) return;
       setState(() => _isDeletingAccount = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to delete account. Please try again.')),
+        const SnackBar(
+            content:
+                Text('Failed to delete account. Please try again.')),
       );
     }
   }
@@ -161,7 +165,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _restorePurchases() async {
     try {
       final info = await Purchases.restorePurchases();
-      final isActive = info.entitlements.all['premium']?.isActive ?? false;
+      final isActive =
+          info.entitlements.all['premium']?.isActive ?? false;
       if (isActive) {
         final uid = ref.read(authStateProvider).valueOrNull?.uid;
         if (uid != null) {
@@ -191,11 +196,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final profile = ref.watch(currentUserProfileProvider).valueOrNull;
+    final journalPref = profile?.journalPreference ?? 'both';
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
+        elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () => context.pop(),
@@ -203,202 +210,180 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         title: Text('Settings', style: AppTextStyles.headlineMedium),
       ),
       body: ListView(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.screenPaddingH,
-          vertical: AppSpacing.lg,
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.screenPaddingH,
+          AppSpacing.md,
+          AppSpacing.screenPaddingH,
+          100,
         ),
         children: [
-          // ── Profile card ─────────────────────────────────────────
-          if (profile != null) ...[
-            AppCard(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Row(
-                children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppColors.primary, AppColors.secondary],
-                      ),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        profile.firstName[0].toUpperCase(),
-                        style: AppTextStyles.headlineLarge.copyWith(color: Colors.white),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(profile.displayName, style: AppTextStyles.headlineSmall),
-                        Text(
-                          profile.email,
-                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: _subscriptionColor(profile.subscriptionStatus).withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
-                          ),
-                          child: Text(
-                            _subscriptionLabel(profile.subscriptionStatus),
-                            style: AppTextStyles.labelSmall.copyWith(
-                              color: _subscriptionColor(profile.subscriptionStatus),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+          // ── Profile ──────────────────────────────────────────────
+          if (profile != null)
+            _ProfileCard(profile: profile).animate().fadeIn(),
+          if (profile != null) const SizedBox(height: AppSpacing.sectionGap),
+
+          // ── Subscription ─────────────────────────────────────────
+          const _GroupLabel('Subscription'),
+          _SettingsCard(
+            children: [
+              _CardRow(
+                icon: Icons.star_rounded,
+                iconColor: AppColors.warning,
+                title: 'Manage Subscription',
+                subtitle: 'View plan, billing, and cancellation',
+                onTap: () => context.push('/pricing?source=settings'),
               ),
-            ).animate().fadeIn(),
-            const SizedBox(height: AppSpacing.xl),
-          ],
+              const _CardDivider(),
+              _CardRow(
+                icon: Icons.restore_rounded,
+                iconColor: AppColors.primary,
+                title: 'Restore Purchases',
+                subtitle: 'Recover a previous subscription',
+                onTap: _restorePurchases,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
 
-          // ── Subscription ────────────────────────────────────────
-          _SectionTitle('Subscription'),
-          _SettingsTile(
-            icon: Icons.star_rounded,
-            iconColor: AppColors.warning,
-            title: 'Manage Subscription',
-            subtitle: 'View plan, billing, and cancellation',
-            onTap: () => context.push('/pricing'),
+          // ── Preferences ──────────────────────────────────────────
+          const _GroupLabel('Preferences'),
+          _SettingsCard(
+            children: [
+              _CardRow(
+                icon: Icons.wb_twilight_rounded,
+                iconColor: AppColors.categoryPersonalGrowth,
+                title: 'Journal Time',
+                subtitle: _journalPrefLabel(journalPref),
+                trailing: _isSavingPreference
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.primary),
+                      )
+                    : _ValueChip(text: _journalPrefLabel(journalPref)),
+                onTap: () => _pickJournalPreference(journalPref),
+              ),
+              const _CardDivider(),
+              _CardRow(
+                icon: Icons.notifications_rounded,
+                iconColor: AppColors.primary,
+                title: 'Notifications',
+                subtitle: 'Reminders, streak alerts, and quiet hours',
+                onTap: () => context.push('/notification-settings'),
+              ),
+            ],
           ),
-          const Divider(color: AppColors.border, height: 1),
-          _SettingsTile(
-            icon: Icons.restore_rounded,
-            iconColor: AppColors.primary,
-            title: 'Restore Purchases',
-            subtitle: 'Recover a previous subscription',
-            onTap: _restorePurchases,
-          ),
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: AppSpacing.md),
 
-          // ── Preferences ─────────────────────────────────────────
-          _SectionTitle('Preferences'),
-          _SettingsTile(
-            icon: Icons.wb_twilight_rounded,
-            iconColor: AppColors.categoryPersonalGrowth,
-            title: 'Journal Time',
-            subtitle: _journalPrefLabel(profile?.journalPreference ?? 'both'),
-            trailing: _isSavingPreference
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: AppColors.primary),
-                  )
-                : null,
-            onTap: () =>
-                _pickJournalPreference(profile?.journalPreference ?? 'both'),
+          // ── Practice ─────────────────────────────────────────────
+          const _GroupLabel('Practice'),
+          _SettingsCard(
+            children: [
+              _CardRow(
+                icon: Icons.show_chart_rounded,
+                iconColor: AppColors.primary,
+                title: 'My Progress',
+                subtitle: 'Streaks, milestones, and activity heatmap',
+                onTap: () => context.push('/progress'),
+              ),
+              const _CardDivider(),
+              _CardRow(
+                icon: Icons.self_improvement_rounded,
+                iconColor: AppColors.secondary,
+                title: 'Future Self Practice',
+                subtitle: 'Visualization scripts and timed sessions',
+                onTap: () => context.push('/future-self'),
+              ),
+              const _CardDivider(),
+              _CardRow(
+                icon: Icons.psychology_alt_rounded,
+                iconColor: AppColors.categoryPersonalGrowth,
+                title: 'Deep Dive Assessment',
+                subtitle: '5 self-discovery modules with AI insights',
+                onTap: () => context.push('/deep-dive'),
+              ),
+            ],
           ),
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: AppSpacing.md),
 
-          // ── Progress ────────────────────────────────────────────
-          _SectionTitle('Progress'),
-          _SettingsTile(
-            icon: Icons.show_chart_rounded,
-            iconColor: AppColors.primary,
-            title: 'View Progress',
-            subtitle: 'Streaks, milestones, and activity heatmap',
-            onTap: () => context.push('/progress'),
+          // ── Accountability ────────────────────────────────────────
+          const _GroupLabel('Accountability'),
+          _SettingsCard(
+            children: [
+              _CardRow(
+                icon: Icons.people_rounded,
+                iconColor: AppColors.categoryRelationships,
+                title: 'My Partnerships',
+                subtitle: 'Invite and manage accountability partners',
+                onTap: () => context.push('/accountability'),
+              ),
+              const _CardDivider(),
+              _CardRow(
+                icon: Icons.mail_outline_rounded,
+                iconColor: AppColors.secondary,
+                title: 'Partner Messages',
+                subtitle: 'Encouragement your partners have sent',
+                onTap: () => context.push('/notifications'),
+              ),
+            ],
           ),
-          const Divider(color: AppColors.border, height: 1),
-          _SettingsTile(
-            icon: Icons.self_improvement_rounded,
-            iconColor: AppColors.secondary,
-            title: 'Future Self Practice',
-            subtitle: 'Visualization scripts and timed sessions',
-            onTap: () => context.push('/future-self'),
-          ),
-          const Divider(color: AppColors.border, height: 1),
-          _SettingsTile(
-            icon: Icons.psychology_alt_rounded,
-            iconColor: AppColors.categoryPersonalGrowth,
-            title: 'Deep Dive Assessment',
-            subtitle: '5 self-discovery modules with personalized insights',
-            onTap: () => context.push('/deep-dive'),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-
-          // ── Partnerships ────────────────────────────────────────
-          _SectionTitle('Accountability'),
-          _SettingsTile(
-            icon: Icons.people_rounded,
-            iconColor: AppColors.categoryRelationships,
-            title: 'My Partnerships',
-            subtitle: 'Invite and manage accountability partners',
-            onTap: () => context.push('/accountability'),
-          ),
-          const Divider(color: AppColors.border, height: 1),
-          _SettingsTile(
-            icon: Icons.notifications_rounded,
-            iconColor: AppColors.primary,
-            title: 'Notifications',
-            subtitle: 'Reminders, streak alerts, and quiet hours',
-            onTap: () => context.push('/notification-settings'),
-          ),
-          const Divider(color: AppColors.border, height: 1),
-          _SettingsTile(
-            icon: Icons.mail_outline_rounded,
-            iconColor: AppColors.secondary,
-            title: 'Partner Messages',
-            subtitle: 'Encouragement your partners have sent',
-            onTap: () => context.push('/notifications'),
-          ),
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: AppSpacing.md),
 
           // ── Coaching ─────────────────────────────────────────────
-          _SectionTitle('Coaching'),
-          ListTile(
-            leading: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppColors.primaryContainer,
-                borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+          const _GroupLabel('Coaching'),
+          _SettingsCard(
+            children: [
+              _CardRow(
+                icon: Icons.auto_awesome_rounded,
+                iconColor: AppColors.primary,
+                title: 'Refresh Mindset Blueprint',
+                subtitle: 'Re-analyze your mindset with fresh AI insights',
+                trailing: _isRefreshingBlueprint
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.primary),
+                      )
+                    : null,
+                onTap: _isRefreshingBlueprint ? null : _refreshBlueprint,
               ),
-              child: const Icon(Icons.refresh_rounded, color: AppColors.primary, size: 20),
-            ),
-            title: const Text('Refresh My Mindset Blueprint'),
-            subtitle: const Text('Re-analyze your mindset with fresh insights'),
-            trailing: _isRefreshingBlueprint
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                  )
-                : const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
-            onTap: _isRefreshingBlueprint ? null : _refreshBlueprint,
+            ],
           ),
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: AppSpacing.md),
 
-          // ── Account ─────────────────────────────────────────────
-          _SectionTitle('Account'),
-          ListTile(
-            leading: const Icon(Icons.logout_rounded, color: AppColors.error),
-            title: Text(AppStrings.logout, style: const TextStyle(color: AppColors.error)),
-            onTap: () => ref.read(authNotifierProvider.notifier).signOut(),
-          ),
-          const Divider(color: AppColors.border, height: 1),
-          ListTile(
-            leading: _isDeletingAccount
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.error),
-                  )
-                : const Icon(Icons.delete_forever_rounded, color: AppColors.error),
-            title: const Text('Delete Account', style: TextStyle(color: AppColors.error)),
-            subtitle: const Text('Permanently delete all your data'),
-            onTap: _isDeletingAccount ? null : _deleteAccount,
+          // ── Account ───────────────────────────────────────────────
+          const _GroupLabel('Account'),
+          _SettingsCard(
+            borderColor: AppColors.error.withValues(alpha: 0.2),
+            children: [
+              _CardRow(
+                icon: Icons.logout_rounded,
+                iconColor: AppColors.error,
+                title: AppStrings.logout,
+                titleColor: AppColors.error,
+                onTap: () =>
+                    ref.read(authNotifierProvider.notifier).signOut(),
+              ),
+              const _CardDivider(),
+              _CardRow(
+                icon: Icons.delete_forever_rounded,
+                iconColor: AppColors.error,
+                title: 'Delete Account',
+                titleColor: AppColors.error,
+                subtitle: 'Permanently removes all your data',
+                trailing: _isDeletingAccount
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.error),
+                      )
+                    : null,
+                onTap: _isDeletingAccount ? null : _deleteAccount,
+              ),
+            ],
           ),
           const SizedBox(height: AppSpacing.xl),
         ],
@@ -406,86 +391,222 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  String _journalPrefLabel(String pref) {
-    return switch (pref) {
-      'morning' => 'Morning only',
-      'evening' => 'Evening only',
-      _ => 'Morning & Evening',
-    };
-  }
-
-  String _subscriptionLabel(String status) {
-    return switch (status) {
-      'active' => '✓ PREMIUM',
-      'trialing' => '✓ TRIAL',
-      'canceled' => 'CANCELED',
-      'past_due' => 'PAST DUE',
-      _ => 'FREE',
-    };
-  }
-
-  Color _subscriptionColor(String status) {
-    return switch (status) {
-      'active' || 'trialing' => AppColors.primary,
-      'canceled' || 'past_due' || 'expired' => AppColors.error,
-      _ => AppColors.textMuted,
-    };
-  }
+  String _journalPrefLabel(String pref) => switch (pref) {
+        'morning' => 'Morning',
+        'evening' => 'Evening',
+        _ => 'AM & PM',
+      };
 }
 
-class _SectionTitle extends StatelessWidget {
-  final String title;
+// ─── Profile card ─────────────────────────────────────────────────────────
 
-  const _SectionTitle(this.title);
+class _ProfileCard extends StatelessWidget {
+  final dynamic profile;
+  const _ProfileCard({required this.profile});
+
+  @override
+  Widget build(BuildContext context) {
+    final status = profile.subscriptionStatus as String;
+    final color = _statusColor(status);
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                  colors: [AppColors.primary, AppColors.secondary]),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                (profile.firstName as String)[0].toUpperCase(),
+                style: AppTextStyles.headlineLarge
+                    .copyWith(color: Colors.white),
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(profile.displayName as String,
+                    style: AppTextStyles.headlineSmall),
+                Text(
+                  profile.email as String,
+                  style: AppTextStyles.bodySmall
+                      .copyWith(color: AppColors.textSecondary),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.15),
+                    borderRadius:
+                        BorderRadius.circular(AppSpacing.radiusFull),
+                  ),
+                  child: Text(
+                    _statusLabel(status),
+                    style: AppTextStyles.labelSmall.copyWith(color: color),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _statusLabel(String s) => switch (s) {
+        'active' => '✓ PREMIUM',
+        'trialing' => '✓ TRIAL',
+        'canceled' => 'CANCELED',
+        'past_due' => 'PAST DUE',
+        _ => 'FREE',
+      };
+
+  Color _statusColor(String s) => switch (s) {
+        'active' || 'trialing' => AppColors.primary,
+        'canceled' || 'past_due' || 'expired' => AppColors.error,
+        _ => AppColors.textMuted,
+      };
+}
+
+// ─── Shared card primitives ────────────────────────────────────────────────
+
+class _GroupLabel extends StatelessWidget {
+  final String text;
+  const _GroupLabel(this.text);
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Text(
-        title.toUpperCase(),
-        style: AppTextStyles.overline,
+      child: Text(text.toUpperCase(), style: AppTextStyles.overline),
+    );
+  }
+}
+
+class _SettingsCard extends StatelessWidget {
+  final List<Widget> children;
+  final Color? borderColor;
+
+  const _SettingsCard({required this.children, this.borderColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: EdgeInsets.zero,
+      borderColor: borderColor,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding),
+        child: Column(children: children),
       ),
     );
   }
 }
 
-class _SettingsTile extends StatelessWidget {
+class _CardDivider extends StatelessWidget {
+  const _CardDivider();
+
+  @override
+  Widget build(BuildContext context) =>
+      const Divider(color: AppColors.borderSubtle, height: 1);
+}
+
+class _CardRow extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final String title;
-  final String subtitle;
-  final VoidCallback onTap;
+  final Color? titleColor;
+  final String? subtitle;
   final Widget? trailing;
+  final VoidCallback? onTap;
 
-  const _SettingsTile({
+  const _CardRow({
     required this.icon,
     required this.iconColor,
     required this.title,
-    required this.subtitle,
-    required this.onTap,
+    this.titleColor,
+    this.subtitle,
     this.trailing,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: iconColor.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-        ),
-        child: Icon(icon, color: iconColor, size: 20),
-      ),
-      title: Text(title),
-      subtitle: Text(
-        subtitle,
-        style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted),
-      ),
-      trailing: trailing ??
-          const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+              ),
+              child: Icon(icon, color: iconColor, size: 18),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: titleColor ?? AppColors.textPrimary,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle!,
+                      style: AppTextStyles.bodySmall
+                          .copyWith(color: AppColors.textMuted),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            trailing ??
+                const Icon(Icons.chevron_right_rounded,
+                    color: AppColors.textMuted, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ValueChip extends StatelessWidget {
+  final String text;
+  const _ValueChip({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.primaryContainer,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+      ),
+      child: Text(
+        text,
+        style: AppTextStyles.labelSmall.copyWith(color: AppColors.primary),
+      ),
     );
   }
 }

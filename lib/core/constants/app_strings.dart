@@ -22,10 +22,20 @@ abstract final class AppStrings {
   static const String loginLink = 'Log in';
   static const String signupLink = 'Sign up';
 
+  // Signup screen headings (default vs. accountability-partner invite)
+  static const String signupTitle = 'Create your account';
+  static const String signupSubtitle = 'Begin forging your ideal mindset';
+  static const String partnerSignupTitle = 'Accept your partner invite';
+  static const String partnerSignupSubtitle =
+      'Create your free account to support your friend and follow their progress.';
+  static const String partnerSignupBanner =
+      "You've been invited to be an accountability partner. Partners join free — no subscription needed.";
+
   // Legal / agreement
   static const String termsTitle = 'Terms of Service';
   static const String privacyTitle = 'Privacy Policy';
-  static const String agreementPrefix = 'By creating an account, you agree to our ';
+  static const String agreementPrefix =
+      'By creating an account, you agree to our ';
   static const String agreementAnd = ' and ';
   static const String agreementSuffix = '.';
   static const String legalEffectivePrefix = 'Effective: ';
@@ -39,7 +49,8 @@ abstract final class AppStrings {
       'others, please contact 988 (call or text) or your local emergency '
       'services right away.';
   static const String coachDisclaimerCta = 'I understand';
-  static const String coachDisclaimerReadMore = 'Read our Terms and Privacy Policy';
+  static const String coachDisclaimerReadMore =
+      'Read our Terms and Privacy Policy';
 
   // Manifestation system explainer
   static const String manifestationSystemTitle = 'How MindsetForge Works';
@@ -72,8 +83,7 @@ abstract final class AppStrings {
   static const String manifestationLayer3Tagline = 'Discipline Layer';
   static const String manifestationLayer3Desc =
       'Beliefs and thoughts mean nothing without action — this is where most people stall. You act as if you are already the person you want to become, and small daily reps compound into momentum. Discipline, not motivation, is what carries you on the days you do not feel like it.';
-  static const String manifestationLayer3FedBy =
-      'Habits and priority actions';
+  static const String manifestationLayer3FedBy = 'Habits and priority actions';
   static const String manifestationLayer3Book =
       'From "177 Mental Toughness Secrets": champions take action first and let motivation follow. Discipline is what creates freedom.';
 
@@ -81,8 +91,7 @@ abstract final class AppStrings {
   static const String manifestationLayer4Tagline = 'Outcome Layer';
   static const String manifestationLayer4Desc =
       'When the three layers below are aligned, results become inevitable. Your subconscious starts hunting for evidence of your new identity, your thoughts steer you toward opportunities, and your actions build proof. Results are not the goal — they are confirmation that the inner work has landed.';
-  static const String manifestationLayer4FedBy =
-      'Progress on your goals';
+  static const String manifestationLayer4FedBy = 'Progress on your goals';
   static const String manifestationLayer4Book =
       'From "Think and Grow Rich": when desire is backed by faith it becomes an irresistible force, and faith is built by consistent evidence validating your new beliefs.';
 
@@ -113,7 +122,8 @@ abstract final class AppStrings {
   static const String onboardingBeliefsTitle = 'Your Limiting Beliefs';
   static const String onboardingBeliefsSubtitle =
       'What stories are holding you back? Name them so we can reprogram them.';
-  static const String onboardingBeliefsHint = 'Type a belief and press Enter...';
+  static const String onboardingBeliefsHint =
+      'Type a belief and press Enter...';
   static const String onboardingGoalsTitle = 'Your First Goal';
   static const String onboardingGoalsSubtitle =
       'What do you want to achieve? Be specific and ambitious.';
@@ -134,6 +144,9 @@ abstract final class AppStrings {
   static const String navActions = 'Actions';
   static const String navJournal = 'Journal';
   static const String navMindset = 'Mindset';
+  static const String navDashboard = 'Dashboard';
+  static const String navCoach = 'Coach';
+  static const String navSettings = 'Settings';
 
   // Dashboard
   static const String goodMorning = 'Good morning';
@@ -164,7 +177,8 @@ abstract final class AppStrings {
   static const String startHere = 'START HERE';
   static const String morningRoutineComplete = 'Morning Complete';
   static const String eveningRoutineComplete = 'Evening Complete';
-  static const String eveningUnlocksMessage = 'Unlocks at 5 PM · Finish morning first';
+  static const String eveningUnlocksMessage =
+      'Unlocks at 5 PM · Finish morning first';
   static const String morningUnlocksMessage = 'Returns tomorrow morning';
   static const String morningSessionHero = 'MORNING SESSION';
   static const String eveningSessionHero = 'EVENING SESSION';
@@ -202,8 +216,10 @@ abstract final class AppStrings {
   static const String goalTitle = 'Goal Title';
   static const String goalDescription = 'Description (optional)';
   static const String goalTargetDate = 'Target Date';
-  static const String goalIdentityBecomes = 'Who do you become by achieving this?';
-  static const String goalVisualization = 'Describe achieving this goal vividly';
+  static const String goalIdentityBecomes =
+      'Who do you become by achieving this?';
+  static const String goalVisualization =
+      'Describe achieving this goal vividly';
   static const String goalLongTerm = 'Long-term Goals';
   static const String goalShortTerm = 'Short-term Goals';
   static const String breakdownWithAI = 'Break Down';
@@ -219,7 +235,8 @@ abstract final class AppStrings {
   static const String fieldRequired = 'Required';
   static const String goalTitleHint = 'e.g., Build my dream business';
   static const String goalDescriptionHint = 'More details...';
-  static const String goalIdentityHint = 'e.g., I become a confident entrepreneur';
+  static const String goalIdentityHint =
+      'e.g., I become a confident entrepreneur';
 
   // Guided goal creation
   static const String goalIntentionPrompt = 'What do you want to achieve?';
@@ -243,8 +260,7 @@ abstract final class AppStrings {
   static const String goalSetupSubtitle =
       'Your coach mapped the path. Add what resonates — you can change it anytime.';
   static const String goalSetupMilestones = 'Suggested milestones';
-  static const String goalSetupMilestonesLoading =
-      'Mapping your milestones...';
+  static const String goalSetupMilestonesLoading = 'Mapping your milestones...';
   static const String goalSetupAddMilestone = 'Add milestone';
   static const String goalSetupReinforce = 'Reinforce it daily';
   static const String goalSetupSuggestHabit = 'Suggest a habit';
@@ -270,8 +286,10 @@ abstract final class AppStrings {
   static const String goalMarkComplete = 'Mark as Complete';
   static const String goalAddAsSubGoal = 'Add as Sub-Goal';
   static const String goalMilestoneAdded = 'Added';
-  static const String goalCompletedToast = "Goal completed! You're unstoppable.";
-  static const String goalMilestoneSavedToast = 'Milestone saved as a sub-goal!';
+  static const String goalCompletedToast =
+      "Goal completed! You're unstoppable.";
+  static const String goalMilestoneSavedToast =
+      'Milestone saved as a sub-goal!';
 
   // Priority actions (Today tab)
   static const String priorityActionsAllDone =
@@ -293,7 +311,8 @@ abstract final class AppStrings {
   static const String habitName = 'Habit Name';
   static const String habitTrigger = 'What triggers this habit?';
   static const String habitFrequency = 'Frequency';
-  static const String habitIdentityReinforces = 'What identity does this reinforce?';
+  static const String habitIdentityReinforces =
+      'What identity does this reinforce?';
   static const String streakDays = 'day streak';
   static const String dailyHabits = 'Daily Habits';
   static const String habitsAllDone = 'All habits done';
@@ -357,7 +376,8 @@ abstract final class AppStrings {
   static const String quickPromptsLabel = 'Or start with one of these:';
   static const String futureSelfQuickPromptsLabel = 'Or ask your future self:';
   static const String messageCopied = 'Copied!';
-  static const String coachErrorRetry = 'I\'m having trouble connecting right now.';
+  static const String coachErrorRetry =
+      'I\'m having trouble connecting right now.';
   static const String noSavedSessions = 'No saved sessions yet.';
   static const String coachIsTyping = 'Your coach is thinking...';
   static const String futureSelfIsTyping = 'Your future self is remembering...';
@@ -485,6 +505,53 @@ abstract final class AppStrings {
   static const String identityStatementEmpty =
       'Set your identity statement, the person you are becoming.';
 
+  // Mindset hub — card copy
+  static const String mindsetCompleteBlueprintTitle = 'Complete your Blueprint';
+  static const String mindsetCompleteBlueprintSubtitle =
+      'Map your mindset traits to personalize everything';
+  static const String mindsetSinceStart = 'since start';
+  static String mindsetStrongestTrait(String trait) => 'Strongest trait $trait';
+  static const String mindsetAlignmentTitle = 'Manifestation Alignment';
+  static String mindsetAlignmentSubtitle(String level) =>
+      '$level, tap for breakdown';
+  static const String mindsetMomentumTitle = 'Momentum \u0026 Progress';
+  static const String mindsetMomentumSubtitle =
+      'Streaks, perfect days, and your activity heatmap';
+  static const String mindsetAffirmationsAddPrompt =
+      'Add affirmations to start your daily reprogramming';
+  static String mindsetAffirmationsActiveCount(int count) =>
+      '$count active for morning and evening';
+  static const String futureSelfVisualizePrompt =
+      'Visualize the person you are becoming';
+  static const String futureSelfCompletedTodayCard =
+      'Completed today, you returned to the scene';
+  static const String futureSelfReturnToScene =
+      'Return to your scene for today';
+
+  // Future Self practice screen
+  static const String futureSelfTodayTitle = 'Today\'s Practice';
+  static const String futureSelfCompletedStatus = 'Completed, nicely done.';
+  static const String futureSelfNotCompletedStatus = 'Not completed yet.';
+  static const String futureSelfPracticeSection = 'Your Practice';
+  static const String futureSelfTimelineLabel = 'Future Timeline';
+  static const String futureSelfIdentityLabel = 'Identity';
+  static const String futureSelfToneLabel = 'Emotional Tone';
+
+  // Journal
+  static const String moodTrendTitle = 'Mood Trend';
+  static String moodTrendAvg(String value) => 'Avg: $value/5';
+
+  // Deep Dive
+  static const String deepDiveTitle = 'Deep Dive';
+  static const String deepDiveCompleteBlueprint =
+      'Complete Your Blueprint First';
+  static const String deepDiveGeneratingInsight = 'Generating your insight...';
+  static const String deepDiveInsightLabel = 'Your Insight';
+  static const String deepDiveAnswersLabel = 'Your Answers';
+  static const String deepDiveSaveInsight = 'Save Insight';
+  static const String deepDiveFailedInsight =
+      'Failed to generate insight. Please try again.';
+
   // Progress
   static const String perfectDays = 'Perfect Days';
   static const String weeklyInsight = 'Weekly Insight';
@@ -505,26 +572,31 @@ abstract final class AppStrings {
 
   // Common actions
   static const String save = 'Save';
+  static const String saving = 'Saving\u2026';
   static const String cancel = 'Cancel';
   static const String delete = 'Delete';
   static const String edit = 'Edit';
   static const String done = 'Done';
   static const String add = 'Add';
   static const String skip = 'Skip';
+  static const String start = 'Start';
   static const String retry = 'Retry';
   static const String loading = 'Loading...';
   static const String orLabel = 'or';
 
   // Empty states
   static const String noGoalsYet = 'No goals yet';
-  static const String noGoalsSubtitle = 'Add your first goal to start forging your future.';
+  static const String noGoalsSubtitle =
+      'Add your first goal to start forging your future.';
   static const String noHabitsYet = 'Build your first habit';
   static const String noHabitsSubtitle =
       'Browse proven habits, generate ideas for your goals, or write your own.';
   static const String noJournalEntries = 'No journal entries yet';
-  static const String noJournalSubtitle = 'Start reflecting to unlock your patterns.';
+  static const String noJournalSubtitle =
+      'Start reflecting to unlock your patterns.';
   static const String noSessions = 'No sessions yet';
-  static const String noSessionsSubtitle = 'Start a conversation with your coach.';
+  static const String noSessionsSubtitle =
+      'Start a conversation with your coach.';
   static const String futureSelfNoSessionsSubtitle =
       'Start a conversation with your future self.';
   static const String noAffirmations = 'Build your affirmations';
@@ -533,9 +605,12 @@ abstract final class AppStrings {
 
   // Errors
   static const String errorGeneric = 'Something went wrong. Please try again.';
-  static const String errorNetwork = 'No connection. Check your internet and retry.';
-  static const String errorAuth = 'Authentication failed. Please check your credentials.';
-  static const String errorAI = 'Coach is unavailable. Please try again shortly.';
+  static const String errorNetwork =
+      'No connection. Check your internet and retry.';
+  static const String errorAuth =
+      'Authentication failed. Please check your credentials.';
+  static const String errorAI =
+      'Coach is unavailable. Please try again shortly.';
 
   // Trait names
   static const String traitConfidence = 'Confidence';
@@ -561,7 +636,8 @@ abstract final class AppStrings {
   static const String invitePromptOnboardingBody =
       'People who are watched follow through. Invite a friend as your accountability partner — they get the app free and can cheer you on from day one.';
 
-  static const String invitePromptPerfectDayTitle = 'Perfect day! Make it stick';
+  static const String invitePromptPerfectDayTitle =
+      'Perfect day! Make it stick';
   static const String invitePromptPerfectDayBody =
       'Days like this are easier with someone in your corner. Invite an accountability partner to keep the momentum going.';
 

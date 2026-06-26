@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/services/analytics_service.dart';
 import '../core/utils/app_date_utils.dart';
 import '../models/future_self_setup.dart';
 import '../models/future_self_completion.dart';
@@ -75,6 +76,10 @@ class FutureSelfNotifier extends StateNotifier<FutureSelfSetup?> {
     await _ref
         .read(dailyCompletionProvider.notifier)
         .toggle('futureSelfCompleted', true);
+
+    _ref
+        .read(analyticsServiceProvider)
+        .trackFutureSelfSessionCompleted(durationSeconds);
   }
 }
 

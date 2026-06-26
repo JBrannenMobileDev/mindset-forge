@@ -9,6 +9,7 @@ import '../../core/constants/app_text_styles.dart';
 import '../../core/widgets/shimmer_widget.dart';
 import '../../core/widgets/responsive_layout.dart';
 import '../../core/widgets/empty_state.dart';
+import '../../core/utils/breakpoints.dart';
 import '../../models/daily_completion.dart';
 import '../../models/user_profile.dart';
 import '../../providers/auth_provider.dart';
@@ -17,7 +18,6 @@ import '../../providers/invite_prompt_provider.dart';
 import 'widgets/dashboard_header.dart';
 import 'widgets/daily_wins_tracker.dart';
 import 'widgets/daily_habits_card.dart';
-import 'widgets/focus_mode_banner.dart';
 import 'widgets/progress_overview_card.dart';
 import 'widgets/getting_started_checklist.dart';
 import 'widgets/accountability_banner.dart';
@@ -70,7 +70,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     // High-intent invite moments — one prompt per visit; controller dedupes.
     ref.listen<DailyCompletion>(dailyCompletionProvider, _onPerfectDay);
-    ref.listen<AsyncValue<UserProfile?>>(currentUserProfileProvider, (prev, next) {
+    ref.listen<AsyncValue<UserProfile?>>(currentUserProfileProvider,
+        (prev, next) {
       _onStreakChanged(prev?.valueOrNull, next.valueOrNull);
     });
 
@@ -108,125 +109,244 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 profile.dailyCompletions.any((c) => c.chatCompleted) &&
                 profile.deepDive.modules.isNotEmpty;
 
-            return ResponsiveLayout(
-              maxWidth: 680,
-              child: CustomScrollView(
-                physics: const BouncingScrollPhysics(),
-                slivers: [
-                  // ── Header ──────────────────────────────────────────
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.only(
-                        left: AppSpacing.screenPaddingH,
-                        right: AppSpacing.screenPaddingH,
-                        top: AppSpacing.md,
-                      ),
-                      child: DashboardHeader(profile: profile),
-                    ),
-                  ),
+            final showDeepDiveNudge =
+                profile.blueprintCompleted && !deepDiveComplete;
 
-                  // ── Accountability (partner support banner / invite CTA) ──
-                  if (showAccountabilityBanner)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.screenPaddingH,
-                          AppSpacing.lg,
-                          AppSpacing.screenPaddingH,
-                          0,
-                        ),
-                        child: AccountabilityBanner(profile: profile),
-                      ),
-                    ),
-
-                  // ── Getting Started (shown until all onboarding steps done) ──
-                  if (!allOnboardingDone)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.screenPaddingH,
-                          AppSpacing.sectionGap,
-                          AppSpacing.screenPaddingH,
-                          0,
-                        ),
-                        child: GettingStartedChecklist(profile: profile),
-                      ),
-                    ),
-
-                  // ── GROUP: Today (focus + daily wins) ────────────────
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: AppSpacing.xxl),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const _GroupLabel(AppStrings.groupToday),
-                          const SizedBox(height: AppSpacing.md),
-                          // Current Focus banner (only after committing).
-                          // Self-collapses; carries its own bottom gap when shown.
-                          FocusModeBanner(profile: profile),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.screenPaddingH,
-                            ),
-                            child: DailyWinsTracker(profile: profile),
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                if (Breakpoints.isWideWidth(constraints.maxWidth)) {
+                  return _DashboardDesktopBody(
+                    profile: profile,
+                    showAccountabilityBanner: showAccountabilityBanner,
+                    showGettingStarted: !allOnboardingDone,
+                    showDeepDiveNudge: showDeepDiveNudge,
+                  );
+                }
+                return ResponsiveLayout(
+                  maxWidth: 680,
+                  child: CustomScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    slivers: [
+                      // ── Header ──────────────────────────────────────────
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.only(
+                            left: AppSpacing.screenPaddingH,
+                            right: AppSpacing.screenPaddingH,
+                            top: AppSpacing.md,
                           ),
-                          const SizedBox(height: AppSpacing.md),
-                          const Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: AppSpacing.screenPaddingH,
-                            ),
-                            child: DailyHabitsCard(),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // ── GROUP: Your Progress (alignment | activity) ──────
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: AppSpacing.xxl),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const _GroupLabel(AppStrings.groupProgress),
-                          const SizedBox(height: AppSpacing.md),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.screenPaddingH,
-                            ),
-                            child: ProgressOverviewCard(profile: profile),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // ── Deep Dive nudge (after Blueprint, until all 5 modules complete) ───
-                  if (profile.blueprintCompleted && !deepDiveComplete)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.screenPaddingH,
-                          AppSpacing.xxl,
-                          AppSpacing.screenPaddingH,
-                          0,
+                          child: DashboardHeader(profile: profile),
                         ),
-                        child: _DeepDiveNudgeCard(),
                       ),
-                    ),
 
-                  // Extra bottom space so the final card clears the floating
-                  // nav and is comfortably scrollable into view.
-                  const SliverToBoxAdapter(
-                    child: SizedBox(height: 140),
+                      // ── Accountability (partner support banner / invite CTA) ──
+                      if (showAccountabilityBanner)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              AppSpacing.screenPaddingH,
+                              AppSpacing.lg,
+                              AppSpacing.screenPaddingH,
+                              0,
+                            ),
+                            child: AccountabilityBanner(profile: profile),
+                          ),
+                        ),
+
+                      // ── Getting Started (shown until all onboarding steps done) ──
+                      if (!allOnboardingDone)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              AppSpacing.screenPaddingH,
+                              AppSpacing.sectionGap,
+                              AppSpacing.screenPaddingH,
+                              0,
+                            ),
+                            child: GettingStartedChecklist(profile: profile),
+                          ),
+                        ),
+
+                      // ── GROUP: Today (time-aware single hero) ────────────
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: AppSpacing.xxl),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const _GroupLabel(AppStrings.groupToday),
+                              const SizedBox(height: AppSpacing.md),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.screenPaddingH,
+                                ),
+                                child: DailyWinsTracker(profile: profile),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // ── GROUP: Habits (clearly separated daytime work) ───
+                      const SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.only(top: AppSpacing.xxl),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _GroupLabel(AppStrings.groupHabits),
+                              SizedBox(height: AppSpacing.md),
+                              Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.screenPaddingH,
+                                ),
+                                child: DailyHabitsCard(),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // ── GROUP: Your Progress (alignment | activity) ──────
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: AppSpacing.xxl),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const _GroupLabel(AppStrings.groupProgress),
+                              const SizedBox(height: AppSpacing.md),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.screenPaddingH,
+                                ),
+                                child: ProgressOverviewCard(profile: profile),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // ── Deep Dive nudge (after Blueprint, until all 5 modules complete) ───
+                      if (profile.blueprintCompleted && !deepDiveComplete)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              AppSpacing.screenPaddingH,
+                              AppSpacing.xxl,
+                              AppSpacing.screenPaddingH,
+                              0,
+                            ),
+                            child: _DeepDiveNudgeCard(),
+                          ),
+                        ),
+
+                      // Extra bottom space so the final card clears the floating
+                      // nav and is comfortably scrollable into view.
+                      const SliverToBoxAdapter(
+                        child: SizedBox(height: 140),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                );
+              },
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+/// Wide-screen dashboard: a full-width header above two independent columns.
+/// Primary (left) carries today's hero + habits; secondary (right) carries
+/// onboarding/progress context. Falls back to a single column automatically
+/// via [ResponsiveTwoColumn] if the content area is narrow.
+class _DashboardDesktopBody extends StatelessWidget {
+  final UserProfile profile;
+  final bool showAccountabilityBanner;
+  final bool showGettingStarted;
+  final bool showDeepDiveNudge;
+
+  const _DashboardDesktopBody({
+    required this.profile,
+    required this.showAccountabilityBanner,
+    required this.showGettingStarted,
+    required this.showDeepDiveNudge,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final leftColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (showAccountabilityBanner) ...[
+          AccountabilityBanner(profile: profile),
+          const SizedBox(height: AppSpacing.sectionGap),
+        ],
+        const _DesktopSectionLabel(AppStrings.groupToday),
+        const SizedBox(height: AppSpacing.md),
+        DailyWinsTracker(profile: profile),
+        const SizedBox(height: AppSpacing.sectionGap),
+        const _DesktopSectionLabel(AppStrings.groupHabits),
+        const SizedBox(height: AppSpacing.md),
+        const DailyHabitsCard(),
+        if (showDeepDiveNudge) ...[
+          const SizedBox(height: AppSpacing.sectionGap),
+          _DeepDiveNudgeCard(),
+        ],
+      ],
+    );
+
+    final rightColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (showGettingStarted) ...[
+          GettingStartedChecklist(profile: profile),
+          const SizedBox(height: AppSpacing.sectionGap),
+        ],
+        const _DesktopSectionLabel(AppStrings.groupProgress),
+        const SizedBox(height: AppSpacing.md),
+        ProgressOverviewCard(profile: profile),
+      ],
+    );
+
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      child: WebContentFrame(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: AppSpacing.xl),
+            DashboardHeader(profile: profile),
+            const SizedBox(height: AppSpacing.sectionGap),
+            ResponsiveTwoColumn(
+              primary: leftColumn,
+              secondary: rightColumn,
+            ),
+            const SizedBox(height: AppSpacing.xxl),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Section label for the desktop columns — same intent as the mobile
+/// `_GroupLabel` but without the screen-edge padding (the column already
+/// supplies its own gutters).
+class _DesktopSectionLabel extends StatelessWidget {
+  final String label;
+
+  const _DesktopSectionLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label.toUpperCase(),
+      style: AppTextStyles.overline.copyWith(
+        color: AppColors.textMuted,
+        letterSpacing: 1.2,
       ),
     );
   }
@@ -322,16 +442,16 @@ class _DashboardSkeleton extends StatelessWidget {
         AppSpacing.screenPaddingH,
         100,
       ),
-      children: [
+      children: const [
         ShimmerBox(width: 200, height: 24, borderRadius: AppSpacing.radiusSm),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         ShimmerBox(width: 140, height: 16, borderRadius: AppSpacing.radiusSm),
-        const SizedBox(height: AppSpacing.xl),
-        const ShimmerCard(height: 80),
-        const SizedBox(height: AppSpacing.lg),
-        const ShimmerCard(height: 100),
-        const SizedBox(height: AppSpacing.lg),
-        const ShimmerCard(height: 260),
+        SizedBox(height: AppSpacing.xl),
+        ShimmerCard(height: 80),
+        SizedBox(height: AppSpacing.lg),
+        ShimmerCard(height: 100),
+        SizedBox(height: AppSpacing.lg),
+        ShimmerCard(height: 260),
       ],
     );
   }

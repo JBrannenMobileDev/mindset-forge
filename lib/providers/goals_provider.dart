@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/services/analytics_service.dart';
 import '../models/action_step.dart';
 import '../models/goal.dart';
 import '../models/user_profile.dart';
@@ -13,37 +15,53 @@ class GoalsNotifier extends StateNotifier<List<Goal>> {
     if (profile != null) state = profile.goals;
   }
 
-  Future<void> addGoal(Goal goal) async {
+  Future<void> _persist(List<Goal> goals) async {
     final uid = _ref.read(authStateProvider).valueOrNull?.uid;
     if (uid == null) return;
+    try {
+      await _ref.read(firestoreServiceProvider).updateUserField(uid, {
+        'goals': goals.map((g) => g.toJson()).toList(),
+      });
+    } catch (e) {
+      debugPrint('GoalsNotifier._persist failed: $e');
+      rethrow;
+    }
+  }
 
+  Future<void> addGoal(Goal goal, {bool usedAiBreakdown = false}) async {
+    final previous = state;
     final updated = [...state, goal];
     state = updated;
-    await _ref.read(firestoreServiceProvider).updateUserField(uid, {
-      'goals': updated.map((g) => g.toJson()).toList(),
-    });
+    try {
+      await _persist(updated);
+      _ref
+          .read(analyticsServiceProvider)
+          .trackGoalCreated(usedAiBreakdown: usedAiBreakdown);
+    } catch (_) {
+      state = previous;
+    }
   }
 
   Future<void> updateGoal(Goal goal) async {
-    final uid = _ref.read(authStateProvider).valueOrNull?.uid;
-    if (uid == null) return;
-
+    final previous = state;
     final updated = state.map((g) => g.id == goal.id ? goal : g).toList();
     state = updated;
-    await _ref.read(firestoreServiceProvider).updateUserField(uid, {
-      'goals': updated.map((g) => g.toJson()).toList(),
-    });
+    try {
+      await _persist(updated);
+    } catch (_) {
+      state = previous;
+    }
   }
 
   Future<void> deleteGoal(String goalId) async {
-    final uid = _ref.read(authStateProvider).valueOrNull?.uid;
-    if (uid == null) return;
-
+    final previous = state;
     final updated = state.where((g) => g.id != goalId).toList();
     state = updated;
-    await _ref.read(firestoreServiceProvider).updateUserField(uid, {
-      'goals': updated.map((g) => g.toJson()).toList(),
-    });
+    try {
+      await _persist(updated);
+    } catch (_) {
+      state = previous;
+    }
   }
 
   /// Toggle a single action step's completion and recompute the goal's
@@ -89,6 +107,7 @@ class GoalsNotifier extends StateNotifier<List<Goal>> {
       progressPercent: 100.0,
       completedAt: DateTime.now(),
     ));
+    _ref.read(analyticsServiceProvider).trackGoalCompleted();
   }
 
   List<Goal> get longTermGoals =>

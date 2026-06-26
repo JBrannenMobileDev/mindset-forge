@@ -10,6 +10,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/utils/validators.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_text_field.dart';
+import '../../core/services/pending_invite_store.dart';
 import '../../providers/auth_notifier.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
@@ -65,6 +66,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final authState = ref.watch(authNotifierProvider);
     final isLoading = authState.isLoading;
     final errorMessage = authState.errorMessage;
+    // A pending invite means this signup is resuming an accountability-partner
+    // accept flow — tailor the copy so it's clear they're joining as a partner.
+    final isPartnerInvite = PendingInviteStore.hasPending;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -89,13 +93,23 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.lg),
+                  if (isPartnerInvite) ...[
+                    _PartnerInviteBanner()
+                        .animate()
+                        .fadeIn(duration: 400.ms),
+                    const SizedBox(height: AppSpacing.lg),
+                  ],
                   Text(
-                    'Create your account',
+                    isPartnerInvite
+                        ? AppStrings.partnerSignupTitle
+                        : AppStrings.signupTitle,
                     style: AppTextStyles.displaySmall,
                   ).animate().fadeIn(duration: 400.ms),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'Begin forging your ideal mindset',
+                    isPartnerInvite
+                        ? AppStrings.partnerSignupSubtitle
+                        : AppStrings.signupSubtitle,
                     style: AppTextStyles.bodyLarge.copyWith(
                       color: AppColors.textSecondary,
                     ),
@@ -245,6 +259,36 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _PartnerInviteBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.primaryContainer,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.people_rounded, color: AppColors.primary, size: 20),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              AppStrings.partnerSignupBanner,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

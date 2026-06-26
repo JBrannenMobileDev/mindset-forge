@@ -12,6 +12,7 @@ import '../../core/constants/crisis_resources.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/responsive_layout.dart';
+import '../../core/utils/breakpoints.dart';
 import '../../models/chat_session.dart';
 import '../../models/chat_message.dart';
 import '../../models/coach_reply.dart';
@@ -186,77 +187,123 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       backgroundColor: AppColors.background,
       body: SafeArea(
         bottom: false,
-        child: ResponsiveLayout(
-          maxWidth: 680,
-          child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.screenPaddingH,
-                AppSpacing.md,
-                AppSpacing.screenPaddingH,
-                AppSpacing.sm,
-              ),
-              child: AnimatedBuilder(
-                animation: _tabCtrl,
-                builder: (context, _) {
-                  final modeIndex = _tabCtrl.index;
-                  return Row(
-                    children: [
-                      _HeaderIconButton(
-                        icon: Icons.arrow_back_ios_new_rounded,
-                        tooltip: AppStrings.back,
-                        onTap: () => context.go('/dashboard'),
-                      ),
-                      Expanded(
-                        child: Center(
-                          child: _ModeSwitch(
-                            selectedIndex: modeIndex,
-                            onSelect: (i) => _tabCtrl.animateTo(i),
-                          ),
-                        ),
-                      ),
-                      _HeaderIconButton(
-                        icon: Icons.history_rounded,
-                        tooltip: AppStrings.sessions,
-                        onTap: () => _showSessionsDrawer(context),
-                      ),
-                      const SizedBox(width: AppSpacing.xs),
-                      _HeaderIconButton(
-                        icon: Icons.add_rounded,
-                        tooltip: AppStrings.newSession,
-                        onTap: () => _startNewSession(
-                          modeIndex == 0 ? _coachMode : _futureSelfMode,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabCtrl,
-                children: [
-                  _ChatView(
-                    mode: _coachMode,
-                    onNewSession: () => _startNewSession(_coachMode),
-                    profile: profile,
-                    journalContext: widget.journalContext,
-                    journalPrompt: widget.journalPrompt,
-                  ),
-                  _FutureSelfChatView(
-                    mode: _futureSelfMode,
-                    onNewSession: () => _startNewSession(_futureSelfMode),
-                    profile: profile,
-                  ),
-                ],
-              ),
-            ),
-          ],
-          ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (Breakpoints.isWideWidth(constraints.maxWidth)) {
+              return _buildDesktop(context, profile);
+            }
+            return ResponsiveLayout(
+              maxWidth: 680,
+              child: _buildMobile(context, profile),
+            );
+          },
         ),
       ),
+    );
+  }
+
+  /// Phone layout: a compact header (back / mode switch / sessions / new)
+  /// stacked above the conversation.
+  Widget _buildMobile(BuildContext context, dynamic profile) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.screenPaddingH,
+            AppSpacing.md,
+            AppSpacing.screenPaddingH,
+            AppSpacing.sm,
+          ),
+          child: AnimatedBuilder(
+            animation: _tabCtrl,
+            builder: (context, _) {
+              final modeIndex = _tabCtrl.index;
+              return Row(
+                children: [
+                  _HeaderIconButton(
+                    icon: Icons.arrow_back_ios_new_rounded,
+                    tooltip: AppStrings.back,
+                    onTap: () => context.go('/dashboard'),
+                  ),
+                  Expanded(
+                    child: Center(
+                      child: _ModeSwitch(
+                        selectedIndex: modeIndex,
+                        onSelect: (i) => _tabCtrl.animateTo(i),
+                      ),
+                    ),
+                  ),
+                  _HeaderIconButton(
+                    icon: Icons.history_rounded,
+                    tooltip: AppStrings.sessions,
+                    onTap: () => _showSessionsDrawer(context),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  _HeaderIconButton(
+                    icon: Icons.add_rounded,
+                    tooltip: AppStrings.newSession,
+                    onTap: () => _startNewSession(
+                      modeIndex == 0 ? _coachMode : _futureSelfMode,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        Expanded(child: _chatBody(profile)),
+      ],
+    );
+  }
+
+  /// Wide layout: a persistent left panel (mode switch + session history)
+  /// beside the conversation — the familiar messaging-app master/detail.
+  Widget _buildDesktop(BuildContext context, dynamic profile) {
+    return Row(
+      children: [
+        AnimatedBuilder(
+          animation: _tabCtrl,
+          builder: (context, _) => _ChatSidePanel(
+            selectedIndex: _tabCtrl.index,
+            onSelectMode: (i) => _tabCtrl.animateTo(i),
+            onNewSession: () => _startNewSession(
+              _tabCtrl.index == 0 ? _coachMode : _futureSelfMode,
+            ),
+            onSelectSession: (s) =>
+                ref.read(activeChatProvider.notifier).setSession(s),
+          ),
+        ),
+        Expanded(
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 820),
+              child: _chatBody(profile),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The dual-mode conversation surface, shared by both layouts.
+  Widget _chatBody(dynamic profile) {
+    return TabBarView(
+      controller: _tabCtrl,
+      children: [
+        _ChatView(
+          mode: _coachMode,
+          onNewSession: () => _startNewSession(_coachMode),
+          profile: profile,
+          journalContext: widget.journalContext,
+          journalPrompt: widget.journalPrompt,
+        ),
+        _FutureSelfChatView(
+          mode: _futureSelfMode,
+          onNewSession: () => _startNewSession(_futureSelfMode),
+          profile: profile,
+        ),
+      ],
     );
   }
 
@@ -267,7 +314,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       isScrollControlled: true,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXl)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXl)),
       ),
       builder: (_) => ProviderScope(
         parent: ProviderScope.containerOf(context),
@@ -322,6 +370,9 @@ class _ChatViewState extends ConsumerState<_ChatView> {
           _loadOpener();
         }
       });
+    } else if (widget.mode == 'future_self') {
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _loadFutureSelfOpener());
     }
   }
 
@@ -331,10 +382,31 @@ class _ChatViewState extends ConsumerState<_ChatView> {
     try {
       final profile = widget.profile;
       if (profile == null) return;
-      final result = await ref.read(claudeServiceProvider).generateSessionOpener(
-            profile,
-            journalContext: widget.journalContext,
-          );
+      final result =
+          await ref.read(claudeServiceProvider).generateSessionOpener(
+                profile,
+                journalContext: widget.journalContext,
+              );
+      if (!mounted) return;
+      setState(() {
+        _openerText = result['opener'] as String?;
+        _quickPrompts = List<String>.from(result['prompts'] as List? ?? []);
+        _loadingOpener = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingOpener = false);
+    }
+  }
+
+  Future<void> _loadFutureSelfOpener() async {
+    if (!mounted) return;
+    setState(() => _loadingOpener = true);
+    try {
+      final profile = widget.profile;
+      if (profile == null) return;
+      final result = await ref
+          .read(claudeServiceProvider)
+          .generateFutureSelfOpener(profile);
       if (!mounted) return;
       setState(() {
         _openerText = result['opener'] as String?;
@@ -447,7 +519,9 @@ class _ChatViewState extends ConsumerState<_ChatView> {
 
     if (!_firstMessageSent) {
       _firstMessageSent = true;
-      await ref.read(dailyCompletionProvider.notifier).toggle('chatCompleted', true);
+      await ref
+          .read(dailyCompletionProvider.notifier)
+          .toggle('chatCompleted', true);
       if (!mounted) return;
     }
 
@@ -479,9 +553,7 @@ class _ChatViewState extends ConsumerState<_ChatView> {
 
         // Persist coaching memory unless we're in a crisis (no coaching).
         if (!isCrisis && !reply.memory.isEmpty) {
-          await ref
-              .read(coachMemoryWriterProvider)
-              .applyUpdate(reply.memory);
+          await ref.read(coachMemoryWriterProvider).applyUpdate(reply.memory);
         }
       } else {
         final response = await ref
@@ -499,9 +571,87 @@ class _ChatViewState extends ConsumerState<_ChatView> {
       if (mounted) _scrollToBottom();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(AppStrings.errorAI)),
+        final errMsg = ChatMessage(
+          id: const Uuid().v4(),
+          role: 'assistant',
+          content: AppStrings.coachErrorRetry,
+          timestamp: DateTime.now(),
+          isError: true,
         );
+        await ref.read(activeChatProvider.notifier).addMessage(errMsg);
+        if (mounted) _scrollToBottom();
+      }
+    } finally {
+      if (mounted) setState(() => _isTyping = false);
+    }
+  }
+
+  /// Removes a stale error bubble and re-runs the AI call for [userContent]
+  /// without re-adding the user message or consuming partner limits again.
+  Future<void> _retry(String errorMsgId, String userContent) async {
+    await ref.read(activeChatProvider.notifier).removeMessage(errorMsgId);
+    if (!mounted) return;
+
+    final session = ref.read(activeChatProvider);
+    if (session == null) return;
+
+    setState(() => _isTyping = true);
+    _scrollToBottom();
+
+    try {
+      final profile = widget.profile;
+      final messages = session.messages;
+      late final ChatMessage aiMsg;
+
+      if (widget.mode == 'coach') {
+        final reply = await ref
+            .read(claudeServiceProvider)
+            .generateCoachResponse(profile, messages, userContent);
+
+        final keywordCrisis =
+            CrisisResources.containsCrisisLanguage(userContent);
+        final isCrisis = reply.safety == CoachSafety.crisis || keywordCrisis;
+
+        aiMsg = ChatMessage(
+          id: const Uuid().v4(),
+          role: 'assistant',
+          content: reply.response,
+          timestamp: DateTime.now(),
+          mode: reply.modeLabel,
+          safety: isCrisis
+              ? 'crisis'
+              : (reply.safety == CoachSafety.concern ? 'concern' : 'none'),
+        );
+
+        if (!isCrisis && !reply.memory.isEmpty) {
+          await ref.read(coachMemoryWriterProvider).applyUpdate(reply.memory);
+        }
+      } else {
+        final response = await ref
+            .read(claudeServiceProvider)
+            .generateFutureSelfResponse(profile, messages, userContent);
+        aiMsg = ChatMessage(
+          id: const Uuid().v4(),
+          role: 'assistant',
+          content: response,
+          timestamp: DateTime.now(),
+        );
+      }
+
+      if (!mounted) return;
+      await ref.read(activeChatProvider.notifier).addMessage(aiMsg);
+      if (mounted) _scrollToBottom();
+    } catch (_) {
+      if (mounted) {
+        final errMsg = ChatMessage(
+          id: const Uuid().v4(),
+          role: 'assistant',
+          content: AppStrings.coachErrorRetry,
+          timestamp: DateTime.now(),
+          isError: true,
+        );
+        await ref.read(activeChatProvider.notifier).addMessage(errMsg);
+        if (mounted) _scrollToBottom();
       }
     } finally {
       if (mounted) setState(() => _isTyping = false);
@@ -516,7 +666,9 @@ class _ChatViewState extends ConsumerState<_ChatView> {
       return EmptyState(
         icon: Icons.chat_bubble_outline_rounded,
         title: AppStrings.noSessions,
-        subtitle: AppStrings.noSessionsSubtitle,
+        subtitle: widget.mode == 'future_self'
+            ? AppStrings.futureSelfNoSessionsSubtitle
+            : AppStrings.noSessionsSubtitle,
         ctaLabel: AppStrings.newSession,
         onCta: widget.onNewSession,
       );
@@ -524,7 +676,7 @@ class _ChatViewState extends ConsumerState<_ChatView> {
 
     final messages = session.messages;
     final showOpener = messages.isEmpty &&
-        widget.mode == 'coach' &&
+        (widget.mode == 'coach' || widget.mode == 'future_self') &&
         widget.journalContext == null;
 
     return Column(
@@ -536,19 +688,18 @@ class _ChatViewState extends ConsumerState<_ChatView> {
             onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
             child: ListView.builder(
               controller: _scrollCtrl,
-              keyboardDismissBehavior:
-                  ScrollViewKeyboardDismissBehavior.onDrag,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.screenPaddingH,
                 vertical: AppSpacing.md,
               ),
-              itemCount: (showOpener ? 1 : 0) +
-                  messages.length +
-                  (_isTyping ? 1 : 0),
+              itemCount:
+                  (showOpener ? 1 : 0) + messages.length + (_isTyping ? 1 : 0),
               itemBuilder: (_, i) {
                 // Opener slot
                 if (showOpener && i == 0) {
                   return _SessionOpener(
+                    mode: widget.mode,
                     openerText: _openerText,
                     quickPrompts: _quickPrompts,
                     isLoading: _loadingOpener,
@@ -562,21 +713,33 @@ class _ChatViewState extends ConsumerState<_ChatView> {
                     child: _TypingIndicator(),
                   ).animate().fadeIn(duration: 250.ms);
                 }
+                final msg = messages[msgIdx];
+                // For an error bubble, find the preceding user message so
+                // the retry handler can re-send the same content.
+                final prevUserContent = msg.isError && msgIdx > 0
+                    ? messages[msgIdx - 1].content
+                    : null;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.lg),
                   child: _ChatBubble(
-                    message: messages[msgIdx],
+                    message: msg,
                     mode: widget.mode,
                     onAction: _handleCoachAction,
                     onFeedback: (feedback) async {
                       await ref
                           .read(activeChatProvider.notifier)
                           .updateMessageFeedback(
-                            messages[msgIdx].id,
+                            msg.id,
                             feedback,
                           );
                     },
-                  ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.1, end: 0),
+                    onRetry: msg.isError && prevUserContent != null
+                        ? () => _retry(msg.id, prevUserContent)
+                        : null,
+                  )
+                      .animate()
+                      .fadeIn(duration: 300.ms)
+                      .slideY(begin: 0.1, end: 0),
                 );
               },
             ),
@@ -595,12 +758,14 @@ class _ChatViewState extends ConsumerState<_ChatView> {
 // ── Session opener with quick prompts ─────────────────────────────────────
 
 class _SessionOpener extends StatelessWidget {
+  final String mode;
   final String? openerText;
   final List<String> quickPrompts;
   final bool isLoading;
   final void Function(String) onPromptTap;
 
   const _SessionOpener({
+    required this.mode,
     required this.openerText,
     required this.quickPrompts,
     required this.isLoading,
@@ -609,6 +774,22 @@ class _SessionOpener extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isFutureSelf = mode == 'future_self';
+    final avatarColor =
+        isFutureSelf ? AppColors.futureSelfGlow : AppColors.primaryContainer;
+    final accentColor =
+        isFutureSelf ? AppColors.futureSelfAccent : AppColors.primary;
+    final bubbleColor =
+        isFutureSelf ? AppColors.futureSelfSurface : AppColors.surfaceElevated;
+    final bubbleBorder = isFutureSelf
+        ? AppColors.futureSelfAccent.withValues(alpha: 0.25)
+        : AppColors.border;
+    final chipColor =
+        isFutureSelf ? AppColors.futureSelfGlow : AppColors.primaryContainer;
+    final promptsLabel = isFutureSelf
+        ? AppStrings.futureSelfQuickPromptsLabel
+        : AppStrings.quickPromptsLabel;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xl),
       child: Column(
@@ -621,12 +802,12 @@ class _SessionOpener extends StatelessWidget {
                 Container(
                   width: 32,
                   height: 32,
-                  decoration: const BoxDecoration(
-                    color: AppColors.primaryContainer,
+                  decoration: BoxDecoration(
+                    color: avatarColor,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.auto_awesome_rounded,
-                      color: AppColors.primary, size: 16),
+                  child: Icon(Icons.auto_awesome_rounded,
+                      color: accentColor, size: 16),
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 const _TypingIndicator(),
@@ -639,26 +820,26 @@ class _SessionOpener extends StatelessWidget {
                 Container(
                   width: 32,
                   height: 32,
-                  decoration: const BoxDecoration(
-                    color: AppColors.primaryContainer,
+                  decoration: BoxDecoration(
+                    color: avatarColor,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.auto_awesome_rounded,
-                      color: AppColors.primary, size: 16),
+                  child: Icon(Icons.auto_awesome_rounded,
+                      color: accentColor, size: 16),
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.all(AppSpacing.md),
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceElevated,
+                      color: bubbleColor,
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(4),
                         topRight: Radius.circular(AppSpacing.radiusLg),
                         bottomLeft: Radius.circular(AppSpacing.radiusLg),
                         bottomRight: Radius.circular(AppSpacing.radiusLg),
                       ),
-                      border: Border.all(color: AppColors.border),
+                      border: Border.all(color: bubbleBorder),
                     ),
                     child: Text(
                       openerText!,
@@ -671,9 +852,9 @@ class _SessionOpener extends StatelessWidget {
             if (quickPrompts.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.md),
               Text(
-                AppStrings.quickPromptsLabel,
-                style: AppTextStyles.labelSmall.copyWith(
-                    color: AppColors.textMuted),
+                promptsLabel,
+                style: AppTextStyles.labelSmall
+                    .copyWith(color: AppColors.textMuted),
               ),
               const SizedBox(height: AppSpacing.sm),
               Wrap(
@@ -688,18 +869,17 @@ class _SessionOpener extends StatelessWidget {
                               vertical: AppSpacing.sm,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.primaryContainer,
-                              borderRadius: BorderRadius.circular(
-                                  AppSpacing.radiusFull),
+                              color: chipColor,
+                              borderRadius:
+                                  BorderRadius.circular(AppSpacing.radiusFull),
                               border: Border.all(
-                                color: AppColors.primary
-                                    .withValues(alpha: 0.3),
+                                color: accentColor.withValues(alpha: 0.3),
                               ),
                             ),
                             child: Text(
                               p,
-                              style: AppTextStyles.bodySmall.copyWith(
-                                  color: AppColors.primary),
+                              style: AppTextStyles.bodySmall
+                                  .copyWith(color: accentColor),
                             ),
                           ),
                         ))
@@ -734,13 +914,17 @@ class _FutureSelfChatView extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.auto_awesome_rounded, color: AppColors.futureSelfAccent, size: 48),
+            const Icon(Icons.auto_awesome_rounded,
+                color: AppColors.futureSelfAccent, size: 48),
             const SizedBox(height: AppSpacing.lg),
-            Text(AppStrings.futureSelfSetupTitle, style: AppTextStyles.headlineMedium, textAlign: TextAlign.center),
+            Text(AppStrings.futureSelfSetupTitle,
+                style: AppTextStyles.headlineMedium,
+                textAlign: TextAlign.center),
             const SizedBox(height: AppSpacing.sm),
             Text(
               AppStrings.futureSelfSetupSubtitle,
-              style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+              style: AppTextStyles.bodyMedium
+                  .copyWith(color: AppColors.textSecondary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.xl),
@@ -817,29 +1001,48 @@ final _actionMarkerRegex = RegExp(r'\[\[ACTION:([^:\]]+):([^\]]+)\]\]');
   return (text: text, actions: actions);
 }
 
-class _ChatBubble extends StatelessWidget {
+class _ChatBubble extends StatefulWidget {
   final ChatMessage message;
   final String mode;
   final void Function(int) onFeedback;
   final void Function(CoachActionType type, String payload)? onAction;
+  final VoidCallback? onRetry;
 
   const _ChatBubble({
     required this.message,
     required this.mode,
     required this.onFeedback,
     this.onAction,
+    this.onRetry,
   });
 
   @override
+  State<_ChatBubble> createState() => _ChatBubbleState();
+}
+
+class _ChatBubbleState extends State<_ChatBubble> {
+  bool _copied = false;
+
+  Future<void> _handleLongPress(String text) async {
+    HapticFeedback.mediumImpact();
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    setState(() => _copied = true);
+    await Future.delayed(const Duration(milliseconds: 1400));
+    if (mounted) setState(() => _copied = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final isUser = message.isUser;
-    final isFutureSelf = mode == 'future_self';
-    final parsed =
-        isUser ? (text: message.content, actions: const <_CoachAction>[]) : _parseCoachContent(message.content);
+    final isUser = widget.message.isUser;
+    final isFutureSelf = widget.mode == 'future_self';
+    final parsed = isUser
+        ? (text: widget.message.content, actions: const <_CoachAction>[])
+        : _parseCoachContent(widget.message.content);
     final showModeCue = !isUser &&
-        !message.isCrisis &&
-        message.mode != null &&
-        message.mode!.isNotEmpty;
+        !widget.message.isCrisis &&
+        widget.message.mode != null &&
+        widget.message.mode!.isNotEmpty;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -847,114 +1050,171 @@ class _ChatBubble extends StatelessWidget {
         // sides symmetric breathing room. Alignment is handled by the Row.
         final maxBubbleWidth = constraints.maxWidth * 0.78;
         return Row(
-      mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        if (!isUser) ...[
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              gradient: isFutureSelf
-                  ? const LinearGradient(colors: [AppColors.futureSelfAccent, AppColors.warning])
-                  : const LinearGradient(colors: [AppColors.primary, AppColors.secondary]),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              isFutureSelf ? Icons.auto_awesome_rounded : Icons.psychology_rounded,
-              size: 16,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-        ],
-        Flexible(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-            child: GestureDetector(
-            onLongPress: () {
-              Clipboard.setData(ClipboardData(text: parsed.text));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text(AppStrings.messageCopied)),
-              );
-            },
-            child: Column(
-              crossAxisAlignment:
-                  isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-              children: [
-                if (showModeCue) ...[
-                  _ModeCue(label: message.mode!),
-                  const SizedBox(height: AppSpacing.xs),
-                ],
-                Container(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: isUser
-                        ? AppColors.primary
-                        : isFutureSelf
-                            ? AppColors.futureSelfSurface
-                            : AppColors.surfaceElevated,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(AppSpacing.radiusLg),
-                      topRight: const Radius.circular(AppSpacing.radiusLg),
-                      bottomLeft: Radius.circular(isUser ? AppSpacing.radiusLg : 4),
-                      bottomRight: Radius.circular(isUser ? 4 : AppSpacing.radiusLg),
-                    ),
-                    border: isUser
-                        ? null
-                        : Border.all(
-                            color: isFutureSelf
-                                ? AppColors.futureSelfAccent.withValues(alpha: 0.2)
-                                : AppColors.border,
-                          ),
-                  ),
-                  child: Text(
-                    parsed.text,
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: isUser ? Colors.white : AppColors.textPrimary,
-                      height: 1.6,
-                    ),
-                  ),
+          mainAxisAlignment:
+              isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (!isUser) ...[
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  gradient: isFutureSelf
+                      ? const LinearGradient(colors: [
+                          AppColors.futureSelfAccent,
+                          AppColors.warning
+                        ])
+                      : const LinearGradient(
+                          colors: [AppColors.primary, AppColors.secondary]),
+                  shape: BoxShape.circle,
                 ),
-                if (message.isCrisis) const CrisisResourceCard(),
-                if (!isUser && parsed.actions.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.sm),
-                  Wrap(
-                    spacing: AppSpacing.sm,
-                    runSpacing: AppSpacing.sm,
-                    children: parsed.actions
-                        .map((a) => _ActionPill(
-                              label: a.label,
-                              onTap: () =>
-                                  onAction?.call(a.type, a.payload),
-                            ))
-                        .toList(),
-                  ),
-                ],
-                if (!isUser && !message.isCrisis) ...[
-                  const SizedBox(height: AppSpacing.sm),
-                  Row(
+                child: Icon(
+                  isFutureSelf
+                      ? Icons.auto_awesome_rounded
+                      : Icons.psychology_rounded,
+                  size: 16,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+            ],
+            Flexible(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+                child: GestureDetector(
+                  onLongPress: () => _handleLongPress(parsed.text),
+                  child: Column(
+                    crossAxisAlignment: isUser
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
                     children: [
-                      _FeedbackButton(
-                        icon: Icons.thumb_up_rounded,
-                        isSelected: message.feedback == 1,
-                        onTap: () => onFeedback(1),
+                      if (showModeCue) ...[
+                        _ModeCue(label: widget.message.mode!),
+                        const SizedBox(height: AppSpacing.xs),
+                      ],
+                      // Bubble + "Copied!" overlay stacked together.
+                      Stack(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(AppSpacing.md),
+                            decoration: BoxDecoration(
+                              color: isUser
+                                  ? AppColors.primary
+                                  : isFutureSelf
+                                      ? AppColors.futureSelfSurface
+                                      : AppColors.surfaceElevated,
+                              borderRadius: BorderRadius.only(
+                                topLeft:
+                                    const Radius.circular(AppSpacing.radiusLg),
+                                topRight:
+                                    const Radius.circular(AppSpacing.radiusLg),
+                                bottomLeft: Radius.circular(
+                                    isUser ? AppSpacing.radiusLg : 4),
+                                bottomRight: Radius.circular(
+                                    isUser ? 4 : AppSpacing.radiusLg),
+                              ),
+                              border: isUser
+                                  ? null
+                                  : Border.all(
+                                      color: isFutureSelf
+                                          ? AppColors.futureSelfAccent
+                                              .withValues(alpha: 0.2)
+                                          : AppColors.border,
+                                    ),
+                            ),
+                            child: Text(
+                              parsed.text,
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                color: isUser
+                                    ? Colors.white
+                                    : AppColors.textPrimary,
+                                height: 1.6,
+                              ),
+                            ),
+                          ),
+                          // "Copied!" pill — fades in over the bubble.
+                          Positioned.fill(
+                            child: AnimatedOpacity(
+                              opacity: _copied ? 1.0 : 0.0,
+                              duration: const Duration(milliseconds: 180),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceHighest
+                                      .withValues(alpha: 0.92),
+                                  borderRadius: BorderRadius.only(
+                                    topLeft: const Radius.circular(
+                                        AppSpacing.radiusLg),
+                                    topRight: const Radius.circular(
+                                        AppSpacing.radiusLg),
+                                    bottomLeft: Radius.circular(
+                                        isUser ? AppSpacing.radiusLg : 4),
+                                    bottomRight: Radius.circular(
+                                        isUser ? 4 : AppSpacing.radiusLg),
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    AppStrings.messageCopied,
+                                    style: AppTextStyles.labelLarge.copyWith(
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: AppSpacing.sm),
-                      _FeedbackButton(
-                        icon: Icons.thumb_down_rounded,
-                        isSelected: message.feedback == -1,
-                        onTap: () => onFeedback(-1),
-                      ),
+                      if (widget.message.isCrisis) const CrisisResourceCard(),
+                      if (!isUser && parsed.actions.isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.sm),
+                        Wrap(
+                          spacing: AppSpacing.sm,
+                          runSpacing: AppSpacing.sm,
+                          children: parsed.actions
+                              .map((a) => _ActionPill(
+                                    label: a.label,
+                                    onTap: () => widget.onAction
+                                        ?.call(a.type, a.payload),
+                                  ))
+                              .toList(),
+                        ),
+                      ],
+                      if (widget.message.isError && widget.onRetry != null) ...[
+                        const SizedBox(height: AppSpacing.xs),
+                        GestureDetector(
+                          onTap: widget.onRetry,
+                          child: Text(
+                            'Try again',
+                            style: AppTextStyles.labelLarge.copyWith(
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ] else if (!isUser && !widget.message.isCrisis) ...[
+                        const SizedBox(height: AppSpacing.sm),
+                        Row(
+                          children: [
+                            _FeedbackButton(
+                              icon: Icons.thumb_up_rounded,
+                              isSelected: widget.message.feedback == 1,
+                              onTap: () => widget.onFeedback(1),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            _FeedbackButton(
+                              icon: Icons.thumb_down_rounded,
+                              isSelected: widget.message.feedback == -1,
+                              onTap: () => widget.onFeedback(-1),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
-                ],
-              ],
+                ),
+              ),
             ),
-          ),
-          ),
-        ),
-      ],
+          ],
         );
       },
     );
@@ -969,7 +1229,8 @@ class _ModeCue extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
+      padding:
+          const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
       decoration: BoxDecoration(
         color: AppColors.primaryContainer,
         borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
@@ -1079,9 +1340,11 @@ class _TypingIndicatorState extends State<_TypingIndicator>
         duration: const Duration(milliseconds: 600),
       ),
     );
-    _anims = _ctrs.map((c) => Tween<double>(begin: 0, end: 1).animate(
-          CurvedAnimation(parent: c, curve: Curves.easeInOut),
-        )).toList();
+    _anims = _ctrs
+        .map((c) => Tween<double>(begin: 0, end: 1).animate(
+              CurvedAnimation(parent: c, curve: Curves.easeInOut),
+            ))
+        .toList();
 
     for (int i = 0; i < 3; i++) {
       Future.delayed(Duration(milliseconds: i * 180), () {
@@ -1106,14 +1369,17 @@ class _TypingIndicatorState extends State<_TypingIndicator>
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [AppColors.primary, AppColors.secondary]),
+            gradient: const LinearGradient(
+                colors: [AppColors.primary, AppColors.secondary]),
             shape: BoxShape.circle,
           ),
-          child: const Icon(Icons.psychology_rounded, size: 16, color: Colors.white),
+          child: const Icon(Icons.psychology_rounded,
+              size: 16, color: Colors.white),
         ),
         const SizedBox(width: AppSpacing.sm),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md, vertical: AppSpacing.sm),
           decoration: BoxDecoration(
             color: AppColors.surfaceElevated,
             borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
@@ -1339,6 +1605,143 @@ class _ModeSwitch extends StatelessWidget {
   }
 }
 
+/// Persistent left panel for the wide chat layout: mode switch, a new-session
+/// action, and the history of saved sessions for the active mode. Mirrors the
+/// controls that live in the mobile header + sessions sheet.
+class _ChatSidePanel extends ConsumerWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onSelectMode;
+  final VoidCallback onNewSession;
+  final void Function(ChatSession) onSelectSession;
+
+  const _ChatSidePanel({
+    required this.selectedIndex,
+    required this.onSelectMode,
+    required this.onNewSession,
+    required this.onSelectSession,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = selectedIndex == 0 ? 'coach' : 'future_self';
+    final sessions = (ref.watch(chatSessionsProvider(mode)).valueOrNull ?? [])
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final activeId = ref.watch(activeChatProvider)?.id;
+
+    return Container(
+      width: 320,
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(right: BorderSide(color: AppColors.border, width: 1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.md,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: _ModeSwitch(
+                    selectedIndex: selectedIndex,
+                    onSelect: onSelectMode,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                AppSecondaryButton(
+                  label: AppStrings.newSession,
+                  icon: Icons.add_rounded,
+                  onPressed: onNewSession,
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.sm,
+            ),
+            child: Text(
+              AppStrings.sessions.toUpperCase(),
+              style: AppTextStyles.overline,
+            ),
+          ),
+          Expanded(
+            child: sessions.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(AppSpacing.lg),
+                    child: Text(
+                      AppStrings.noSavedSessions,
+                      style: AppTextStyles.bodySmall
+                          .copyWith(color: AppColors.textMuted),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                    ),
+                    itemCount: sessions.length,
+                    itemBuilder: (_, i) {
+                      final s = sessions[i];
+                      final selected = s.id == activeId;
+                      return Material(
+                        color: selected
+                            ? AppColors.primaryContainer
+                            : Colors.transparent,
+                        borderRadius:
+                            BorderRadius.circular(AppSpacing.radiusMd),
+                        child: InkWell(
+                          onTap: () => onSelectSession(s),
+                          borderRadius:
+                              BorderRadius.circular(AppSpacing.radiusMd),
+                          hoverColor: AppColors.surfaceElevated,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.md,
+                              vertical: AppSpacing.sm + 2,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.topic,
+                                  style: AppTextStyles.labelLarge.copyWith(
+                                    color: selected
+                                        ? AppColors.primary
+                                        : AppColors.textPrimary,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  s.lastMessagePreview,
+                                  style: AppTextStyles.bodySmall
+                                      .copyWith(color: AppColors.textMuted),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+        ],
+      ),
+    );
+  }
+}
+
 class _SessionsSheet extends ConsumerWidget {
   final void Function(ChatSession) onSelectSession;
 
@@ -1346,8 +1749,10 @@ class _SessionsSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final coachSessions = ref.watch(chatSessionsProvider('coach')).valueOrNull ?? [];
-    final allSessions = [...coachSessions]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final coachSessions =
+        ref.watch(chatSessionsProvider('coach')).valueOrNull ?? [];
+    final allSessions = [...coachSessions]
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.xl),
@@ -1368,7 +1773,8 @@ class _SessionsSheet extends ConsumerWidget {
           if (allSessions.isEmpty)
             Text(
               AppStrings.noSavedSessions,
-              style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+              style: AppTextStyles.bodyMedium
+                  .copyWith(color: AppColors.textSecondary),
             )
           else
             ...allSessions.map((s) => ListTile(
@@ -1379,13 +1785,15 @@ class _SessionsSheet extends ConsumerWidget {
                   title: Text(s.topic, style: AppTextStyles.labelLarge),
                   subtitle: Text(
                     s.lastMessagePreview,
-                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted),
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: AppColors.textMuted),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   trailing: Text(
                     s.mode == 'coach' ? 'Coach' : 'Future Self',
-                    style: AppTextStyles.labelSmall.copyWith(color: AppColors.primary),
+                    style: AppTextStyles.labelSmall
+                        .copyWith(color: AppColors.primary),
                   ),
                 )),
           const SizedBox(height: AppSpacing.xl),

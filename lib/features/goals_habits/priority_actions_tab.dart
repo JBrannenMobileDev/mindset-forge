@@ -283,81 +283,153 @@ class _PriorityActionCard extends StatelessWidget {
           : (isCompleted
               ? AppColors.primary.withValues(alpha: 0.3)
               : AppColors.border),
-      child: Row(
-        children: [
-          // Completion toggle
-          GestureDetector(
-            onTap: onToggleComplete,
-            behavior: HitTestBehavior.opaque,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: isCompleted ? AppColors.primary : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isCompleted ? AppColors.primary : AppColors.border,
-                  width: 2,
-                ),
-              ),
-              child: isCompleted
-                  ? const Icon(Icons.check_rounded,
-                      color: Colors.white, size: 18)
-                  : null,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (isFocus)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: Text(
-                      AppStrings.priorityActionsFocusLabel,
-                      style: AppTextStyles.overline
-                          .copyWith(color: AppColors.primary),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Completion circle — primary action, stays prominent on the left.
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: GestureDetector(
+                onTap: onToggleComplete,
+                behavior: HitTestBehavior.opaque,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: isCompleted ? AppColors.primary : Colors.transparent,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color:
+                          isCompleted ? AppColors.primary : AppColors.border,
+                      width: 2,
                     ),
                   ),
-                Text(
-                  action,
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: isCompleted
-                        ? AppColors.primary
-                        : AppColors.textPrimary,
-                    decoration:
-                        isCompleted ? TextDecoration.lineThrough : null,
-                    decorationColor: AppColors.primary,
-                  ),
+                  child: isCompleted
+                      ? const Icon(Icons.check_rounded,
+                          color: Colors.white, size: 16)
+                      : null,
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          // Focus toggle (star)
-          GestureDetector(
-            onTap: onSetFocus,
-            behavior: HitTestBehavior.opaque,
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.xs),
-              child: Icon(
-                isFocus ? Icons.star_rounded : Icons.star_outline_rounded,
-                color: isFocus ? AppColors.primary : AppColors.textMuted,
-                size: 22,
               ),
             ),
-          ),
-          // Remove
-          GestureDetector(
-            onTap: onRemove,
-            behavior: HitTestBehavior.opaque,
-            child: const Padding(
-              padding: EdgeInsets.all(AppSpacing.xs),
-              child: Icon(Icons.close_rounded,
-                  color: AppColors.textMuted, size: 18),
+            const SizedBox(width: AppSpacing.md),
+            // Text-forward column: focus badge → action text → footer controls.
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isFocus) ...[
+                    _FocusBadge(),
+                    const SizedBox(height: AppSpacing.xs),
+                  ],
+                  Text(
+                    action,
+                    style: AppTextStyles.bodyLarge.copyWith(
+                      height: 1.45,
+                      color: isCompleted
+                          ? AppColors.primary
+                          : AppColors.textPrimary,
+                      decoration:
+                          isCompleted ? TextDecoration.lineThrough : null,
+                      decorationColor: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  // Footer: focus toggle (labelled) + overflow menu.
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: onSetFocus,
+                        behavior: HitTestBehavior.opaque,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isFocus
+                                  ? Icons.star_rounded
+                                  : Icons.star_outline_rounded,
+                              color: isFocus
+                                  ? AppColors.primary
+                                  : AppColors.textMuted,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              isFocus
+                                  ? AppStrings.priorityActionsFocusLabel
+                                  : AppStrings.priorityActionsSetFocus,
+                              style: AppTextStyles.labelSmall.copyWith(
+                                color: isFocus
+                                    ? AppColors.primary
+                                    : AppColors.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_horiz_rounded,
+                            color: AppColors.textMuted, size: 18),
+                        color: AppColors.surfaceElevated,
+                        padding: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppSpacing.radiusMd),
+                          side: const BorderSide(color: AppColors.border),
+                        ),
+                        onSelected: (v) {
+                          if (v == 'remove') onRemove();
+                        },
+                        itemBuilder: (_) => [
+                          PopupMenuItem<String>(
+                            value: 'remove',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.delete_outline_rounded,
+                                    color: AppColors.error, size: 18),
+                                const SizedBox(width: AppSpacing.sm),
+                                Text(AppStrings.delete,
+                                    style: AppTextStyles.bodyMedium
+                                        .copyWith(color: AppColors.error)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Focus badge ──────────────────────────────────────────────────────────────
+
+class _FocusBadge extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm + 2, vertical: AppSpacing.xs - 1),
+      decoration: BoxDecoration(
+        color: AppColors.primaryContainer,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.star_rounded, color: AppColors.primary, size: 11),
+          const SizedBox(width: 3),
+          Text(
+            AppStrings.priorityActionsFocusLabel,
+            style: AppTextStyles.labelSmall.copyWith(color: AppColors.primary),
           ),
         ],
       ),

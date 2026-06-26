@@ -163,7 +163,7 @@ class _PartnerDashboardScreenState extends ConsumerState<PartnerDashboardScreen>
             AppPrimaryButton(
               label: needsSetup ? 'Start My Journey' : 'Start Free Trial',
               icon: Icons.arrow_forward_rounded,
-              onPressed: () => context.push(needsSetup ? '/onboarding' : '/pricing'),
+              onPressed: () => context.push(needsSetup ? '/onboarding' : '/pricing?source=partner_upgrade'),
             ),
           ],
         ),

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/services/analytics_service.dart';
 import '../models/journal_entry.dart';
 import 'auth_provider.dart';
 
@@ -9,6 +10,14 @@ class JournalNotifier extends StateNotifier<List<JournalEntry>> {
 
   Future<void> saveEntry(JournalEntry entry) async {
     await _ref.read(firestoreServiceProvider).saveJournalEntry(entry);
+    final wordCount = entry.content.trim().split(RegExp(r'\s+')).length;
+    final hasTags = entry.limitingBeliefsShifted.isNotEmpty ||
+        entry.fearsOutwitted.isNotEmpty;
+    _ref.read(analyticsServiceProvider).trackJournalEntrySaved(
+          mode: entry.mode,
+          wordCount: wordCount,
+          hasTags: hasTags,
+        );
   }
 
   Future<void> deleteEntry(String entryId) async {

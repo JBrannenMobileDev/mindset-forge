@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import '../core/firebase/firestore_service.dart';
+import '../core/services/analytics_service.dart';
 import '../core/services/notification_service.dart';
 import '../models/user_profile.dart';
 import 'auth_provider.dart';
@@ -10,24 +10,20 @@ import 'auth_provider.dart';
 
 class AuthState {
   final bool isLoading;
-  final bool isGoogleLoading;
   final String? errorMessage;
 
   const AuthState({
     this.isLoading = false,
-    this.isGoogleLoading = false,
     this.errorMessage,
   });
 
   AuthState copyWith({
     bool? isLoading,
-    bool? isGoogleLoading,
     String? errorMessage,
     bool clearError = false,
   }) {
     return AuthState(
       isLoading: isLoading ?? this.isLoading,
-      isGoogleLoading: isGoogleLoading ?? this.isGoogleLoading,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }
@@ -37,8 +33,9 @@ class AuthState {
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final FirestoreService _firestoreService;
+  final Ref _ref;
 
-  AuthNotifier(this._firestoreService) : super(const AuthState());
+  AuthNotifier(this._firestoreService, this._ref) : super(const AuthState());
 
   void clearError() => state = state.copyWith(clearError: true);
 
@@ -49,6 +46,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         email: email.trim(),
         password: password,
       );
+      _ref.read(analyticsServiceProvider).trackLogIn();
       // Navigation is handled reactively by GoRouter's auth guard.
     } on FirebaseAuthException catch (e) {
       state = state.copyWith(
@@ -79,6 +77,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         displayName: name.trim(),
       );
       await _firestoreService.createUserProfile(profile);
+      _ref.read(analyticsServiceProvider).trackSignUp();
     } on FirebaseAuthException catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -86,55 +85,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
     } catch (_) {
       state = state.copyWith(isLoading: false, errorMessage: 'An unexpected error occurred. Please try again.');
-    }
-  }
-
-  Future<void> signInWithGoogle() async {
-    state = state.copyWith(isGoogleLoading: true, clearError: true);
-    try {
-      final googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) {
-        state = state.copyWith(isGoogleLoading: false);
-        return;
-      }
-
-      final googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-      final userCred =
-          await FirebaseAuth.instance.signInWithCredential(credential);
-
-      if (userCred.additionalUserInfo?.isNewUser == true) {
-        final profile = UserProfile.create(
-          uid: userCred.user!.uid,
-          email: userCred.user!.email ?? googleUser.email,
-          displayName:
-              userCred.user!.displayName ?? googleUser.displayName ?? '',
-        );
-        await _firestoreService.createUserProfile(profile);
-      } else {
-        final existing =
-            await _firestoreService.getUserProfile(userCred.user!.uid);
-        if (existing == null) {
-          final profile = UserProfile.create(
-            uid: userCred.user!.uid,
-            email: userCred.user!.email ?? googleUser.email,
-            displayName:
-                userCred.user!.displayName ?? googleUser.displayName ?? '',
-          );
-          await _firestoreService.createUserProfile(profile);
-        }
-      }
-      // Navigation handled by GoRouter auth guard.
-    } on FirebaseAuthException catch (e) {
-      state = state.copyWith(
-        isGoogleLoading: false,
-        errorMessage: _mapAuthError(e.code),
-      );
-    } catch (_) {
-      state = state.copyWith(isGoogleLoading: false, errorMessage: 'Google sign-in failed. Please try again.');
     }
   }
 
@@ -151,6 +101,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (uid != null) await service.clearToken(uid, _firestoreService);
       await service.cancelAll();
     } catch (_) {}
+    final analytics = _ref.read(analyticsServiceProvider);
+    analytics.trackLogOut();
+    analytics.reset();
     await FirebaseAuth.instance.signOut();
   }
 
@@ -182,5 +135,5 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
 final authNotifierProvider =
     StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(ref.read(firestoreServiceProvider));
+  return AuthNotifier(ref.read(firestoreServiceProvider), ref);
 });

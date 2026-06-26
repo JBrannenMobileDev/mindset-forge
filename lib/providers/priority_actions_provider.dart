@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/services/analytics_service.dart';
 import '../core/utils/app_date_utils.dart';
 import 'auth_provider.dart';
 import 'claude_provider.dart';
@@ -46,7 +47,7 @@ class PriorityActionsState {
 
 /// Owns today's priority actions and their completion state, persisting to the
 /// same `UserProfile` fields the dashboard Plan Day flow writes so the Today
-/// tab, [FocusModeBanner], and the daily-wins tracker stay in sync.
+/// tab and the daily-wins tracker stay in sync.
 class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
   final Ref _ref;
 
@@ -92,8 +93,8 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
   }
 
   /// Toggle a single action's completion. This is the *doing*. Keeps
-  /// `dailyFocusActionCompleted` (drives [FocusModeBanner]) aligned; the win
-  /// flags follow the #1 focus via [_syncDailyWins].
+  /// `dailyFocusActionCompleted` (drives the Today's Focus hero) aligned; the
+  /// win flags follow the #1 focus via [_syncDailyWins].
   Future<void> toggleComplete(String action) async {
     final uid = _ref.read(authStateProvider).valueOrNull?.uid;
     if (uid == null) return;
@@ -199,6 +200,10 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
       });
       // Explicit pick — this is what satisfies the "Plan Day" win.
       await _syncDailyWins();
+      _ref.read(analyticsServiceProvider).trackPriorityActionsSet(
+            actionCount: state.actions.length,
+            usedAi: false,
+          );
     } catch (e) {
       debugPrint('PriorityActionsNotifier.setFocus failed: $e');
     }
@@ -228,6 +233,7 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
       final dc = _ref.read(dailyCompletionProvider.notifier);
       await dc.toggle('dayPlanned', false);
       await dc.toggle('priorityActionsCompleted', false);
+      _ref.read(analyticsServiceProvider).trackAiFeatureUsed('priority_actions');
       // State refreshes from the profile stream.
     } catch (e) {
       debugPrint('PriorityActionsNotifier.regenerate failed: $e');

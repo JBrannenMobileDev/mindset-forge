@@ -89,6 +89,11 @@ class GettingStartedChecklist extends StatelessWidget {
         onTap: () => context.go('/mindset'),
       ),
       _ChecklistItem(
+        label: 'Add your first affirmations',
+        isDone: profile.affirmations.isNotEmpty,
+        onTap: () => context.push('/affirmations'),
+      ),
+      _ChecklistItem(
         label: 'Complete your Mindset Blueprint',
         isDone: profile.blueprintCompleted,
         onTap: () => context.push('/blueprint-setup'),

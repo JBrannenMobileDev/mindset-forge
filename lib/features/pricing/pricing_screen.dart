@@ -7,10 +7,13 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/widgets/app_button.dart';
+import '../../providers/analytics_provider.dart';
 import '../../providers/auth_provider.dart';
 
 class PricingScreen extends ConsumerStatefulWidget {
-  const PricingScreen({super.key});
+  final String source;
+
+  const PricingScreen({super.key, this.source = 'subscription_gate'});
 
   @override
   ConsumerState<PricingScreen> createState() => _PricingScreenState();
@@ -28,6 +31,12 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
   void initState() {
     super.initState();
     _loadOfferings();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref
+          .read(analyticsServiceProvider)
+          .trackPaywallViewed(source: widget.source);
+    });
   }
 
   Future<void> _loadOfferings() async {
@@ -75,18 +84,31 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
 
     try {
       final result = await Purchases.purchasePackage(_selectedPackage!);
-      final isActive = result.entitlements.all['premium']?.isActive ?? false;
-
       if (!mounted) return;
-      if (isActive) {
-        // Update Firestore subscription status optimistically
-        final uid = ref.read(authStateProvider).valueOrNull?.uid;
-        if (uid != null) {
-          await ref.read(firestoreServiceProvider).updateUserField(uid, {
-            'subscriptionStatus': 'active',
-          });
-        }
+
+      final entitlement = result.entitlements.all['premium'];
+      final isActive = entitlement?.isActive ?? false;
+      final isTrial = entitlement?.periodType == PeriodType.trial;
+      final newStatus = isActive ? (isTrial ? 'trialing' : 'active') : 'trialing';
+
+      // Update Firestore regardless of isActive — the purchase completed so
+      // at minimum the user is in a trial. isActive may be false if the
+      // entitlement products aren't attached in RevenueCat yet.
+      final uid = ref.read(authStateProvider).valueOrNull?.uid;
+      if (uid != null) {
+        await ref.read(firestoreServiceProvider).updateUserField(uid, {
+          'subscriptionStatus': newStatus,
+        });
       }
+      if (!mounted) return;
+      final planType = _selectedPackage!.packageType == PackageType.annual
+          ? 'annual'
+          : 'monthly';
+      ref.read(analyticsServiceProvider).trackSubscriptionStarted(
+            plan: planType,
+            priceUsd: _selectedPackage!.storeProduct.price,
+          );
+      context.go('/dashboard');
     } on PurchasesErrorCode catch (e) {
       if (e == PurchasesErrorCode.purchaseCancelledError) {
         // User cancelled — no error needed
@@ -115,6 +137,7 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
             'subscriptionStatus': 'active',
           });
         }
+        ref.read(analyticsServiceProvider).trackSubscriptionRestored();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Subscription restored!')),

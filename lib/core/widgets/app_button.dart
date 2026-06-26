@@ -9,6 +9,10 @@ class AppPrimaryButton extends StatelessWidget {
   final bool isLoading;
   final IconData? icon;
   final double? width;
+  // When provided, themes the button to a session/phase accent instead of the
+  // default primary. Used by the dashboard hero so its CTA matches the
+  // time-of-day color (morning = warning, evening = secondary).
+  final Color? accentColor;
 
   const AppPrimaryButton({
     super.key,
@@ -17,10 +21,12 @@ class AppPrimaryButton extends StatelessWidget {
     this.isLoading = false,
     this.icon,
     this.width,
+    this.accentColor,
   });
 
   @override
   Widget build(BuildContext context) {
+    final accent = accentColor ?? AppColors.primary;
     return SizedBox(
       width: width ?? double.infinity,
       height: AppSpacing.buttonHeight,
@@ -29,10 +35,10 @@ class AppPrimaryButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           boxShadow: onPressed != null
               ? [
-                  const BoxShadow(
-                    color: AppColors.primaryGlow,
+                  BoxShadow(
+                    color: accent.withValues(alpha: 0.2),
                     blurRadius: 20,
-                    offset: Offset(0, 4),
+                    offset: const Offset(0, 4),
                   ),
                 ]
               : null,
@@ -40,9 +46,9 @@ class AppPrimaryButton extends StatelessWidget {
         child: ElevatedButton(
           onPressed: isLoading ? null : onPressed,
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
+            backgroundColor: accent,
             foregroundColor: Colors.white,
-            disabledBackgroundColor: AppColors.primaryDark.withValues(alpha: 0.5),
+            disabledBackgroundColor: accent.withValues(alpha: 0.5),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
             ),

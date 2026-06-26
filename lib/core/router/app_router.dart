@@ -32,7 +32,7 @@ import '../constants/app_strings.dart';
 import '../constants/legal_content.dart';
 import '../../providers/auth_provider.dart';
 import '../services/pending_invite_store.dart';
-import '../widgets/bottom_nav_shell.dart';
+import '../widgets/adaptive_nav_shell.dart';
 
 /// Routes that are accessible without a subscription (besides auth/onboarding
 /// paths). Partner accounts and unsubscribed users can still reach these.
@@ -122,9 +122,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isSubscriptionAllowedPath =
           _noSubscriptionPaths.contains(location) ||
               _noSubscriptionPrefixes.any((p) => location.startsWith(p));
-      if (needsSubscription &&
-          !isSubscriptionAllowedPath &&
-          !isOnAuthPath) {
+      if (needsSubscription && !isSubscriptionAllowedPath && !isOnAuthPath) {
         return '/pricing';
       }
 
@@ -156,7 +154,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/pricing',
-        builder: (_, __) => const PricingScreen(),
+        builder: (_, state) {
+          final source =
+              state.uri.queryParameters['source'] ?? 'subscription_gate';
+          return PricingScreen(source: source);
+        },
       ),
       // Partner invite — accessible via deep link without subscription gate
       GoRoute(
@@ -173,7 +175,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       ShellRoute(
         builder: (context, state, child) =>
-            BottomNavShell(child: child, location: state.matchedLocation),
+            AdaptiveNavShell(location: state.matchedLocation, child: child),
         routes: [
           GoRoute(
             path: '/dashboard',

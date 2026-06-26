@@ -7,10 +7,13 @@ import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
+import '../../core/constants/app_strings.dart';
+import '../../core/widgets/empty_state.dart';
 import '../../models/deep_dive.dart';
 import '../../models/user_profile.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/claude_provider.dart';
+import '../../providers/deep_dive_provider.dart';
 
 // ── Module definitions ─────────────────────────────────────────────────────
 
@@ -234,13 +237,17 @@ class _DeepDiveScreenState extends ConsumerState<DeepDiveScreen> {
           },
         ),
         title: Text(
-          _inModule ? _currentModuleTitle : 'Deep Dive',
+          _inModule ? _currentModuleTitle : AppStrings.deepDiveTitle,
           style: AppTextStyles.headlineMedium,
         ),
       ),
       body: profileAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
-        error: (_, __) => const Center(child: Text('Failed to load profile.')),
+        loading: () =>
+            const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        error: (_, __) => ErrorState(
+          message: AppStrings.errorGeneric,
+          onRetry: () => ref.invalidate(currentUserProfileProvider),
+        ),
         data: (profile) {
           if (profile == null) return const SizedBox.shrink();
 
@@ -256,14 +263,10 @@ class _DeepDiveScreenState extends ConsumerState<DeepDiveScreen> {
               module: modules[_currentModuleIndex],
               profile: profile,
               onComplete: (insight) async {
-                final uid = ref.read(authStateProvider).valueOrNull?.uid;
-                if (uid != null) {
-                  final moduleId = modules[_currentModuleIndex].id;
-                  await ref.read(firestoreServiceProvider).updateUserField(uid, {
-                    'deepDive.$moduleId.insight': insight,
-                    'deepDive.$moduleId.completedAt': DateTime.now().toIso8601String(),
-                  });
-                }
+                final moduleId = modules[_currentModuleIndex].id;
+                await ref
+                    .read(deepDiveProvider.notifier)
+                    .saveInsight(moduleId, insight);
                 if (mounted) setState(() => _inModule = false);
               },
             );
@@ -305,7 +308,7 @@ class _BlueprintRequiredState extends StatelessWidget {
             ).animate().fadeIn(duration: 400.ms).scale(begin: const Offset(0.8, 0.8)),
             const SizedBox(height: AppSpacing.xl),
             Text(
-              'Complete Your Blueprint First',
+              AppStrings.deepDiveCompleteBlueprint,
               style: AppTextStyles.headlineSmall,
               textAlign: TextAlign.center,
             ).animate().fadeIn(delay: 150.ms),
@@ -446,6 +449,10 @@ class _ModuleScreen extends ConsumerStatefulWidget {
 }
 
 class _ModuleScreenState extends ConsumerState<_ModuleScreen> {
+  static const _chipEntranceEffects = [
+    FadeEffect(delay: Duration(milliseconds: 100)),
+  ];
+
   int _questionIndex = 0;
   final Map<String, String> _answers = {};
   final _textCtrl = TextEditingController();
@@ -499,7 +506,11 @@ class _ModuleScreenState extends ConsumerState<_ModuleScreen> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to generate insight. Please try again.')),
+          const SnackBar(
+            content: Text(AppStrings.deepDiveFailedInsight),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } finally {
@@ -570,39 +581,46 @@ class _ModuleScreenState extends ConsumerState<_ModuleScreen> {
 
               // Option chips
               if (q.options != null) ...[
-                Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.sm,
-                  children: q.options!.map((opt) {
-                    final isSelected = _textCtrl.text == opt;
-                    return GestureDetector(
-                      onTap: () => setState(() => _selectOption(opt)),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.md,
-                          vertical: AppSpacing.sm,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? widget.module.color.withValues(alpha: 0.15)
-                              : AppColors.surfaceElevated,
-                          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                          border: Border.all(
-                            color: isSelected ? widget.module.color : AppColors.border,
-                            width: isSelected ? 1.5 : 1,
+                ListenableBuilder(
+                  listenable: _textCtrl,
+                  builder: (context, _) => Animate(
+                    key: ValueKey(_questionIndex),
+                    effects: _ModuleScreenState._chipEntranceEffects,
+                    child: Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.sm,
+                      children: q.options!.map((opt) {
+                        final isSelected = _textCtrl.text == opt;
+                        return GestureDetector(
+                          onTap: () => _selectOption(opt),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.md,
+                              vertical: AppSpacing.sm,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? widget.module.color.withValues(alpha: 0.15)
+                                  : AppColors.surfaceElevated,
+                              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                              border: Border.all(
+                                color: isSelected ? widget.module.color : AppColors.border,
+                                width: isSelected ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Text(
+                              opt,
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: isSelected ? widget.module.color : AppColors.textPrimary,
+                              ),
+                            ),
                           ),
-                        ),
-                        child: Text(
-                          opt,
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: isSelected ? widget.module.color : AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ).animate(key: ValueKey(_questionIndex)).fadeIn(delay: 100.ms),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.lg),
                 Text(
                   'Or add your own:',
@@ -666,7 +684,7 @@ class _ModuleScreenState extends ConsumerState<_ModuleScreen> {
           ).animate().scale(duration: 600.ms).then().scale(begin: const Offset(1, 1), end: const Offset(1.05, 1.05), duration: 1000.ms),
           const SizedBox(height: AppSpacing.xl),
           Text(
-            'Generating your insight...',
+            AppStrings.deepDiveGeneratingInsight,
             style: AppTextStyles.headlineSmall,
             textAlign: TextAlign.center,
           ).animate().fadeIn(delay: 200.ms),
@@ -705,7 +723,7 @@ class _ModuleScreenState extends ConsumerState<_ModuleScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Your Insight', style: AppTextStyles.labelMedium.copyWith(color: widget.module.color)),
+                Text(AppStrings.deepDiveInsightLabel, style: AppTextStyles.labelMedium.copyWith(color: widget.module.color)),
                 Text(widget.module.title, style: AppTextStyles.headlineSmall),
               ],
             ),
@@ -720,7 +738,7 @@ class _ModuleScreenState extends ConsumerState<_ModuleScreen> {
         ).animate().fadeIn(delay: 200.ms),
         const SizedBox(height: AppSpacing.xl),
         Text(
-          'Your Answers',
+          AppStrings.deepDiveAnswersLabel,
           style: AppTextStyles.headlineSmall,
         ).animate().fadeIn(delay: 300.ms),
         const SizedBox(height: AppSpacing.md),
@@ -747,7 +765,7 @@ class _ModuleScreenState extends ConsumerState<_ModuleScreen> {
         }),
         const SizedBox(height: AppSpacing.xl),
         AppPrimaryButton(
-          label: 'Save Insight',
+          label: AppStrings.deepDiveSaveInsight,
           onPressed: _isSaving ? null : _save,
           isLoading: _isSaving,
         ).animate().fadeIn(delay: 500.ms),

@@ -30,10 +30,19 @@ class SplashView extends StatelessWidget {
               children: [
                 const _LogoMark(),
                 const SizedBox(height: 28),
-                Text(
-                  AppStrings.appName,
-                  style: AppTextStyles.displayMedium
-                      .copyWith(color: AppColors.textPrimary),
+                Text.rich(
+                  TextSpan(
+                    style: AppTextStyles.displayMedium
+                        .copyWith(color: AppColors.textPrimary),
+                    children: const [
+                      TextSpan(text: AppStrings.appNamePrefix),
+                      TextSpan(
+                        text: AppStrings.appNameAccent,
+                        style: TextStyle(color: AppColors.primary),
+                      ),
+                    ],
+                  ),
+                  textAlign: TextAlign.center,
                 )
                     .animate()
                     .fadeIn(delay: 400.ms, duration: 600.ms)

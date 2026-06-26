@@ -44,7 +44,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       if (!mounted) return;
       final u = ref.read(authStateProvider).valueOrNull;
       if (u == null) {
-        context.go('/login');
+        context.go('/welcome');
         return;
       }
       final profile = ref.read(currentUserProfileProvider).valueOrNull;

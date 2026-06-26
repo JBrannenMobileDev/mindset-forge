@@ -6,9 +6,9 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/constants/affirmation_library.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
-import '../../core/widgets/empty_state.dart';
 import '../../models/affirmation.dart';
 import '../../models/user_profile.dart';
 import '../../providers/affirmations_provider.dart';
@@ -92,52 +92,11 @@ class AffirmationsTab extends ConsumerStatefulWidget {
 }
 
 class _AffirmationsTabState extends ConsumerState<AffirmationsTab> {
-  bool _starterTriggered = false;
-  bool _starterLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeAutoStart());
-  }
-
-  Future<void> _maybeAutoStart() async {
-    if (_starterTriggered) return;
-    final affirmations = ref.read(affirmationsProvider);
-    if (affirmations.isNotEmpty) return;
-    _starterTriggered = true;
-
-    if (!mounted) return;
-    setState(() => _starterLoading = true);
-
-    try {
-      final results = await ref
-          .read(claudeServiceProvider)
-          .generateAffirmations(widget.profile);
-      // Use only first 2 for the starter set
-      final starters = results.take(2).toList();
-      for (final text in starters) {
-        if (!mounted) return;
-        await ref.read(affirmationsProvider.notifier).addAffirmation(
-              Affirmation(
-                id: const Uuid().v4(),
-                text: text,
-                source: 'ai',
-                createdAt: DateTime.now(),
-              ),
-            );
-      }
-    } catch (_) {
-      // Silent failure — user can generate manually
-    }
-
-    if (mounted) setState(() => _starterLoading = false);
-  }
-
   @override
   Widget build(BuildContext context) {
     final affirmations = ref.watch(affirmationsProvider);
     final active = affirmations.where((a) => a.isActive).toList();
+    final isEmpty = affirmations.isEmpty;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -186,73 +145,62 @@ class _AffirmationsTabState extends ConsumerState<AffirmationsTab> {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.screenPaddingH,
-              vertical: AppSpacing.md,
+          if (!isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.screenPaddingH,
+                vertical: AppSpacing.md,
+              ),
+              child: Row(
+                children: [
+                  AppTextButton(
+                    label: AppStrings.addAffirmation,
+                    onPressed: () => _showAddModal(context, ref),
+                  ),
+                  const Spacer(),
+                  AppTextButton(
+                    label: AppStrings.browseLibrary,
+                    onPressed: () => _showLibraryModal(context, ref),
+                  ),
+                  const Spacer(),
+                  AppTextButton(
+                    label: AppStrings.generateAffirmations,
+                    onPressed: () => _showGenerateModal(context, ref),
+                  ),
+                ],
+              ),
             ),
-            child: Row(
-              children: [
-                AppTextButton(
-                  label: AppStrings.addAffirmation,
-                  onPressed: () => _showAddModal(context, ref),
-                ),
-                const Spacer(),
-                AppTextButton(
-                  label: AppStrings.generateAffirmations,
-                  onPressed: () => _showGenerateModal(context, ref),
-                ),
-              ],
-            ),
-          ),
           Expanded(
-            child: _starterLoading
-                ? const Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(color: AppColors.primary),
-                        SizedBox(height: AppSpacing.md),
-                        Text(
-                          'Creating your personalized affirmations…',
-                          style: TextStyle(color: AppColors.textSecondary),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
+            child: isEmpty
+                ? _AffirmationsEmptyState(
+                    onBrowse: () => _showLibraryModal(context, ref),
+                    onGenerate: () => _showGenerateModal(context, ref),
+                    onWrite: () => _showAddModal(context, ref),
                   )
-                : affirmations.isEmpty
-                    ? EmptyState(
-                        icon: Icons.format_quote_rounded,
-                        title: AppStrings.noAffirmations,
-                        subtitle: AppStrings.noAffirmationsSubtitle,
-                        ctaLabel: AppStrings.generateAffirmations,
-                        onCta: () => _showGenerateModal(context, ref),
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.screenPaddingH,
-                          0,
-                          AppSpacing.screenPaddingH,
-                          100,
-                        ),
-                        itemCount: affirmations.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: AppSpacing.md),
-                        itemBuilder: (_, i) => _AffirmationTile(
-                          affirmation: affirmations[i],
-                          onToggle: () => ref
-                              .read(affirmationsProvider.notifier)
-                              .toggleActive(affirmations[i].id),
-                          onDelete: () => ref
-                              .read(affirmationsProvider.notifier)
-                              .deleteAffirmation(affirmations[i].id),
-                        )
-                            .animate()
-                            .fadeIn(
-                                delay: Duration(milliseconds: i * 50),
-                                duration: 300.ms),
-                      ),
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.screenPaddingH,
+                      0,
+                      AppSpacing.screenPaddingH,
+                      100,
+                    ),
+                    itemCount: affirmations.length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: AppSpacing.md),
+                    itemBuilder: (_, i) => _AffirmationTile(
+                      affirmation: affirmations[i],
+                      onToggle: () => ref
+                          .read(affirmationsProvider.notifier)
+                          .toggleActive(affirmations[i].id),
+                      onDelete: () => ref
+                          .read(affirmationsProvider.notifier)
+                          .deleteAffirmation(affirmations[i].id),
+                    )
+                        .animate()
+                        .fadeIn(
+                            delay: Duration(milliseconds: i * 50),
+                            duration: 300.ms),
+                  ),
           ),
         ],
       ),
@@ -275,6 +223,23 @@ class _AffirmationsTabState extends ConsumerState<AffirmationsTab> {
       builder: (_) => ProviderScope(
         parent: ProviderScope.containerOf(context),
         child: _GenerateAffirmationsSheet(profile: widget.profile),
+      ),
+    );
+  }
+
+  void _showLibraryModal(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppSpacing.radiusXl)),
+      ),
+      builder: (_) => ProviderScope(
+        parent: ProviderScope.containerOf(context),
+        child: const _LibraryBrowseSheet(),
       ),
     );
   }
@@ -430,8 +395,7 @@ class _AddAffirmationModalState extends ConsumerState<_AddAffirmationModal> {
                 cursorColor: AppColors.primary,
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
-                  hintText:
-                      'I am confident and capable of achieving my goals',
+                  hintText: AppStrings.affirmationFieldHint,
                   filled: true,
                   fillColor: AppColors.surfaceElevated,
                   counterText: '$charCount / 500',
@@ -550,57 +514,120 @@ class _AffirmationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isActive = affirmation.isActive;
+    final showCategory = affirmation.category != 'general';
+
     return AppCard(
-      child: Row(
-        children: [
-          Container(
-            width: 4,
-            height: 40,
-            decoration: BoxDecoration(
-              color: affirmation.isActive
-                  ? AppColors.primary
-                  : AppColors.border,
-              borderRadius: BorderRadius.circular(2),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Full-height accent bar — encodes active/paused state.
+            Container(
+              width: 4,
+              decoration: BoxDecoration(
+                color: isActive ? AppColors.primary : AppColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  affirmation.text,
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: affirmation.isActive
-                        ? AppColors.textPrimary
-                        : AppColors.textMuted,
-                    fontStyle: affirmation.isActive
-                        ? FontStyle.italic
-                        : FontStyle.normal,
-                  ),
-                ),
-                if (affirmation.category != 'general') ...[
-                  const SizedBox(height: 4),
+            const SizedBox(width: AppSpacing.md),
+            // Text-forward content: statement on top, metadata footer below.
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    affirmation.category[0].toUpperCase() +
-                        affirmation.category.substring(1),
-                    style: AppTextStyles.bodySmall
-                        .copyWith(color: AppColors.primary),
+                    affirmation.text,
+                    style: AppTextStyles.bodyLarge.copyWith(
+                      height: 1.5,
+                      color:
+                          isActive ? AppColors.textPrimary : AppColors.textMuted,
+                      fontStyle:
+                          isActive ? FontStyle.italic : FontStyle.normal,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Row(
+                    children: [
+                      if (showCategory)
+                        _CategoryChip(category: affirmation.category)
+                      else
+                        const SizedBox.shrink(),
+                      const Spacer(),
+                      Transform.scale(
+                        scale: 0.8,
+                        child: Switch(
+                          value: isActive,
+                          onChanged: (_) => onToggle(),
+                          activeThumbColor: AppColors.primary,
+                          activeTrackColor:
+                              AppColors.primary.withValues(alpha: 0.4),
+                          inactiveThumbColor: AppColors.textMuted,
+                          inactiveTrackColor: AppColors.surfaceHighest,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                      PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_horiz_rounded,
+                            color: AppColors.textMuted, size: 20),
+                        color: AppColors.surfaceElevated,
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppSpacing.radiusMd),
+                          side: const BorderSide(color: AppColors.border),
+                        ),
+                        onSelected: (v) {
+                          if (v == 'delete') onDelete();
+                        },
+                        itemBuilder: (_) => [
+                          PopupMenuItem<String>(
+                            value: 'delete',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.delete_outline_rounded,
+                                    color: AppColors.error, size: 18),
+                                const SizedBox(width: AppSpacing.sm),
+                                Text(AppStrings.delete,
+                                    style: AppTextStyles.bodyMedium
+                                        .copyWith(color: AppColors.error)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ],
-              ],
+              ),
             ),
-          ),
-          Switch(
-            value: affirmation.isActive,
-            onChanged: (_) => onToggle(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline_rounded,
-                color: AppColors.textMuted, size: 20),
-            onPressed: onDelete,
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Category chip ────────────────────────────────────────────────────────────
+
+class _CategoryChip extends StatelessWidget {
+  final String category;
+
+  const _CategoryChip({required this.category});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = category[0].toUpperCase() + category.substring(1);
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm + 2, vertical: AppSpacing.xs),
+      decoration: BoxDecoration(
+        color: AppColors.primaryContainer,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+      ),
+      child: Text(
+        label,
+        style: AppTextStyles.labelSmall.copyWith(color: AppColors.primary),
       ),
     );
   }
@@ -1133,6 +1160,227 @@ class _GenerateAffirmationsSheetState
               );
             }),
           const SizedBox(height: AppSpacing.xl),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Empty state (first-run: Browse / Generate / Write) ───────────────────────
+
+class _AffirmationsEmptyState extends StatelessWidget {
+  final VoidCallback onBrowse;
+  final VoidCallback onGenerate;
+  final VoidCallback onWrite;
+
+  const _AffirmationsEmptyState({
+    required this.onBrowse,
+    required this.onGenerate,
+    required this.onWrite,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: const BoxDecoration(
+              color: AppColors.primaryContainer,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.format_quote_rounded,
+                color: AppColors.primary, size: 36),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Text(
+            AppStrings.noAffirmations,
+            style: AppTextStyles.headlineSmall,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            AppStrings.noAffirmationsSubtitle,
+            style: AppTextStyles.bodyMedium
+                .copyWith(color: AppColors.textSecondary),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          AppPrimaryButton(
+            label: AppStrings.browseLibrary,
+            onPressed: onBrowse,
+            width: 240,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          AppSecondaryButton(
+            label: AppStrings.generateForMe,
+            onPressed: onGenerate,
+            width: 240,
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          AppTextButton(
+            label: AppStrings.writeMyOwn,
+            onPressed: onWrite,
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 400.ms);
+  }
+}
+
+// ─── Browsable library sheet (curated, tap-to-add by category) ────────────────
+
+class _LibraryBrowseSheet extends ConsumerStatefulWidget {
+  const _LibraryBrowseSheet();
+
+  @override
+  ConsumerState<_LibraryBrowseSheet> createState() =>
+      _LibraryBrowseSheetState();
+}
+
+class _LibraryBrowseSheetState extends ConsumerState<_LibraryBrowseSheet> {
+  String _category = 'general';
+
+  void _add(String text) {
+    ref.read(affirmationsProvider.notifier).addAffirmation(
+          Affirmation(
+            id: const Uuid().v4(),
+            text: text,
+            source: 'library',
+            category: _category,
+            createdAt: DateTime.now(),
+          ),
+        );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Dedupe against what the user already has (case-insensitive).
+    final existing = ref
+        .watch(affirmationsProvider)
+        .map((a) => a.text.trim().toLowerCase())
+        .toSet();
+    final items = kAffirmationLibrary[_category] ?? const [];
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.75,
+      maxChildSize: 0.95,
+      minChildSize: 0.5,
+      expand: false,
+      builder: (_, scrollCtrl) => Column(
+        children: [
+          const SizedBox(height: AppSpacing.md),
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl, AppSpacing.lg, AppSpacing.md, AppSpacing.sm),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(AppStrings.affirmationLibraryTitle,
+                      style: AppTextStyles.headlineMedium),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+          // Category selector
+          SizedBox(
+            height: 36,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+              itemCount: kAffirmationCategories.length,
+              separatorBuilder: (_, __) =>
+                  const SizedBox(width: AppSpacing.sm),
+              itemBuilder: (_, i) {
+                final c = kAffirmationCategories[i];
+                final selected = c == _category;
+                return GestureDetector(
+                  onTap: () => setState(() => _category = c),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? AppColors.primary.withValues(alpha: 0.15)
+                          : AppColors.surfaceElevated,
+                      borderRadius:
+                          BorderRadius.circular(AppSpacing.radiusFull),
+                      border: Border.all(
+                        color: selected
+                            ? AppColors.primary.withValues(alpha: 0.5)
+                            : AppColors.border,
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      c[0].toUpperCase() + c.substring(1),
+                      style: AppTextStyles.labelSmall.copyWith(
+                        color: selected
+                            ? AppColors.primary
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Expanded(
+            child: ListView.separated(
+              controller: scrollCtrl,
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.xxl),
+              itemCount: items.length,
+              separatorBuilder: (_, __) =>
+                  const SizedBox(height: AppSpacing.md),
+              itemBuilder: (_, i) {
+                final text = items[i];
+                final added = existing.contains(text.trim().toLowerCase());
+                return AppCard(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          text,
+                          style: AppTextStyles.bodyMedium
+                              .copyWith(fontStyle: FontStyle.italic),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      added
+                          ? const Icon(Icons.check_circle_rounded,
+                              color: AppColors.success)
+                          : IconButton(
+                              icon: const Icon(Icons.add_circle_rounded,
+                                  color: AppColors.primary),
+                              onPressed: () => _add(text),
+                            ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
         ],
       ),
     );

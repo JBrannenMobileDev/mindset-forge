@@ -245,12 +245,13 @@ class _TodayStatus extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Today\'s Practice', style: AppTextStyles.labelLarge),
+                Text(AppStrings.futureSelfTodayTitle,
+                    style: AppTextStyles.labelLarge),
                 const SizedBox(height: 2),
                 Text(
                   completed
-                      ? 'Completed, nicely done.'
-                      : 'Not completed yet.',
+                      ? AppStrings.futureSelfCompletedStatus
+                      : AppStrings.futureSelfNotCompletedStatus,
                   style: AppTextStyles.bodySmall
                       .copyWith(color: AppColors.textSecondary),
                 ),
@@ -280,15 +281,17 @@ class _PracticeSummary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Your Practice',
+          Text(AppStrings.futureSelfPracticeSection,
               style: AppTextStyles.headlineSmall
                   .copyWith(color: AppColors.futureSelfAccent)),
           const SizedBox(height: AppSpacing.md),
-          _row('Future Timeline', '${setup.futureTimeline} from now'),
+          _row(AppStrings.futureSelfTimelineLabel,
+              '${setup.futureTimeline} from now'),
           if (setup.identityAnchor.isNotEmpty)
-            _row('Identity', 'I am someone who ${setup.identityAnchor}'),
+            _row(AppStrings.futureSelfIdentityLabel,
+                'I am someone who ${setup.identityAnchor}'),
           if (setup.emotionalTone.isNotEmpty)
-            _row('Emotional Tone', setup.emotionalTone),
+            _row(AppStrings.futureSelfToneLabel, setup.emotionalTone),
           const SizedBox(height: AppSpacing.sm),
           Text(AppStrings.futureSelfRefineNote,
               style: AppTextStyles.bodySmall

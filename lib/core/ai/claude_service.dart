@@ -274,19 +274,25 @@ RULES — NEVER BREAK THESE:
     List<ChatMessage> history,
     String userMessage,
   ) async {
-    try {
-      final messages = _buildConversationMessages(history, userMessage);
-      final raw = await completeConversation(
-        systemPrompt: _coachUserContext(profile),
-        messages: messages,
-        maxTokens: 1100,
-      );
-      return CoachReply.parse(raw);
-    } catch (_) {
-      return CoachReply.plain(
-        'I\'m having trouble connecting right now. Give me a moment and try again.',
-      );
+    final messages = _buildConversationMessages(history, userMessage);
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final raw = await completeConversation(
+          systemPrompt: _coachUserContext(profile),
+          messages: messages,
+          maxTokens: 1100,
+        );
+        return CoachReply.parse(raw);
+      } catch (e) {
+        if (attempt < 2) {
+          await Future.delayed(Duration(seconds: attempt + 1));
+          continue;
+        }
+        rethrow;
+      }
     }
+    // Unreachable — the loop always returns or rethrows.
+    throw StateError('generateCoachResponse: unreachable');
   }
 
   Future<String> generateFutureSelfResponse(
@@ -294,19 +300,26 @@ RULES — NEVER BREAK THESE:
     List<ChatMessage> history,
     String userMessage,
   ) async {
-    try {
-      final messages = [
-        ...history.take(20).map((m) => m.toApiFormat()),
-        {'role': 'user', 'content': userMessage},
-      ];
-      return await completeWithHistory(
-        systemPrompt: _futureSelfSystemPrompt(profile),
-        messages: messages,
-        maxTokens: 400,
-      );
-    } catch (_) {
-      return 'I remember this moment. Trust the path you\'re on, it leads somewhere extraordinary.';
+    final messages = [
+      ...history.take(20).map((m) => m.toApiFormat()),
+      {'role': 'user', 'content': userMessage},
+    ];
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await completeWithHistory(
+          systemPrompt: _futureSelfSystemPrompt(profile),
+          messages: messages,
+          maxTokens: 400,
+        );
+      } catch (e) {
+        if (attempt < 2) {
+          await Future.delayed(Duration(seconds: attempt + 1));
+          continue;
+        }
+        rethrow;
+      }
     }
+    throw StateError('generateFutureSelfResponse: unreachable');
   }
 
   Future<String> generateJournalPrompt(
@@ -402,6 +415,8 @@ RULES — NEVER BREAK THESE:
       final response = await complete(
         systemPrompt:
             'You suggest 4 short, powerful affirmations (8–15 words each) for a mindset app. '
+            'Each MUST be a present-tense identity statement that begins with "I am" '
+            '(use "I have" or "I do" only when far more natural). '
             'Return ONLY a JSON array of 4 strings. No other text.',
         userPrompt:
             '${UserContextBuilder.coreBlock(profile)}\n\n'
@@ -429,7 +444,8 @@ RULES — NEVER BREAK THESE:
         systemPrompt:
             'You generate 5 powerful, personal affirmations for a mindset coaching app. '
             'Return ONLY a JSON array of 5 strings. No other text. '
-            'Each affirmation should be in first person, present tense, specific to this user. '
+            'Each affirmation MUST be a present-tense identity statement that begins with "I am" '
+            '(use "I have" or "I do" only when far more natural), bold and specific to this user. '
             'Do NOT duplicate any existing affirmations.',
         userPrompt:
             '${UserContextBuilder.coreBlock(profile)}\n\n'
@@ -450,9 +466,9 @@ RULES — NEVER BREAK THESE:
       return [
         'I am becoming the best version of myself every day.',
         'I have everything I need to achieve my goals.',
-        'I embrace challenges as opportunities to grow.',
+        'I am someone who embraces challenges as opportunities to grow.',
         'I am worthy of success and abundance.',
-        'I take consistent action toward my dreams.',
+        'I am taking consistent action toward my dreams.',
       ];
     }
   }
@@ -733,8 +749,9 @@ ${setup.amplifiers.isNotEmpty ? 'Character Traits (weave in naturally, do not st
     try {
       final response = await complete(
         systemPrompt:
-            'You write ONE powerful first-person, present-tense affirmation that '
+            'You write ONE powerful present-tense "I am" affirmation that '
             'embodies someone already living a specific goal. '
+            'It MUST begin with "I am" (use "I have" or "I do" only when far more natural). '
             'Return ONLY the affirmation text — no quotes, no preamble.',
         userPrompt:
             'Goal: "${goal.title}"'
@@ -791,8 +808,11 @@ ${setup.amplifiers.isNotEmpty ? 'Character Traits (weave in naturally, do not st
       final deepDiveContext = deepDive.isNotEmpty ? '$deepDive\n\n' : '';
       final response = await complete(
         systemPrompt:
-            'You suggest 3 powerful identity-based habits. Return ONLY a JSON array of 3 objects '
-            'with keys: name (string), trigger (string), identityReinforces (string). No other text.',
+            'You suggest 3 powerful identity-based habits. '
+            'Respond with ONLY a raw JSON array — no markdown, no code fences, no explanation. '
+            'Each element is an object with exactly three string keys: '
+            '"name" (the habit name), "trigger" (the cue/when), "identityReinforces" (an "I am" statement). '
+            'Example: [{"name":"...","trigger":"...","identityReinforces":"I am..."}]',
         userPrompt:
             '${UserContextBuilder.coreBlock(profile)}\n\n'
             '${UserContextBuilder.goalsBlock(profile)}\n\n'
@@ -800,18 +820,44 @@ ${setup.amplifiers.isNotEmpty ? 'Character Traits (weave in naturally, do not st
             '$deepDiveContext'
             'Suggest 3 habits that are NOT already in the existing habits list above. '
             'Each habit should reinforce the user\'s identity and support their active goals.',
-        maxTokens: 300,
+        maxTokens: 500,
       );
-      final jsonStr = response.contains('[')
-          ? response.substring(
-              response.indexOf('['), response.lastIndexOf(']') + 1)
-          : response;
+
+      // Extract the JSON array, tolerating any surrounding text / code fences.
+      String jsonStr = response.trim();
+      final startIdx = jsonStr.indexOf('[');
+      // Find the matching closing bracket by walking forward from the opener.
+      int depth = 0;
+      int endIdx = -1;
+      for (int i = startIdx; i < jsonStr.length; i++) {
+        if (jsonStr[i] == '[') depth++;
+        if (jsonStr[i] == ']') {
+          depth--;
+          if (depth == 0) {
+            endIdx = i;
+            break;
+          }
+        }
+      }
+      if (startIdx == -1 || endIdx == -1) {
+        throw FormatException('No JSON array found in response: $jsonStr');
+      }
+      jsonStr = jsonStr.substring(startIdx, endIdx + 1);
+
       final list = jsonDecode(jsonStr) as List<dynamic>;
-      return list
-          .map((e) => Map<String, String>.from(e as Map<String, dynamic>))
-          .toList();
-    } catch (_) {
-      return [];
+      return list.map((e) {
+        final map = e as Map<String, dynamic>;
+        return {
+          'name': (map['name'] ?? '').toString(),
+          'trigger': (map['trigger'] ?? '').toString(),
+          'identityReinforces': (map['identityReinforces'] ?? '').toString(),
+        };
+      }).toList();
+    } catch (e) {
+      // Re-throw so callers can surface a proper error + retry UI rather than
+      // silently returning an empty list that looks like a successful response.
+      debugPrint('ClaudeService.generateHabitSuggestions failed: $e');
+      rethrow;
     }
   }
 
@@ -835,7 +881,7 @@ ${setup.amplifiers.isNotEmpty ? 'Character Traits (weave in naturally, do not st
             '${UserContextBuilder.beliefHistoryBlock(profile)}\n\n'
             'Deep dive module: $moduleName\n'
             'Session responses:\n$responseText',
-        maxTokens: 400,
+        maxTokens: 700,
       );
     } catch (_) {
       return 'Your responses reveal important patterns worth exploring. Take a moment to reflect on what these answers say about where you are and where you\'re headed.';
@@ -923,6 +969,95 @@ ${setup.amplifiers.isNotEmpty ? 'Character Traits (weave in naturally, do not st
           'I want to talk through a goal.',
           'A fear is holding me back.',
           'Help me reset my focus.',
+        ],
+      };
+    }
+  }
+
+  /// Returns a Future Self greeting in the "remembering" voice + 4 tappable
+  /// questions the user can ask their future self.
+  /// Result: { 'opener': String, 'prompts': List<String> }
+  Future<Map<String, dynamic>> generateFutureSelfOpener(
+    UserProfile profile,
+  ) async {
+    final setup = profile.futureSelfSetup;
+    if (setup == null) {
+      return {
+        'opener':
+            'I remember being right where you are now. Ask me anything — I\'ve already lived it.',
+        'prompts': const [
+          'What did it take to get here?',
+          'What should I let go of?',
+          'Was the fear worth listening to?',
+          'Describe a normal day for you.',
+        ],
+      };
+    }
+
+    final achievedTitles = [
+      ...profile.goals
+          .where((g) => setup.achievedGoalIds.contains(g.id))
+          .map((g) => g.title),
+      ...setup.customGoals,
+    ];
+    final achieved =
+        achievedTitles.isEmpty ? '(none specified)' : achievedTitles.join(', ');
+
+    // Randomized opening style + salt so the greeting feels different each time
+    // instead of repeating the same line.
+    final rng = Random();
+    const styles = [
+      'Open like you are picking up a conversation you both already know the end of.',
+      'Open by remembering a specific feeling from this exact point in their life.',
+      'Open with quiet certainty about where this moment leads.',
+      'Open by naming something ordinary about your life now that would amaze them today.',
+      'Open like you have been waiting for them to ask.',
+    ];
+    final style = styles[rng.nextInt(styles.length)];
+    final salt = rng.nextInt(100000);
+
+    try {
+      final response = await complete(
+        systemPrompt:
+            'You ARE ${profile.displayName}\'s future self, ${setup.futureTimeline} from now. '
+            'You are not a coach and you do not give advice — you REMEMBER. '
+            'Speak in the past tense about their present, with warmth and certainty, never hope. '
+            'You became someone who ${setup.identityAnchor}. '
+            '$style Do not mention this instruction or the variation id. '
+            'Return ONLY valid JSON with keys: "opener" (1-2 warm, specific sentences welcoming them, '
+            'in your remembering voice) and "prompts" (array of exactly 4 short questions the USER could '
+            'tap to ask YOU, their future self, each phrased in first person from the user\'s point of view, '
+            '10 words or fewer). No other text.',
+        userPrompt:
+            'Who you became: ${setup.identityAnchor}\n'
+            'Timeline: ${setup.futureTimeline} from now\n'
+            'How you spend your time: ${setup.workPurpose}\n'
+            'Your daily life: ${setup.dailySnapshot}\n'
+            'What you achieved (now ordinary): $achieved\n'
+            'How you operate: ${setup.emotionalTone}\n\n'
+            '(variation: $salt)',
+        maxTokens: 350,
+      );
+      final jsonStr = response.contains('{')
+          ? response.substring(
+              response.indexOf('{'), response.lastIndexOf('}') + 1)
+          : response;
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      return {
+        'opener': data['opener'] as String? ?? '',
+        'prompts': (data['prompts'] as List<dynamic>? ?? [])
+            .map((e) => e as String)
+            .toList(),
+      };
+    } catch (_) {
+      return {
+        'opener':
+            'I remember being right where you are now. Ask me anything — I\'ve already lived it.',
+        'prompts': const [
+          'What did it take to get here?',
+          'What should I let go of?',
+          'Was the fear worth listening to?',
+          'Describe a normal day for you.',
         ],
       };
     }

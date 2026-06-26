@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
+import '../../core/constants/affirmation_library.dart';
+import '../../models/affirmation.dart';
 import '../../models/mindset_blueprint.dart';
 import '../../models/goal.dart';
 import '../../models/user_profile.dart';
+import '../../providers/analytics_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/notification_provider.dart';
 import '../../providers/invite_prompt_provider.dart';
@@ -71,6 +75,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Future<void> _goToStep(int step) async {
+    // Track the step the user is leaving (i.e. the step they just completed).
+    if (step > _currentStep) {
+      ref
+          .read(analyticsServiceProvider)
+          .trackOnboardingStepCompleted(_currentStep);
+    }
     try {
       await _saveStep(step);
     } catch (_) {
@@ -120,10 +130,24 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       goals: _goals,
       fearsDrift: _fearsDrift,
       mindsetBlueprintSummary: _mindsetBlueprintSummary,
+      // Land new users with a ready starter deck so the affirmations practice is
+      // never empty. Derived from curated content (no network call) so onboarding
+      // stays instant. Preserve any affirmations a returning user already has.
+      affirmations:
+          base.affirmations.isEmpty ? _buildStarterAffirmations() : base.affirmations,
     );
 
     await ref.read(firestoreServiceProvider).updateUserProfile(updated);
     if (!mounted) return;
+
+    // Track the final AI Summary step completion and the overall event.
+    ref
+        .read(analyticsServiceProvider)
+        .trackOnboardingStepCompleted(_kStepAiAnalysis);
+    ref.read(analyticsServiceProvider).trackOnboardingCompleted(
+          goalsCount: _goals.length,
+          hasIdentityStatement: _identityStatement.isNotEmpty,
+        );
 
     await _askForNotifications();
     if (!mounted) return;
@@ -132,6 +156,26 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         .read(invitePromptProvider)
         .maybeShow(context, InviteTrigger.onboarding);
     if (mounted) context.go('/dashboard');
+  }
+
+  /// Builds a small curated starter deck from the focus areas the user already
+  /// shared (goal categories + identity qualities), mapped onto affirmation
+  /// categories. Curated, not AI-generated, so it is instant and never fails.
+  List<Affirmation> _buildStarterAffirmations() {
+    final focus = <String>[
+      ..._goals.map((g) => g.category),
+      ..._identityQualities,
+    ];
+    final now = DateTime.now();
+    return affirmationStarterSet(focusCategories: focus, count: 5)
+        .map((e) => Affirmation(
+              id: const Uuid().v4(),
+              text: e.text,
+              source: 'starter',
+              category: e.category,
+              createdAt: now,
+            ))
+        .toList();
   }
 
   Future<void> _askForNotifications() async {
