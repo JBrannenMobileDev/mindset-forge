@@ -453,8 +453,13 @@ export const callClaudeConversation = onCall(
  * Configure in RevenueCat dashboard: Webhook URL → this function's URL.
  * Set Authorization header to a secret shared with RevenueCat.
  */
+// `invoker: 'public'` is required: RevenueCat authenticates with a shared
+// secret in the Authorization header, not a Google IAM token. Without public
+// invoker, Cloud Run rejects every webhook at the IAM layer (403/401) before
+// our handler runs. Public ingress is safe here because the handler enforces
+// the REVENUECAT_WEBHOOK_SECRET check below.
 export const revenueCatWebhook = onRequest(
-  { secrets: [revenueCatWebhookSecret] },
+  { secrets: [revenueCatWebhookSecret], invoker: 'public' },
   async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
