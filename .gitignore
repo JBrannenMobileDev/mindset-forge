@@ -53,3 +53,6 @@ GoogleService-Info.plist
 node_modules/
 functions/node_modules/
 functions/lib/
+
+# Firebase Hosting deploy cache (regenerated on each deploy)
+.firebase/
