@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/splash_screen.dart';
+import '../../features/auth/welcome_screen.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/auth/signup_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
@@ -59,7 +60,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       final profile = profileAsync.valueOrNull;
 
       final location = state.matchedLocation;
-      final isOnAuthPath = location == '/login' ||
+      final isOnAuthPath = location == '/welcome' ||
+          location == '/login' ||
           location == '/signup' ||
           location == '/splash';
       // Legal pages are reachable pre-auth (linked from the signup screen).
@@ -76,10 +78,15 @@ final routerProvider = Provider<GoRouter>((ref) {
           return '/signup';
         }
         if (isOnAuthPath || isPublicInfoPath) return null;
-        return '/login';
+        return '/welcome';
       }
 
       if (location == '/splash') return null;
+
+      // The partner-invite accept screen must always be reachable for a signed-in
+      // user, regardless of onboarding or subscription state — otherwise the gates
+      // below bounce an invited friend to onboarding/pricing/dashboard.
+      if (location.startsWith('/partner-invite/')) return null;
 
       // Resume a pending partner invite once the user has an account. This
       // takes priority over the onboarding gate so invited partners skip
@@ -128,6 +135,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/splash',
         builder: (_, __) => const SplashScreen(),
+      ),
+      GoRoute(
+        path: '/welcome',
+        // No page transition so the welcome screen appears in place over the
+        // splash (the shared brand block stays put); only its CTAs animate in.
+        pageBuilder: (_, __) => const NoTransitionPage(child: WelcomeScreen()),
       ),
       GoRoute(
         path: '/login',
