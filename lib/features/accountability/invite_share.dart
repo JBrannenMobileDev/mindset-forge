@@ -38,7 +38,8 @@ Future<bool> shareInvite(
 
     _showSnack(context, AppStrings.inviteCreatedSuccess);
     return true;
-  } catch (_) {
+  } catch (e) {
+    debugPrint('shareInvite: failed to create partner invite: $e');
     if (!context.mounted) return false;
     _showSnack(context, AppStrings.inviteCreateError, isError: true);
     return false;

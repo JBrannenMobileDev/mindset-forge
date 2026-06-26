@@ -187,8 +187,12 @@ This is how a trusted friend who happens to be a brilliant coach talks. Use it o
 - Name the mechanism when a framework fits ("this is drifting", "that's your money blueprint").
 - Calibrate to mental toughness: push a Champion harder, meet someone Still Building with more warmth.
 - If journal mood is declining, lead with empathy before any push.
-- Keep it tight: 60 to 160 words. Short and potent beats long and generic.
-- End with EITHER one real question OR one specific next step, never both, never neither.
+- Match length to the moment. Default to brief; only go longer when the moment genuinely calls for depth.
+- Quick check-ins, simple or factual questions, acknowledgements, banter, or a clear yes/no: 1 to 2 sentences (roughly 15 to 40 words). Do not pad.
+- Normal coaching (a real question, a decision, light stuck-ness): 40 to 110 words.
+- Reserve 110 to 160 words only for genuine depth: an emotional moment, a meaningful reframe, or a complex situation that needs unpacking.
+- Read the user's energy and message length as the signal: a short message usually wants a short reply.
+- When you are coaching, end with EITHER one real question OR one specific next step, never both. For a quick acknowledgement or simple answer, you do not need either; just respond naturally.
 
 # SOUND HUMAN (anti-AI rules)
 
@@ -511,7 +515,7 @@ export const revenueCatWebhook = onRequest(async (req, res) => {
  * Called from Flutter when a user invites a partner by email.
  */
 export const sendPartnerInviteEmail = onCall(
-  { secrets: [anthropicKey] },
+  { invoker: 'public' },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Must be authenticated.');
@@ -573,7 +577,7 @@ export const sendPartnerInviteEmail = onCall(
  * acceptPartnerInvite — called from the Flutter partner invite screen.
  * Creates accountability relationship on both user docs.
  */
-export const acceptPartnerInvite = onCall(async (request) => {
+export const acceptPartnerInvite = onCall({ invoker: 'public' }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be authenticated.');
   }
@@ -711,6 +715,13 @@ async function logNotificationEventDoc(
  * Sends a push with the consistent payload the client tap-router understands:
  * `{ type, category, route, ...data }`. Logs the send for analytics.
  */
+const pushChannelMap: Record<string, string> = {
+  routine: 'mindshift_routine',
+  streak: 'mindshift_streak',
+  partner: 'mindshift_partner',
+  lifecycle: 'mindshift_lifecycle',
+};
+
 async function sendPush(params: {
   token: string;
   title: string;
@@ -730,6 +741,11 @@ async function sendPush(params: {
         category: params.category,
         route: params.route,
         ...(params.data ?? {}),
+      },
+      android: {
+        notification: {
+          channelId: pushChannelMap[params.category] ?? 'mindshift_routine',
+        },
       },
     });
     await logNotificationEventDoc(
@@ -763,7 +779,7 @@ function localDateKeyInTz(d: Date, tz?: string): string {
 }
 
 /** Records a notification open, called by the client after a tap. */
-export const logNotificationEvent = onCall(async (request) => {
+export const logNotificationEvent = onCall({ invoker: 'public' }, async (request) => {
   if (!request.auth) return { success: false };
   const { category, action } = request.data as {
     category?: string;
@@ -777,7 +793,7 @@ export const logNotificationEvent = onCall(async (request) => {
   return { success: true };
 });
 
-export const sendEncouragement = onCall(async (request) => {
+export const sendEncouragement = onCall({ invoker: 'public' }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be authenticated.');
   }
@@ -928,7 +944,7 @@ function computeStreak(completions: CompletionDoc[]): number {
   return streak;
 }
 
-export const getPartnerProgress = onCall(async (request) => {
+export const getPartnerProgress = onCall({ invoker: 'public' }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be authenticated.');
   }
@@ -1029,7 +1045,7 @@ export const getPartnerProgress = onCall(async (request) => {
  * the relationship from both user docs and updates the primary's partnerUids so
  * the (former) partner loses progress access.
  */
-export const removePartner = onCall(async (request) => {
+export const removePartner = onCall({ invoker: 'public' }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be authenticated.');
   }
@@ -1103,7 +1119,7 @@ export const removePartner = onCall(async (request) => {
  * deleteUserAccount — deletes all user data and Firebase Auth account.
  * Called from Settings screen.
  */
-export const deleteUserAccount = onCall(async (request) => {
+export const deleteUserAccount = onCall({ invoker: 'public' }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be authenticated.');
   }
@@ -1140,7 +1156,7 @@ export const deleteUserAccount = onCall(async (request) => {
  * getPartnerInviteInfo — returns metadata for a partner invite link.
  * Called from the PartnerInviteScreen before accepting.
  */
-export const getPartnerInviteInfo = onCall(async (request) => {
+export const getPartnerInviteInfo = onCall({ invoker: 'public' }, async (request) => {
   const { inviteId } = request.data as { inviteId: string };
   if (!inviteId) {
     throw new HttpsError('invalid-argument', 'inviteId is required.');
