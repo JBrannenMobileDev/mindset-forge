@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -117,9 +118,30 @@ class _InitAppState extends State<_InitApp> {
     try {
       await Purchases.setLogLevel(LogLevel.error);
       await Purchases.configure(PurchasesConfiguration(apiKey));
+      _syncRevenueCatIdentity();
     } catch (e) {
       debugPrint('RevenueCat init error: $e');
     }
+  }
+
+  /// Keep the RevenueCat app user ID in sync with the Firebase UID so that
+  /// server-side webhook events (renewals, cancellations, expirations) map to
+  /// the correct `users/{uid}` document. Without this, RevenueCat uses an
+  /// anonymous ID and the webhook cannot resolve the user. Fires immediately
+  /// for an already-signed-in user on cold start and on every auth change.
+  void _syncRevenueCatIdentity() {
+    FirebaseAuth.instance.authStateChanges().listen((user) async {
+      try {
+        if (user != null) {
+          await Purchases.logIn(user.uid);
+        } else {
+          await Purchases.logOut();
+        }
+      } catch (e) {
+        // logOut throws if the current user is already anonymous — harmless.
+        debugPrint('RevenueCat identity sync error: $e');
+      }
+    });
   }
 
   Future<void> _initLocalNotifications() async {
