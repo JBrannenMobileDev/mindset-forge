@@ -22,10 +22,17 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == request.resource.data.uid;
     }
 
-    // Partner invites — readable by anyone with the invite ID, writable only by Cloud Functions (admin SDK)
+    // Partner invites — fully locked to clients. All reads/writes happen
+    // through Cloud Functions (getPartnerInviteInfo / acceptPartnerInvite)
+    // using the Admin SDK, which bypasses these rules. The client never
+    // touches this collection directly, so deny all direct access.
     match /partner_invites/{inviteId} {
-      allow read: if request.auth != null;
-      allow write: if false;
+      allow read, write: if false;
+    }
+
+    // Viral metrics — written only by Cloud Functions (Admin SDK).
+    match /viral_metrics/{docId} {
+      allow read, write: if false;
     }
   }
 }

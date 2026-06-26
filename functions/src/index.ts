@@ -4,11 +4,26 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onRequest } from 'firebase-functions/v2/https';
 import Anthropic from '@anthropic-ai/sdk';
 import { defineSecret } from 'firebase-functions/params';
+import { timingSafeEqual } from 'crypto';
 
 admin.initializeApp();
 
 const anthropicKey = defineSecret('ANTHROPIC_API_KEY');
+// Shared secret used to authenticate inbound RevenueCat webhook requests.
+// Set the same value as the Authorization header in the RevenueCat dashboard.
+const revenueCatWebhookSecret = defineSecret('REVENUECAT_WEBHOOK_SECRET');
 const db = admin.firestore();
+
+/**
+ * Constant-time string comparison to avoid leaking secrets via timing.
+ * Returns false on any length mismatch.
+ */
+function secretsMatch(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
 
 // Subdomain that hosts the partner-invite universal link + AASA/assetlinks
 // files. Kept separate from the apex domain so the marketing site can own
@@ -438,9 +453,22 @@ export const callClaudeConversation = onCall(
  * Configure in RevenueCat dashboard: Webhook URL → this function's URL.
  * Set Authorization header to a secret shared with RevenueCat.
  */
-export const revenueCatWebhook = onRequest(async (req, res) => {
+export const revenueCatWebhook = onRequest(
+  { secrets: [revenueCatWebhookSecret] },
+  async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
+    return;
+  }
+
+  // Authenticate the caller against the shared secret configured in the
+  // RevenueCat dashboard. Without this, anyone who knows the URL could forge
+  // events and grant themselves a subscription.
+  const expectedAuth = revenueCatWebhookSecret.value();
+  const providedAuth = req.headers.authorization ?? '';
+  if (!expectedAuth || !secretsMatch(providedAuth, expectedAuth)) {
+    console.error('RevenueCat webhook: unauthorized request rejected');
+    res.status(401).send('Unauthorized');
     return;
   }
 
