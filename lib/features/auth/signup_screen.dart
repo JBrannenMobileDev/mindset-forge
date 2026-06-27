@@ -12,6 +12,7 @@ import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_text_field.dart';
 import '../../core/services/pending_invite_store.dart';
 import '../../providers/auth_notifier.dart';
+import 'widgets/auth_scaffold.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
@@ -70,21 +71,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     // accept flow — tailor the copy so it's clear they're joining as a partner.
     final isPartnerInvite = PendingInviteStore.hasPending;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.screenPaddingH,
-              vertical: AppSpacing.screenPaddingV,
-            ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: AppSpacing.maxContentWidth),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: AppSpacing.xl),
+    return AuthScaffold(
+      form: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
                   GestureDetector(
                     onTap: () => context.go('/login'),
                     child: const Icon(
@@ -254,11 +244,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                       ),
                     ],
                   ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
-                ],
-              ),
-            ),
-          ),
-        ),
+        ],
       ),
     );
   }

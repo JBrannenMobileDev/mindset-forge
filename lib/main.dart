@@ -11,6 +11,7 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_text_styles.dart';
+import 'core/firebase/firestore_service.dart';
 import 'core/router/app_router.dart';
 import 'core/services/analytics_service.dart';
 import 'core/services/deep_link_service.dart';
@@ -66,6 +67,11 @@ class _InitAppState extends State<_InitApp> {
   bool _ready = false;
   String? _error;
 
+  // Last subscription status pushed to Firestore from a RevenueCat customer-info
+  // update this session — used to skip redundant writes when the listener fires
+  // repeatedly (e.g. on every app foreground) with an unchanged entitlement.
+  String? _lastSyncedSubStatus;
+
   @override
   void initState() {
     super.initState();
@@ -119,9 +125,44 @@ class _InitAppState extends State<_InitApp> {
       await Purchases.setLogLevel(LogLevel.error);
       await Purchases.configure(PurchasesConfiguration(apiKey));
       _syncRevenueCatIdentity();
+      // Reconcile Firestore whenever RevenueCat's view of the customer changes
+      // (purchase, restore, renewal, app foreground). This self-heals stale
+      // subscription state if a webhook event was missed or delayed.
+      Purchases.addCustomerInfoUpdateListener(_syncEntitlementToFirestore);
     } catch (e) {
       debugPrint('RevenueCat init error: $e');
     }
+  }
+
+  /// Mirrors the live `premium` entitlement onto the user's Firestore
+  /// `subscriptionStatus`. Only heals upward (grants access) — cancellations and
+  /// expirations remain authoritative through the webhook, so a transient read
+  /// here never downgrades a user.
+  Future<void> _syncEntitlementToFirestore(CustomerInfo info) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final entitlement = info.entitlements.all['premium'];
+    if (entitlement == null || !entitlement.isActive) return;
+    final status = _statusForEntitlement(entitlement);
+    if (status == _lastSyncedSubStatus) return;
+    try {
+      await FirestoreService().updateUserField(uid, {
+        'subscriptionStatus': status,
+      });
+      _lastSyncedSubStatus = status;
+    } catch (e) {
+      debugPrint('RevenueCat entitlement sync failed: $e');
+    }
+  }
+
+  /// Maps an active `premium` entitlement to a Firestore subscription status.
+  /// `willRenew == false` on an active entitlement means the user cancelled but
+  /// still has access until expiry, so it maps to 'canceled' (not 'active') to
+  /// stay consistent with the webhook and avoid masking the ending state.
+  static String _statusForEntitlement(EntitlementInfo entitlement) {
+    if (entitlement.periodType == PeriodType.trial) return 'trialing';
+    if (!entitlement.willRenew) return 'canceled';
+    return 'active';
   }
 
   /// Keep the RevenueCat app user ID in sync with the Firebase UID so that

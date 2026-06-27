@@ -5,6 +5,47 @@ abstract final class AppStrings {
   static const String appNameAccent = 'Forge';
   static const String appTagline = 'Rewire your mindset. Forge your future.';
 
+  // Web auth brand hero (wide-screen marketing panel)
+  static const String authEyebrow = 'YOUR DAILY MINDSET COACH';
+  static const String authHeadline = 'Turn what you know into who you are.';
+  static const String authSubheadline =
+      'MindsetForge reprograms the beliefs beneath your decisions, day by day, until the change finally sticks.';
+  static const String authFeature1Title = 'A coach that knows you';
+  static const String authFeature1Body =
+      'AI coaching that learns your goals and the beliefs holding you back, then meets you the moment you are stuck.';
+  static const String authFeature2Title = 'A rhythm that compounds';
+  static const String authFeature2Body =
+      'Start mornings aligned with who you are becoming and close each night reinforcing it.';
+  static const String authFeature3Title = "Today's one move";
+  static const String authFeature3Body =
+      'Watch limiting beliefs lose their grip as goals break down into the single action that matters now.';
+  static const String authFooterNote =
+      'A mindset and growth coach, not therapy or medical care.';
+
+  // Welcome form (landing CTA pane)
+  static const String welcomeFormTitle = 'Begin your transformation';
+  static const String welcomeFormSubtitle =
+      'Create your account and start your 7-day free trial.';
+
+  // App store links — TODO: replace placeholders with the live store URLs.
+  static const String iosAppStoreUrl =
+      'https://apps.apple.com/app/idYOUR_APP_ID';
+  static const String androidPlayStoreUrl =
+      'https://play.google.com/store/apps/details?id=YOUR_PACKAGE_NAME';
+
+  // Download-the-app screen (web account creation is mobile-only)
+  static const String downloadTitle = 'Get the MindsetForge app';
+  static const String downloadSubtitle =
+      'Create your account in the MindsetForge app to get started. Subscriptions are managed in-app, so account setup happens on your phone.';
+  static const String downloadIosCta = 'Download on the App Store';
+  static const String downloadAndroidCta = 'Get it on Google Play';
+
+  // Pricing screen on web (subscriptions are mobile-only)
+  static const String manageSubscriptionWebTitle =
+      'Manage your subscription in the app';
+  static const String manageSubscriptionWebSubtitle =
+      'Subscriptions are purchased and managed in the MindsetForge mobile app. Open the app on your phone to subscribe or change your plan.';
+
   // Auth
   static const String getStarted = 'Get Started';
   static const String login = 'Log In';
@@ -206,6 +247,7 @@ abstract final class AppStrings {
       'Your #1 focus is still open — close it out before you wind down.';
   static const String otherRoutineMorningLink = 'Morning recap';
   static const String otherRoutineEveningLink = 'Evening routine';
+  static const String dailyRoutine = 'Daily Routine';
   static const String groupHabits = 'Habits';
 
   // Goals
@@ -403,6 +445,8 @@ abstract final class AppStrings {
   static const String futureSelfRefineNote =
       'Small refinements are okay. Repetition installs identity.';
   static const String futureSelfComplete = 'Complete Practice';
+  static String futureSelfCompleteSnackBar(String minutes) =>
+      'Practice complete. $minutes minutes with your future self.';
   static const String futureSelfPlayerGuidance =
       'Read slowly. Return to the same scene. Familiarity is the point.';
   static const String futureSelfWhatTitle = 'What is Future Self Practice?';

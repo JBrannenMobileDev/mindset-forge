@@ -16,7 +16,8 @@ import '../../providers/auth_provider.dart';
 import '../../providers/daily_completion_provider.dart';
 import '../../providers/invite_prompt_provider.dart';
 import 'widgets/dashboard_header.dart';
-import 'widgets/daily_wins_tracker.dart';
+import 'widgets/today_hero_card.dart';
+import 'widgets/daily_routine_card.dart';
 import 'widgets/daily_habits_card.dart';
 import 'widgets/progress_overview_card.dart';
 import 'widgets/getting_started_checklist.dart';
@@ -41,7 +42,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   void _onPerfectDay(DailyCompletion? prev, DailyCompletion next) {
     // Only on a genuine in-session false→true transition (mirrors the
-    // confetti logic in DailyWinsTracker), not on initial load.
+    // confetti logic in TodayHeroCard), not on initial load.
     if (prev != null && !prev.isPerfectDay && next.isPerfectDay) {
       _firePrompt(InviteTrigger.perfectDay);
     }
@@ -180,7 +181,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: AppSpacing.screenPaddingH,
                                 ),
-                                child: DailyWinsTracker(profile: profile),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    TodayHeroCard(profile: profile),
+                                    const SizedBox(height: AppSpacing.lg),
+                                    DailyRoutineCard(profile: profile),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
@@ -286,7 +294,9 @@ class _DashboardDesktopBody extends StatelessWidget {
         ],
         const _DesktopSectionLabel(AppStrings.groupToday),
         const SizedBox(height: AppSpacing.md),
-        DailyWinsTracker(profile: profile),
+        TodayHeroCard(profile: profile),
+        const SizedBox(height: AppSpacing.lg),
+        DailyRoutineCard(profile: profile),
         const SizedBox(height: AppSpacing.sectionGap),
         const _DesktopSectionLabel(AppStrings.groupHabits),
         const SizedBox(height: AppSpacing.md),

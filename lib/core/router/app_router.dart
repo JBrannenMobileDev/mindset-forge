@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/splash_screen.dart';
 import '../../features/auth/welcome_screen.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/auth/signup_screen.dart';
+import '../../features/auth/download_app_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import '../../features/pricing/pricing_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
@@ -64,19 +65,28 @@ final routerProvider = Provider<GoRouter>((ref) {
           location == '/login' ||
           location == '/signup' ||
           location == '/splash';
-      // Legal pages are reachable pre-auth (linked from the signup screen).
-      final isPublicInfoPath = location == '/terms' || location == '/privacy';
+      // Legal pages (and the web app-download screen) are reachable pre-auth —
+      // legal is linked from signup, download-app is where web users land when
+      // they try to create an account.
+      final isPublicInfoPath = location == '/terms' ||
+          location == '/privacy' ||
+          location == '/download-app';
 
       if (authAsync.isLoading) return null;
 
       if (user == null) {
-        // Capture an invite opened by a logged-out user, then send them to
-        // sign-up. The accept flow resumes automatically after they sign in.
+        // Capture an invite opened by a logged-out user, then send them on to
+        // create an account. The accept flow resumes automatically after they
+        // sign in. On web, account creation lives in the mobile app, so route
+        // them to the download screen instead of signup.
         if (location.startsWith('/partner-invite/')) {
           final id = location.substring('/partner-invite/'.length);
           PendingInviteStore.set(id);
-          return '/signup';
+          return kIsWeb ? '/download-app' : '/signup';
         }
+        // Web account creation is mobile-only — redirect signup to the app
+        // download screen. Login stays available for existing users.
+        if (kIsWeb && location == '/signup') return '/download-app';
         if (isOnAuthPath || isPublicInfoPath) return null;
         return '/welcome';
       }
@@ -147,6 +157,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/signup',
         builder: (_, __) => const SignupScreen(),
+      ),
+      GoRoute(
+        path: '/download-app',
+        builder: (_, __) => const DownloadAppScreen(),
       ),
       GoRoute(
         path: '/onboarding',

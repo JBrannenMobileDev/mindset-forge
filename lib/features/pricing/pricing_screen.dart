@@ -1,13 +1,19 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/constants/app_text_styles.dart';
+import '../../core/utils/app_date_utils.dart';
 import '../../core/widgets/app_button.dart';
+import '../../core/widgets/store_buttons.dart';
 import '../../providers/analytics_provider.dart';
+import '../../providers/auth_notifier.dart';
 import '../../providers/auth_provider.dart';
 
 class PricingScreen extends ConsumerStatefulWidget {
@@ -30,7 +36,18 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
   @override
   void initState() {
     super.initState();
-    _loadOfferings();
+    // Subscriptions run through RevenueCat, which is only configured on mobile.
+    // On web we skip offering loading entirely and show a "use the app" gate.
+    if (kIsWeb) {
+      _isLoading = false;
+    } else {
+      _loadOfferings();
+      // Self-heal: if RevenueCat reports an active entitlement that Firestore
+      // hasn't caught up to yet (e.g. the webhook lagged after a purchase),
+      // reconcile so this screen flips to the subscribed view instead of the
+      // paywall.
+      _reconcileSubscription();
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref
@@ -67,6 +84,31 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
           _errorMessage = 'Could not load pricing. Please check your connection.';
         });
       }
+    }
+  }
+
+  /// Reads the live entitlement from RevenueCat and upgrades the Firestore
+  /// `subscriptionStatus` if it is behind. Only heals upward (grants access) —
+  /// cancellations and expirations are authoritative through the webhook, so we
+  /// never downgrade here to avoid locking out a user on a transient read.
+  Future<void> _reconcileSubscription() async {
+    if (!await Purchases.isConfigured) return;
+    try {
+      final info = await Purchases.getCustomerInfo();
+      final entitlement = info.entitlements.all['premium'];
+      if (entitlement == null || !entitlement.isActive) return;
+      final liveStatus = entitlement.periodType == PeriodType.trial
+          ? 'trialing'
+          : (entitlement.willRenew ? 'active' : 'canceled');
+      final profile = ref.read(currentUserProfileProvider).valueOrNull;
+      if (profile != null && profile.subscriptionStatus == liveStatus) return;
+      final uid = ref.read(authStateProvider).valueOrNull?.uid;
+      if (uid == null) return;
+      await ref.read(firestoreServiceProvider).updateUserField(uid, {
+        'subscriptionStatus': liveStatus,
+      });
+    } catch (e) {
+      debugPrint('PricingScreen._reconcileSubscription failed: $e');
     }
   }
 
@@ -138,11 +180,11 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
           });
         }
         ref.read(analyticsServiceProvider).trackSubscriptionRestored();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Subscription restored!')),
-          );
-        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Subscription restored!')),
+        );
+        context.go('/dashboard');
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('No active subscription found.')),
@@ -159,11 +201,102 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Web users cannot purchase (RevenueCat is mobile-only) — direct them to
+    // manage their subscription in the app instead of the native paywall.
+    if (kIsWeb) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: _buildWebGate(),
+      );
+    }
+
+    // An already-subscribed user reaching this screen (e.g. via
+    // Settings -> Manage Subscription) should see their subscription status and
+    // store-management options, not the purchase paywall.
+    final profile = ref.watch(currentUserProfileProvider).valueOrNull;
+    if (profile != null && profile.hasActiveSubscription) {
+      return _SubscribedView(
+        status: profile.subscriptionStatus,
+        expiresAt: profile.subscriptionExpiresAt,
+        isBusy: _isPurchasing,
+        onRestore: _isPurchasing ? null : _restorePurchases,
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
           : _buildContent(),
+    );
+  }
+
+  Widget _buildWebGate() {
+    return SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.screenPaddingH,
+            vertical: AppSpacing.screenPaddingV,
+          ),
+          child: ConstrainedBox(
+            constraints:
+                const BoxConstraints(maxWidth: AppSpacing.maxContentWidth),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [AppColors.primary, AppColors.secondary],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: AppColors.primaryGlow,
+                        blurRadius: 24,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.phone_iphone_rounded,
+                    color: Colors.white,
+                    size: 36,
+                  ),
+                ).animate().scale(duration: 400.ms),
+                const SizedBox(height: AppSpacing.lg),
+                Text(
+                  AppStrings.manageSubscriptionWebTitle,
+                  style: AppTextStyles.displaySmall,
+                  textAlign: TextAlign.center,
+                ).animate().fadeIn(delay: 100.ms),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  AppStrings.manageSubscriptionWebSubtitle,
+                  style: AppTextStyles.bodyLarge
+                      .copyWith(color: AppColors.textSecondary),
+                  textAlign: TextAlign.center,
+                ).animate().fadeIn(delay: 200.ms),
+                const SizedBox(height: AppSpacing.xxl),
+                const StoreButtons()
+                    .animate()
+                    .fadeIn(delay: 300.ms, duration: 400.ms),
+                const SizedBox(height: AppSpacing.lg),
+                AppTextButton(
+                  label: AppStrings.logout,
+                  onPressed: () =>
+                      ref.read(authNotifierProvider.notifier).signOut(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -541,6 +674,175 @@ class _ToggleOption extends StatelessWidget {
             textAlign: TextAlign.center,
             style: AppTextStyles.labelMedium.copyWith(
               color: isSelected ? Colors.white : AppColors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown in place of the paywall when the current user already has an active
+/// or trialing subscription. Surfaces their status and links out to the store
+/// for billing/cancellation, plus a restore option.
+class _SubscribedView extends StatelessWidget {
+  final String status;
+  final DateTime? expiresAt;
+  final bool isBusy;
+  final VoidCallback? onRestore;
+
+  const _SubscribedView({
+    required this.status,
+    required this.expiresAt,
+    required this.isBusy,
+    required this.onRestore,
+  });
+
+  bool get _isTrial => status == 'trialing';
+  bool get _isCanceled => status == 'canceled';
+
+  String get _badgeLabel {
+    if (_isCanceled) return 'CANCELED';
+    if (_isTrial) return '✓ TRIAL';
+    return '✓ PREMIUM';
+  }
+
+  Color get _badgeColor => _isCanceled ? AppColors.warning : AppColors.primary;
+
+  String get _headline {
+    if (_isCanceled) return 'Your subscription is ending';
+    if (_isTrial) return 'Your free trial is active';
+    return 'Your subscription is active';
+  }
+
+  String get _subtitle {
+    if (_isCanceled) {
+      return 'Auto-renew is off. You keep full access until your subscription '
+          'expires, then you can resubscribe anytime.';
+    }
+    return 'You have full access to MindShift. Manage billing or cancel '
+        'anytime through your app store account.';
+  }
+
+  /// e.g. "Renews on Jul 4, 2026" or "Access until Jul 4, 2026".
+  String? get _dateLine {
+    final date = expiresAt;
+    if (date == null) return null;
+    final formatted = AppDateUtils.formatDate(date);
+    return _isCanceled ? 'Access until $formatted' : 'Renews on $formatted';
+  }
+
+  bool get _isApple => defaultTargetPlatform == TargetPlatform.iOS;
+
+  String get _manageLabel =>
+      _isApple ? 'Manage in App Store' : 'Manage in Google Play';
+
+  Future<void> _openStore() async {
+    final uri = Uri.parse(
+      _isApple
+          ? 'https://apps.apple.com/account/subscriptions'
+          : 'https://play.google.com/store/account/subscriptions',
+    );
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.background,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/dashboard'),
+        ),
+        title: Text('Subscription', style: AppTextStyles.headlineMedium),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.screenPaddingH,
+            vertical: AppSpacing.screenPaddingV,
+          ),
+          child: ConstrainedBox(
+            constraints:
+                const BoxConstraints(maxWidth: AppSpacing.maxContentWidth),
+            child: Column(
+              children: [
+                const SizedBox(height: AppSpacing.xl),
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [AppColors.primary, AppColors.secondary],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: AppColors.primaryGlow,
+                        blurRadius: 24,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.workspace_premium_rounded,
+                    color: Colors.white,
+                    size: 36,
+                  ),
+                ).animate().scale(duration: 400.ms),
+                const SizedBox(height: AppSpacing.lg),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: _badgeColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+                  ),
+                  child: Text(
+                    _badgeLabel,
+                    style:
+                        AppTextStyles.labelSmall.copyWith(color: _badgeColor),
+                  ),
+                ).animate().fadeIn(delay: 100.ms),
+                const SizedBox(height: AppSpacing.lg),
+                Text(
+                  _headline,
+                  style: AppTextStyles.displaySmall,
+                  textAlign: TextAlign.center,
+                ).animate().fadeIn(delay: 150.ms),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  _subtitle,
+                  style: AppTextStyles.bodyLarge
+                      .copyWith(color: AppColors.textSecondary),
+                  textAlign: TextAlign.center,
+                ).animate().fadeIn(delay: 200.ms),
+                if (_dateLine != null) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    _dateLine!,
+                    style: AppTextStyles.labelLarge
+                        .copyWith(color: AppColors.textPrimary),
+                    textAlign: TextAlign.center,
+                  ).animate().fadeIn(delay: 250.ms),
+                ],
+                const SizedBox(height: AppSpacing.xxl),
+                AppPrimaryButton(
+                  label: _manageLabel,
+                  onPressed: _openStore,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                AppTextButton(
+                  label: 'Restore Purchases',
+                  onPressed: onRestore,
+                ),
+              ],
             ),
           ),
         ),

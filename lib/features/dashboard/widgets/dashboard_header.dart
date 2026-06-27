@@ -7,8 +7,11 @@ import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/utils/app_date_utils.dart';
 import '../../../core/widgets/shimmer_widget.dart';
+import '../../../models/daily_completion.dart';
 import '../../../models/user_profile.dart';
+import '../../../providers/daily_completion_provider.dart';
 import '../../../providers/daily_wisdom_provider.dart';
+import 'daily_wins_shared.dart';
 
 class DashboardHeader extends ConsumerWidget {
   final UserProfile profile;
@@ -22,6 +25,7 @@ class DashboardHeader extends ConsumerWidget {
     });
 
     final wisdomState = ref.watch(dailyWisdomProvider);
+    final completion = ref.watch(dailyCompletionProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -69,7 +73,8 @@ class DashboardHeader extends ConsumerWidget {
         ).animate().fadeIn(duration: 400.ms),
         const SizedBox(height: AppSpacing.sm),
         if (wisdomState.isLoading || wisdomState.wisdom == null)
-          ShimmerBox(width: 200, height: 14, borderRadius: AppSpacing.radiusSm)
+          const ShimmerBox(
+              width: 200, height: 14, borderRadius: AppSpacing.radiusSm)
         else
           Text(
             '"${wisdomState.wisdom!}"',
@@ -78,7 +83,113 @@ class DashboardHeader extends ConsumerWidget {
               color: AppColors.textSecondary,
             ),
           ).animate().fadeIn(duration: 600.ms),
+
+        // ── Zone 3: Momentum strip (streak, best, today's progress) ──────────
+        const SizedBox(height: AppSpacing.md),
+        _MomentumStrip(
+          currentStreak: profile.currentStreak,
+          bestStreak: bestStreak(profile.dailyCompletions),
+          completedCount: completion.completedCount,
+          totalCount: DailyCompletion.totalCount,
+          isPerfect: completion.isPerfectDay,
+        ).animate().fadeIn(delay: 200.ms, duration: 500.ms),
       ],
+    );
+  }
+}
+
+/// Slim, card-less momentum row under the greeting: current streak, best
+/// streak, and today's win progress. Always visible so momentum is felt the
+/// moment the dashboard opens.
+class _MomentumStrip extends StatelessWidget {
+  final int currentStreak;
+  final int bestStreak;
+  final int completedCount;
+  final int totalCount;
+  final bool isPerfect;
+
+  const _MomentumStrip({
+    required this.currentStreak,
+    required this.bestStreak,
+    required this.completedCount,
+    required this.totalCount,
+    required this.isPerfect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _MomentumItem(
+          icon: Icons.local_fire_department_rounded,
+          color: AppColors.warning,
+          value: '$currentStreak',
+          label: currentStreak == 1 ? 'day streak' : 'days streak',
+        ),
+        const _MomentumDivider(),
+        _MomentumItem(
+          icon: Icons.emoji_events_rounded,
+          color: AppColors.secondary,
+          value: '$bestStreak',
+          label: 'best',
+        ),
+        const _MomentumDivider(),
+        _MomentumItem(
+          icon: isPerfect
+              ? Icons.workspace_premium_rounded
+              : Icons.check_circle_outline_rounded,
+          color: isPerfect ? AppColors.primary : AppColors.textSecondary,
+          value: isPerfect ? 'Perfect' : '$completedCount/$totalCount',
+          label: 'today',
+        ),
+      ],
+    );
+  }
+}
+
+class _MomentumItem extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String value;
+  final String label;
+
+  const _MomentumItem({
+    required this.icon,
+    required this.color,
+    required this.value,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 15, color: color),
+        const SizedBox(width: 5),
+        Text(
+          value,
+          style: AppTextStyles.labelLarge.copyWith(color: AppColors.textPrimary),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: AppTextStyles.labelSmall.copyWith(color: AppColors.textMuted),
+        ),
+      ],
+    );
+  }
+}
+
+class _MomentumDivider extends StatelessWidget {
+  const _MomentumDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 14,
+      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      color: AppColors.border,
     );
   }
 }

@@ -4,7 +4,7 @@
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
-    "public": "public",
+    "public": "build/web",
     "appAssociation": "NONE",
     "ignore": ["firebase.json", "**/node_modules/**"],
     "headers": [
@@ -19,6 +19,10 @@
       {
         "source": "/partner-invite/**",
         "destination": "/partner-invite.html"
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
       }
     ]
   },

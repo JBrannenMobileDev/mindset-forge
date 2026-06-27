@@ -22,6 +22,7 @@ class UserProfile {
   final String displayName;
   final String userType;
   final String subscriptionStatus;
+  final DateTime? subscriptionExpiresAt;
   final int onboardingStep;
   final MindsetBlueprint mindsetBlueprint;
   final MindsetBlueprint originalMindsetBaseline;
@@ -94,6 +95,7 @@ class UserProfile {
     required this.displayName,
     this.userType = 'user',
     this.subscriptionStatus = 'free',
+    this.subscriptionExpiresAt,
     this.onboardingStep = 0,
     required this.mindsetBlueprint,
     required this.originalMindsetBaseline,
@@ -150,8 +152,13 @@ class UserProfile {
   bool get isPartnerAccount => userType == 'partner';
 
   /// True when the user has full, paid access (paying subscriber or in trial).
+  // 'canceled' means auto-renew was turned off, not that access has ended —
+  // the user keeps access until the period expires (status flips to 'expired'
+  // via the webhook at that point).
   bool get hasActiveSubscription =>
-      subscriptionStatus == 'active' || subscriptionStatus == 'trialing';
+      subscriptionStatus == 'active' ||
+      subscriptionStatus == 'trialing' ||
+      subscriptionStatus == 'canceled';
 
   /// For a partner account, the name of the primary user they are supporting
   /// (used for social proof in upgrade prompts). Null if not applicable.
@@ -224,6 +231,7 @@ class UserProfile {
     String? displayName,
     String? userType,
     String? subscriptionStatus,
+    DateTime? subscriptionExpiresAt,
     int? onboardingStep,
     MindsetBlueprint? mindsetBlueprint,
     MindsetBlueprint? originalMindsetBaseline,
@@ -277,6 +285,8 @@ class UserProfile {
       displayName: displayName ?? this.displayName,
       userType: userType ?? this.userType,
       subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
+      subscriptionExpiresAt:
+          subscriptionExpiresAt ?? this.subscriptionExpiresAt,
       onboardingStep: onboardingStep ?? this.onboardingStep,
       mindsetBlueprint: mindsetBlueprint ?? this.mindsetBlueprint,
       originalMindsetBaseline:
@@ -355,6 +365,8 @@ class UserProfile {
       displayName: json['displayName'] as String? ?? '',
       userType: json['userType'] as String? ?? 'user',
       subscriptionStatus: json['subscriptionStatus'] as String? ?? 'free',
+      subscriptionExpiresAt:
+          DateTime.tryParse(json['subscriptionExpiresAt'] as String? ?? ''),
       onboardingStep: (json['onboardingStep'] as num?)?.toInt() ?? 0,
       mindsetBlueprint: json['mindsetBlueprint'] != null
           ? MindsetBlueprint.fromJson(
@@ -489,6 +501,7 @@ class UserProfile {
         'displayName': displayName,
         'userType': userType,
         'subscriptionStatus': subscriptionStatus,
+        'subscriptionExpiresAt': subscriptionExpiresAt?.toIso8601String(),
         'onboardingStep': onboardingStep,
         'mindsetBlueprint': mindsetBlueprint.toJson(),
         'originalMindsetBaseline': originalMindsetBaseline.toJson(),

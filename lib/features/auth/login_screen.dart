@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import '../../core/utils/validators.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_text_field.dart';
 import '../../providers/auth_notifier.dart';
+import 'widgets/auth_scaffold.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -45,21 +47,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final isLoading = authState.isLoading;
     final errorMessage = authState.errorMessage;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.screenPaddingH,
-              vertical: AppSpacing.screenPaddingV,
-            ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: AppSpacing.maxContentWidth),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: AppSpacing.xl),
+    return AuthScaffold(
+      form: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
                   _LogoMark()
                       .animate()
                       .fadeIn(duration: 400.ms)
@@ -157,15 +148,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ),
                       AppTextButton(
                         label: AppStrings.signupLink,
-                        onPressed: () => context.go('/signup'),
+                        onPressed: () =>
+                            context.go(kIsWeb ? '/download-app' : '/signup'),
                       ),
                     ],
                   ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
-                ],
-              ),
-            ),
-          ),
-        ),
+        ],
       ),
     );
   }

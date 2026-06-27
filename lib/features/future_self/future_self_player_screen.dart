@@ -136,11 +136,13 @@ class _FutureSelfPlayerScreenState
     final seconds = DateTime.now().difference(_start).inSeconds;
     await ref.read(futureSelfProvider.notifier).recordCompletion(seconds);
     if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
     Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(
+    messenger.showSnackBar(
       SnackBar(
         content: Text(
-          'Practice complete. ${(seconds / 60).toStringAsFixed(1)} minutes with your future self.',
+          AppStrings.futureSelfCompleteSnackBar(
+              (seconds / 60).toStringAsFixed(1)),
         ),
       ),
     );
