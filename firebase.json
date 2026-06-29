@@ -4,6 +4,7 @@
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
+    "site": "mindsetforge-ai",
     "public": "build/web",
     "appAssociation": "NONE",
     "ignore": ["firebase.json", "**/node_modules/**"],

@@ -1,13 +1,30 @@
 # Web Deployment Reference
 
-## Sites
+## Sites — the one table that matters
 
-| Domain | Site | Repo |
-|--------|------|------|
-| `mindsetforge.app` | `mindsetforge-marketing` | `~/mindsetforge-web` (Next.js) |
-| `app.mindsetforge.app` | `mindsetforge-ai` (default) | `~/MindsetForge` (Flutter) |
+| Domain | Hosting site | Repo | Build dir |
+|--------|--------------|------|-----------|
+| `mindsetforge.app` (marketing) | `mindsetforge-marketing` | `~/mindsetforge-web` (Next.js) | `out/` |
+| `app.mindsetforge.app` (web app) | `mindsetforge-ai` | `~/MindsetForge` (Flutter) | `build/web/` |
 
-**Firebase project:** `mindsetforge-ai`
+**Firebase project:** `mindsetforge-ai` (one project, two hosting sites).
+
+## How mix-ups are prevented
+
+Each repo's `firebase.json` is **pinned to exactly one site** via the
+`hosting.site` field, and neither repo references the other's site:
+
+- `~/MindsetForge/firebase.json` → `"site": "mindsetforge-ai"`
+- `~/mindsetforge-web/firebase.json` → `"site": "mindsetforge-marketing"`
+
+Because of this, `firebase deploy --only hosting` from either repo can **only**
+target its own site. The Flutter deploy script (`scripts/deploy-web.sh`) also
+hard-fails if `firebase.json` is ever changed to point anywhere other than
+`mindsetforge-ai`.
+
+> ⚠️ **Domain rule of thumb:** the bare apex `mindsetforge.app` is **marketing**.
+> Only the `app.` subdomain is the Flutter app. When attaching a custom domain
+> in the Firebase Console, double-check you selected the correct **site** first.
 
 ---
 
@@ -64,7 +81,13 @@ Do this once in the Firebase Console:
 4. Follow the steps: add the verification TXT record to your DNS, then add the A records Firebase provides
 5. Repeat for `www.mindsetforge.app` if desired
 
-`app.mindsetforge.app` is connected to the default `mindsetforge-ai` hosting site — add it the same way on that site's custom domain settings.
+`app.mindsetforge.app` is connected to the `mindsetforge-ai` hosting site — add it the same way on **that** site's custom domain settings.
+
+> ⚠️ **This is exactly where it once broke:** `mindsetforge.app` was accidentally
+> attached to the `mindsetforge-ai` (app) site, so the apex domain served the
+> Flutter app instead of the marketing site. Before clicking **Add custom domain**,
+> always confirm which **site** you are editing — the bare apex domain belongs to
+> `mindsetforge-marketing`, never to `mindsetforge-ai`.
 
 ---
 

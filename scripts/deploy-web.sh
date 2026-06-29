@@ -15,9 +15,23 @@ BUILD_DIR="$REPO_ROOT/build/web"
 STATIC_DIR="$REPO_ROOT/public"
 BUILD_ONLY=false
 
+# This repo (the Flutter web app) must ONLY ever deploy to the app site.
+# The marketing site (mindsetforge.app) is a completely separate repo/site.
+EXPECTED_SITE="mindsetforge-ai"   # serves app.mindsetforge.app
+
 for arg in "$@"; do
   [[ "$arg" == "--build-only" ]] && BUILD_ONLY=true
 done
+
+# --- Safety guard: refuse to deploy if firebase.json isn't pinned to the app site.
+# This makes it impossible to accidentally publish the Flutter app to the
+# marketing site, even if firebase.json is ever changed or copied between repos.
+CONFIGURED_SITE="$(grep -oE '"site"[[:space:]]*:[[:space:]]*"[^"]+"' "$REPO_ROOT/firebase.json" | head -1 | sed -E 's/.*"site"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
+if [[ "$CONFIGURED_SITE" != "$EXPECTED_SITE" ]]; then
+  echo "ERROR: firebase.json hosting.site is '$CONFIGURED_SITE' but this repo must deploy to '$EXPECTED_SITE'." >&2
+  echo "       Refusing to deploy to avoid overwriting the wrong site." >&2
+  exit 1
+fi
 
 echo "==> Building Flutter web (release)..."
 cd "$REPO_ROOT"
@@ -39,8 +53,8 @@ if $BUILD_ONLY; then
   exit 0
 fi
 
-echo "==> Deploying to Firebase Hosting (project: mindsetforge-ai)..."
-firebase deploy --only hosting
+echo "==> Deploying to Firebase Hosting (site: $EXPECTED_SITE)..."
+firebase deploy --only "hosting:$EXPECTED_SITE"
 
 echo ""
 echo "==> Done! Site live at https://app.mindsetforge.app"
