@@ -104,3 +104,26 @@ final futureSelfCompletedTodayProvider = Provider<bool>((ref) {
   return profile.futureSelfCompletions
       .any((c) => c.date == today && c.completed);
 });
+
+/// Today's rotating "embodiment trait" — one of the Future Self trait
+/// amplifiers, chosen deterministically per calendar day so it stays stable all
+/// day but shifts daily. This is the lens the user carries into today's choices
+/// ("act like someone who is ..."). Falls back to the emotional tone, and is
+/// null when there is no practice or no traits to surface.
+final embodimentTraitTodayProvider = Provider<String?>((ref) {
+  final setup = ref.watch(futureSelfProvider);
+  if (setup == null) return null;
+
+  final traits = setup.amplifiers
+      .map((t) => t.trim())
+      .where((t) => t.isNotEmpty)
+      .toList();
+  if (traits.isEmpty) {
+    final tone = setup.emotionalTone.trim();
+    return tone.isEmpty ? null : tone;
+  }
+
+  // Days since a fixed epoch → a stable, daily-advancing index into the traits.
+  final dayOrdinal = DateTime.now().difference(DateTime(2000)).inDays;
+  return traits[dayOrdinal % traits.length];
+});

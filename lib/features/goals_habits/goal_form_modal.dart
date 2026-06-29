@@ -307,6 +307,7 @@ class _GoalFormSheetState extends ConsumerState<_GoalFormSheet> {
                 label: AppStrings.goalTitle,
                 hint: AppStrings.goalTitleHint,
                 controller: _titleCtrl,
+                textCapitalization: TextCapitalization.words,
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? AppStrings.fieldRequired : null,
               ),
@@ -346,6 +347,7 @@ class _GoalFormSheetState extends ConsumerState<_GoalFormSheet> {
                 label: AppStrings.goalIdentityBecomes,
                 hint: AppStrings.goalIdentityHint,
                 controller: _identityCtrl,
+                textCapitalization: TextCapitalization.sentences,
                 validator: (v) =>
                     v == null || v.trim().isEmpty ? AppStrings.fieldRequired : null,
               ),
@@ -359,6 +361,7 @@ class _GoalFormSheetState extends ConsumerState<_GoalFormSheet> {
                 label: AppStrings.goalDescription,
                 hint: AppStrings.goalWhyMattersHint,
                 controller: _descCtrl,
+                textCapitalization: TextCapitalization.sentences,
                 maxLines: 3,
               ),
               const SizedBox(height: AppSpacing.md),

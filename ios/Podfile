@@ -1,5 +1,5 @@
-# Uncomment this line to define a global platform for your project
-# platform :ios, '13.0'
+# Bumped from 13.0 to 14.0: home_widget (iOS widget support) requires iOS 14.
+platform :ios, '14.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -34,6 +34,16 @@ target 'Runner' do
   target 'RunnerTests' do
     inherit! :search_paths
   end
+end
+
+# The iOS widget extension links home_widget directly so its interactive
+# "Mark done" App Intent can invoke HomeWidgetBackgroundWorker. The watch
+# targets use no Flutter plugins and intentionally have no pods.
+target 'MindsetForgeWidget' do
+  use_frameworks!
+  use_modular_headers!
+
+  pod 'home_widget', :path => '.symlinks/plugins/home_widget/ios'
 end
 
 post_install do |installer|

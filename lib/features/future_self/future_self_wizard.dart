@@ -368,12 +368,14 @@ class _WarmField extends StatelessWidget {
   final String hint;
   final int maxLines;
   final VoidCallback onChanged;
+  final TextCapitalization textCapitalization;
 
   const _WarmField({
     required this.controller,
     required this.hint,
     required this.onChanged,
     this.maxLines = 1,
+    this.textCapitalization = TextCapitalization.sentences,
   });
 
   @override
@@ -381,6 +383,7 @@ class _WarmField extends StatelessWidget {
     return TextField(
       controller: controller,
       maxLines: maxLines,
+      textCapitalization: textCapitalization,
       style: AppTextStyles.bodyMedium,
       cursorColor: AppColors.futureSelfAccent,
       onChanged: (_) => onChanged(),

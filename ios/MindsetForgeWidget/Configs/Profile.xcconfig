@@ -1,0 +1,2 @@
+#include? "../../Pods/Target Support Files/Pods-MindsetForgeWidget/Pods-MindsetForgeWidget.profile.xcconfig"
+#include "../../Flutter/Generated.xcconfig"

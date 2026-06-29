@@ -7,17 +7,40 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0279C03644FB087D1B5FB8B0 /* WatchDesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6298BDD41B7D14268C0F8A02 /* WatchDesignTokens.swift */; };
 		02F8955CBEF0BAB6AD734707 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = FC5B683F74BB698C752FE36E /* GoogleService-Info.plist */; };
-		A1B2C3D4E5F60002A2B3C4D5 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001A2B3C4D5 /* PrivacyInfo.xcprivacy */; };
+		03CD81FCFD720A21AB0A8913 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 490701A02F14F683B6769EDE /* Foundation.framework */; };
+		0475A88BC74DCB431F298A62 /* WatchPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88B4500C8F6603470444A524 /* WatchPayload.swift */; };
 		09130B288D843D13A946A8D5 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6568B6A687850751B1CD9064 /* Pods_RunnerTests.framework */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
+		1C511FDD57EC034A1D48ED3A /* MindsetForgeWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29C3193CCBC769E81251B76D /* MindsetForgeWatchApp.swift */; };
+		1F3CAC92F0E78CD8A93B2DE8 /* WidgetPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 957E8E939055C384B91EC046 /* WidgetPayload.swift */; };
 		277D89D59C560A99575CE8E1 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 49C2FEFDDBF9A0668EFC6BAE /* Pods_Runner.framework */; };
+		2C10E8270467764D8D76DBFD /* FocusWidgetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE718E8B9B821F3326AE3302 /* FocusWidgetViews.swift */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
+		36A250FBBE19DB435AB5AF8B /* WatchConnectivityBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99FE416DF2AD45C31236C2C7 /* WatchConnectivityBridge.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
+		4378373272CF170A03B1B152 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7D7553C08A367201CF6E232 /* DesignTokens.swift */; };
+		60A8A8D730B5EDC7F172CD53 /* MindsetForgeWatchWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 3607F6231F64CC38EBF8655B /* MindsetForgeWatchWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		6F465CE2B3705C440D9EB184 /* MindsetForgeWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09B25E29DF6C5AA07A11C3F6 /* MindsetForgeWidget.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
+		7A9C901678B6065CBC4E1BBD /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D9DFEFC1B59ADA11052E2DA9 /* Foundation.framework */; };
+		8F72CB26A4CA1CF321DC0F8C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 490701A02F14F683B6769EDE /* Foundation.framework */; };
+		904ACA1E43216CD2294F36B1 /* MindsetForgeWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 5B8B3386AAEEB9DD814D8031 /* MindsetForgeWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		9483AFA63D0D086DEDEB6810 /* MindsetForgeWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B8DE371722E3C36DA8D28440 /* MindsetForgeWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		98558741171B95311F37E26C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8B88327A6AD52EFBFA521CA8 /* Assets.xcassets */; };
+		A1B2C3D4E5F60002A2B3C4D5 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001A2B3C4D5 /* PrivacyInfo.xcprivacy */; };
+		A85E8FE2A428E1072F3D216F /* CompleteFocusIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03A98D5DB33BB71C56826EE8 /* CompleteFocusIntent.swift */; };
+		AC4E683FF08AE775B63AE566 /* CompleteFocusIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03A98D5DB33BB71C56826EE8 /* CompleteFocusIntent.swift */; };
+		B27C1D2D5DDB4F06D9C018F3 /* WatchPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88B4500C8F6603470444A524 /* WatchPayload.swift */; };
+		BFBF70B18FA3A6B1E796FD9C /* WatchContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65E32BC52E3C12434F2065DA /* WatchContentView.swift */; };
+		C4CF353A229B4DB282D7B85D /* Pods_MindsetForgeWidget.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EC34528049480257EA83AECF /* Pods_MindsetForgeWidget.framework */; };
+		CEE6C2D241220ED43BB55C23 /* WatchConnectivityProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED65115BE1035C29F82A053 /* WatchConnectivityProvider.swift */; };
+		D7F6B2B486559A0B161C49BE /* WatchDesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6298BDD41B7D14268C0F8A02 /* WatchDesignTokens.swift */; };
+		FF2D02018637181F1429BBE6 /* WatchComplications.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDCFE0C400D5EFEF30DB5EA0 /* WatchComplications.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -28,9 +51,52 @@
 			remoteGlobalIDString = 97C146ED1CF9000F007C117D;
 			remoteInfo = Runner;
 		};
+		48A9833FD01DFDCB1533C12F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5D3E4B0FB41900315EBB1529;
+			remoteInfo = MindsetForgeWatchWidget;
+		};
+		A735CB18C07A13344662AAD7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4B4813CEB941878BFB0D8DD9;
+			remoteInfo = MindsetForgeWidget;
+		};
+		E21762774D0FCB5603604998 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5E8BA1F7876E0B1981CCAD40;
+			remoteInfo = MindsetForgeWatch;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		1EE32D18FC4C33E8915E0AEB /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				60A8A8D730B5EDC7F172CD53 /* MindsetForgeWatchWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4A3B3B28934CEAB4D6D20821 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				904ACA1E43216CD2294F36B1 /* MindsetForgeWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		9705A1C41CF9048500538489 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -41,23 +107,54 @@
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C589DC4ED69191F6309BB222 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				9483AFA63D0D086DEDEB6810 /* MindsetForgeWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		03A98D5DB33BB71C56826EE8 /* CompleteFocusIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CompleteFocusIntent.swift; path = MindsetForgeWidget/CompleteFocusIntent.swift; sourceTree = "<group>"; };
+		0494C1645BB012E839E27D7F /* MindsetForgeWatch.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = MindsetForgeWatch.entitlements; path = MindsetForgeWatch/MindsetForgeWatch.entitlements; sourceTree = "<group>"; };
+		058E4B4498F74612A2F2C370 /* MindsetForgeWatchWidget.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = MindsetForgeWatchWidget.entitlements; path = MindsetForgeWatchWidget/MindsetForgeWatchWidget.entitlements; sourceTree = "<group>"; };
+		09B25E29DF6C5AA07A11C3F6 /* MindsetForgeWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MindsetForgeWidget.swift; path = MindsetForgeWidget/MindsetForgeWidget.swift; sourceTree = "<group>"; };
+		0D8C9B231817DEF0C3056D0C /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = Info.plist; path = MindsetForgeWatchWidget/Info.plist; sourceTree = "<group>"; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		2312D6C715E049AD65E4E2D1 /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
+		29C3193CCBC769E81251B76D /* MindsetForgeWatchApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MindsetForgeWatchApp.swift; path = MindsetForgeWatch/MindsetForgeWatchApp.swift; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3607F6231F64CC38EBF8655B /* MindsetForgeWatchWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MindsetForgeWatchWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
+		3ED65115BE1035C29F82A053 /* WatchConnectivityProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WatchConnectivityProvider.swift; path = MindsetForgeWatch/WatchConnectivityProvider.swift; sourceTree = "<group>"; };
 		42923B7D19B37C20362E9C8E /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
+		490701A02F14F683B6769EDE /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/WatchOS.platform/Developer/SDKs/WatchOS11.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		49C2FEFDDBF9A0668EFC6BAE /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		5B8B3386AAEEB9DD814D8031 /* MindsetForgeWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MindsetForgeWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5BE636413297AA88C545BE3E /* Pods-RunnerTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.release.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.release.xcconfig"; sourceTree = "<group>"; };
+		6298BDD41B7D14268C0F8A02 /* WatchDesignTokens.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WatchDesignTokens.swift; path = MindsetForgeWatch/WatchDesignTokens.swift; sourceTree = "<group>"; };
 		6568B6A687850751B1CD9064 /* Pods_RunnerTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RunnerTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		65E32BC52E3C12434F2065DA /* WatchContentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WatchContentView.swift; path = MindsetForgeWatch/WatchContentView.swift; sourceTree = "<group>"; };
+		69DFB23AE4F8C8E1E72DF8FA /* Pods-MindsetForgeWidget.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MindsetForgeWidget.release.xcconfig"; path = "Target Support Files/Pods-MindsetForgeWidget/Pods-MindsetForgeWidget.release.xcconfig"; sourceTree = "<group>"; };
+		6CA19651CF3F27C3D905ED9F /* Release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = MindsetForgeWidget/Configs/Release.xcconfig; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		78E4B4D818D4747D5DE42FE2 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = Info.plist; path = MindsetForgeWidget/Info.plist; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
 		7FC785A921C04DF84D9572EF /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
+		88B4500C8F6603470444A524 /* WatchPayload.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WatchPayload.swift; path = MindsetForgeWatch/WatchPayload.swift; sourceTree = "<group>"; };
+		8B88327A6AD52EFBFA521CA8 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = MindsetForgeWatch/Assets.xcassets; sourceTree = "<group>"; };
+		8BB7C773A66BA57A8138EE01 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = Info.plist; path = MindsetForgeWatch/Info.plist; sourceTree = "<group>"; };
+		94BAB4A091183A84BD77A138 /* Pods-MindsetForgeWidget.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MindsetForgeWidget.profile.xcconfig"; path = "Target Support Files/Pods-MindsetForgeWidget/Pods-MindsetForgeWidget.profile.xcconfig"; sourceTree = "<group>"; };
+		957E8E939055C384B91EC046 /* WidgetPayload.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WidgetPayload.swift; path = MindsetForgeWidget/WidgetPayload.swift; sourceTree = "<group>"; };
 		95FA81D57B94281B7D94DC27 /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
@@ -66,17 +163,53 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		D7E75F2D2B03D618D105AD1A /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
-		FC5B683F74BB698C752FE36E /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Runner/GoogleService-Info.plist"; sourceTree = "<group>"; };
+		99FE416DF2AD45C31236C2C7 /* WatchConnectivityBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchConnectivityBridge.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60001A2B3C4D5 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		B74A24A33221D1D0B578150F /* MindsetForgeWidget.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = MindsetForgeWidget.entitlements; path = MindsetForgeWidget/MindsetForgeWidget.entitlements; sourceTree = "<group>"; };
+		B8DE371722E3C36DA8D28440 /* MindsetForgeWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MindsetForgeWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D7E75F2D2B03D618D105AD1A /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
+		D9DFEFC1B59ADA11052E2DA9 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		DDCFE0C400D5EFEF30DB5EA0 /* WatchComplications.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WatchComplications.swift; path = MindsetForgeWatchWidget/WatchComplications.swift; sourceTree = "<group>"; };
+		E7D7553C08A367201CF6E232 /* DesignTokens.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DesignTokens.swift; path = MindsetForgeWidget/DesignTokens.swift; sourceTree = "<group>"; };
+		E98E677FC15244335FDAEB2B /* Pods-MindsetForgeWidget.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MindsetForgeWidget.debug.xcconfig"; path = "Target Support Files/Pods-MindsetForgeWidget/Pods-MindsetForgeWidget.debug.xcconfig"; sourceTree = "<group>"; };
+		EC34528049480257EA83AECF /* Pods_MindsetForgeWidget.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_MindsetForgeWidget.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		EE718E8B9B821F3326AE3302 /* FocusWidgetViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FocusWidgetViews.swift; path = MindsetForgeWidget/FocusWidgetViews.swift; sourceTree = "<group>"; };
+		F832E69CAED9DC4C1D76EF0D /* Profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = Profile.xcconfig; path = MindsetForgeWidget/Configs/Profile.xcconfig; sourceTree = "<group>"; };
+		F9AC7201ABE30330EE483B03 /* Debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = MindsetForgeWidget/Configs/Debug.xcconfig; sourceTree = "<group>"; };
+		FC5B683F74BB698C752FE36E /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Runner/GoogleService-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		114D889917DD911C589E899D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				03CD81FCFD720A21AB0A8913 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		39EB0B31817243745D40BEF0 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				09130B288D843D13A946A8D5 /* Pods_RunnerTests.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3E6DAE27240588DDF83FDA34 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7A9C901678B6065CBC4E1BBD /* Foundation.framework in Frameworks */,
+				C4CF353A229B4DB282D7B85D /* Pods_MindsetForgeWidget.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6E65295C721F622B2C25F6C4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8F72CB26A4CA1CF321DC0F8C /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -96,8 +229,34 @@
 			children = (
 				49C2FEFDDBF9A0668EFC6BAE /* Pods_Runner.framework */,
 				6568B6A687850751B1CD9064 /* Pods_RunnerTests.framework */,
+				2FA1413E7D538AF827694CCF /* iOS */,
+				52BD873B170FAC1F00E51856 /* watchOS */,
+				EC34528049480257EA83AECF /* Pods_MindsetForgeWidget.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		04D31628E4AADCF7E7C724B3 /* MindsetForgeWidget */ = {
+			isa = PBXGroup;
+			children = (
+				09B25E29DF6C5AA07A11C3F6 /* MindsetForgeWidget.swift */,
+				EE718E8B9B821F3326AE3302 /* FocusWidgetViews.swift */,
+				957E8E939055C384B91EC046 /* WidgetPayload.swift */,
+				E7D7553C08A367201CF6E232 /* DesignTokens.swift */,
+				03A98D5DB33BB71C56826EE8 /* CompleteFocusIntent.swift */,
+				78E4B4D818D4747D5DE42FE2 /* Info.plist */,
+				B74A24A33221D1D0B578150F /* MindsetForgeWidget.entitlements */,
+				D9BF3ADAFE36CEB91E418DB5 /* Configs */,
+			);
+			name = MindsetForgeWidget;
+			sourceTree = SOURCE_ROOT;
+		};
+		2FA1413E7D538AF827694CCF /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				D9DFEFC1B59ADA11052E2DA9 /* Foundation.framework */,
+			);
+			name = iOS;
 			sourceTree = "<group>";
 		};
 		331C8082294A63A400263BE5 /* RunnerTests */ = {
@@ -106,6 +265,14 @@
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
 			);
 			path = RunnerTests;
+			sourceTree = "<group>";
+		};
+		52BD873B170FAC1F00E51856 /* watchOS */ = {
+			isa = PBXGroup;
+			children = (
+				490701A02F14F683B6769EDE /* Foundation.framework */,
+			);
+			name = watchOS;
 			sourceTree = "<group>";
 		};
 		9740EEB11CF90186004384FC /* Flutter */ = {
@@ -129,6 +296,9 @@
 				FC5B683F74BB698C752FE36E /* GoogleService-Info.plist */,
 				FBFE1D4E963A3B2AAE9BD0B9 /* Pods */,
 				0014E4075F460EA21A4ABA02 /* Frameworks */,
+				04D31628E4AADCF7E7C724B3 /* MindsetForgeWidget */,
+				B8AFFBBCB9A2999377E1C748 /* MindsetForgeWatch */,
+				B00CB88F0324F1A0AA72D661 /* MindsetForgeWatchWidget */,
 			);
 			sourceTree = "<group>";
 		};
@@ -137,6 +307,9 @@
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
+				B8DE371722E3C36DA8D28440 /* MindsetForgeWidget.appex */,
+				5B8B3386AAEEB9DD814D8031 /* MindsetForgeWatch.app */,
+				3607F6231F64CC38EBF8655B /* MindsetForgeWatchWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -153,9 +326,45 @@
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
+				99FE416DF2AD45C31236C2C7 /* WatchConnectivityBridge.swift */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
+		};
+		B00CB88F0324F1A0AA72D661 /* MindsetForgeWatchWidget */ = {
+			isa = PBXGroup;
+			children = (
+				DDCFE0C400D5EFEF30DB5EA0 /* WatchComplications.swift */,
+				0D8C9B231817DEF0C3056D0C /* Info.plist */,
+				058E4B4498F74612A2F2C370 /* MindsetForgeWatchWidget.entitlements */,
+			);
+			name = MindsetForgeWatchWidget;
+			sourceTree = SOURCE_ROOT;
+		};
+		B8AFFBBCB9A2999377E1C748 /* MindsetForgeWatch */ = {
+			isa = PBXGroup;
+			children = (
+				29C3193CCBC769E81251B76D /* MindsetForgeWatchApp.swift */,
+				65E32BC52E3C12434F2065DA /* WatchContentView.swift */,
+				3ED65115BE1035C29F82A053 /* WatchConnectivityProvider.swift */,
+				88B4500C8F6603470444A524 /* WatchPayload.swift */,
+				6298BDD41B7D14268C0F8A02 /* WatchDesignTokens.swift */,
+				8BB7C773A66BA57A8138EE01 /* Info.plist */,
+				0494C1645BB012E839E27D7F /* MindsetForgeWatch.entitlements */,
+				8B88327A6AD52EFBFA521CA8 /* Assets.xcassets */,
+			);
+			name = MindsetForgeWatch;
+			sourceTree = SOURCE_ROOT;
+		};
+		D9BF3ADAFE36CEB91E418DB5 /* Configs */ = {
+			isa = PBXGroup;
+			children = (
+				F9AC7201ABE30330EE483B03 /* Debug.xcconfig */,
+				6CA19651CF3F27C3D905ED9F /* Release.xcconfig */,
+				F832E69CAED9DC4C1D76EF0D /* Profile.xcconfig */,
+			);
+			name = Configs;
+			sourceTree = SOURCE_ROOT;
 		};
 		FBFE1D4E963A3B2AAE9BD0B9 /* Pods */ = {
 			isa = PBXGroup;
@@ -166,6 +375,9 @@
 				7FC785A921C04DF84D9572EF /* Pods-RunnerTests.debug.xcconfig */,
 				5BE636413297AA88C545BE3E /* Pods-RunnerTests.release.xcconfig */,
 				2312D6C715E049AD65E4E2D1 /* Pods-RunnerTests.profile.xcconfig */,
+				69DFB23AE4F8C8E1E72DF8FA /* Pods-MindsetForgeWidget.release.xcconfig */,
+				E98E677FC15244335FDAEB2B /* Pods-MindsetForgeWidget.debug.xcconfig */,
+				94BAB4A091183A84BD77A138 /* Pods-MindsetForgeWidget.profile.xcconfig */,
 			);
 			name = Pods;
 			path = Pods;
@@ -193,6 +405,60 @@
 			productReference = 331C8081294A63A400263BE5 /* RunnerTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		4B4813CEB941878BFB0D8DD9 /* MindsetForgeWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 787260EEA957507EAA7CD32C /* Build configuration list for PBXNativeTarget "MindsetForgeWidget" */;
+			buildPhases = (
+				C442230988186C1C45E91D36 /* [CP] Check Pods Manifest.lock */,
+				89951F520FCE0453AF91415E /* Sources */,
+				3E6DAE27240588DDF83FDA34 /* Frameworks */,
+				B1710C1AFD9023A4137B6635 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MindsetForgeWidget;
+			productName = MindsetForgeWidget;
+			productReference = B8DE371722E3C36DA8D28440 /* MindsetForgeWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		5D3E4B0FB41900315EBB1529 /* MindsetForgeWatchWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 639051DCCDAC54196681915F /* Build configuration list for PBXNativeTarget "MindsetForgeWatchWidget" */;
+			buildPhases = (
+				E8A3AF124A9984BB7ECCA9B0 /* Sources */,
+				6E65295C721F622B2C25F6C4 /* Frameworks */,
+				5E7706F7EB3CC707057B99B9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MindsetForgeWatchWidget;
+			productName = MindsetForgeWatchWidget;
+			productReference = 3607F6231F64CC38EBF8655B /* MindsetForgeWatchWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		5E8BA1F7876E0B1981CCAD40 /* MindsetForgeWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 37FFB1D41FD2BCFCD1EF1F19 /* Build configuration list for PBXNativeTarget "MindsetForgeWatch" */;
+			buildPhases = (
+				4FD14B9FE66074C9ECD88338 /* Sources */,
+				114D889917DD911C589E899D /* Frameworks */,
+				F4C1BEDDECFE27F692B11D49 /* Resources */,
+				1EE32D18FC4C33E8915E0AEB /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2877FC0169BD2FA4A00AA290 /* PBXTargetDependency */,
+			);
+			name = MindsetForgeWatch;
+			productName = MindsetForgeWatch;
+			productReference = 5B8B3386AAEEB9DD814D8031 /* MindsetForgeWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
 		97C146ED1CF9000F007C117D /* Runner */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
@@ -203,6 +469,8 @@
 				97C146EB1CF9000F007C117D /* Frameworks */,
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
+				C589DC4ED69191F6309BB222 /* Embed Foundation Extensions */,
+				4A3B3B28934CEAB4D6D20821 /* Embed Watch Content */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				3EE21550496B0E815EFAFBBC /* [CP] Embed Pods Frameworks */,
 				D83FE251A90D33D327F68572 /* [CP] Copy Pods Resources */,
@@ -210,6 +478,8 @@
 			buildRules = (
 			);
 			dependencies = (
+				64706BA416A34A95C9806661 /* PBXTargetDependency */,
+				3AF68F14808A91488C080F51 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
@@ -229,6 +499,18 @@
 					331C8080294A63A400263BE5 = {
 						CreatedOnToolsVersion = 14.0;
 						TestTargetID = 97C146ED1CF9000F007C117D;
+					};
+					4B4813CEB941878BFB0D8DD9 = {
+						CreatedOnToolsVersion = 15.0;
+						ProvisioningStyle = Automatic;
+					};
+					5D3E4B0FB41900315EBB1529 = {
+						CreatedOnToolsVersion = 15.0;
+						ProvisioningStyle = Automatic;
+					};
+					5E8BA1F7876E0B1981CCAD40 = {
+						CreatedOnToolsVersion = 15.0;
+						ProvisioningStyle = Automatic;
 					};
 					97C146ED1CF9000F007C117D = {
 						CreatedOnToolsVersion = 7.3.1;
@@ -251,12 +533,22 @@
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
+				4B4813CEB941878BFB0D8DD9 /* MindsetForgeWidget */,
+				5E8BA1F7876E0B1981CCAD40 /* MindsetForgeWatch */,
+				5D3E4B0FB41900315EBB1529 /* MindsetForgeWatchWidget */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		331C807F294A63A400263BE5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E7706F7EB3CC707057B99B9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -273,6 +565,21 @@
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
 				02F8955CBEF0BAB6AD734707 /* GoogleService-Info.plist in Resources */,
 				A1B2C3D4E5F60002A2B3C4D5 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1710C1AFD9023A4137B6635 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F4C1BEDDECFE27F692B11D49 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				98558741171B95311F37E26C /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -349,6 +656,28 @@
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build";
 		};
+		C442230988186C1C45E91D36 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-MindsetForgeWidget-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
 		D83FE251A90D33D327F68572 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -399,22 +728,76 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4FD14B9FE66074C9ECD88338 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1C511FDD57EC034A1D48ED3A /* MindsetForgeWatchApp.swift in Sources */,
+				BFBF70B18FA3A6B1E796FD9C /* WatchContentView.swift in Sources */,
+				CEE6C2D241220ED43BB55C23 /* WatchConnectivityProvider.swift in Sources */,
+				B27C1D2D5DDB4F06D9C018F3 /* WatchPayload.swift in Sources */,
+				D7F6B2B486559A0B161C49BE /* WatchDesignTokens.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		89951F520FCE0453AF91415E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6F465CE2B3705C440D9EB184 /* MindsetForgeWidget.swift in Sources */,
+				2C10E8270467764D8D76DBFD /* FocusWidgetViews.swift in Sources */,
+				1F3CAC92F0E78CD8A93B2DE8 /* WidgetPayload.swift in Sources */,
+				4378373272CF170A03B1B152 /* DesignTokens.swift in Sources */,
+				AC4E683FF08AE775B63AE566 /* CompleteFocusIntent.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		97C146EA1CF9000F007C117D /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
+				A85E8FE2A428E1072F3D216F /* CompleteFocusIntent.swift in Sources */,
+				36A250FBBE19DB435AB5AF8B /* WatchConnectivityBridge.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E8A3AF124A9984BB7ECCA9B0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FF2D02018637181F1429BBE6 /* WatchComplications.swift in Sources */,
+				0475A88BC74DCB431F298A62 /* WatchPayload.swift in Sources */,
+				0279C03644FB087D1B5FB8B0 /* WatchDesignTokens.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		2877FC0169BD2FA4A00AA290 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = MindsetForgeWatchWidget;
+			target = 5D3E4B0FB41900315EBB1529 /* MindsetForgeWatchWidget */;
+			targetProxy = 48A9833FD01DFDCB1533C12F /* PBXContainerItemProxy */;
+		};
 		331C8086294A63A400263BE5 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
+		};
+		3AF68F14808A91488C080F51 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = MindsetForgeWatch;
+			target = 5E8BA1F7876E0B1981CCAD40 /* MindsetForgeWatch */;
+			targetProxy = E21762774D0FCB5603604998 /* PBXContainerItemProxy */;
+		};
+		64706BA416A34A95C9806661 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = MindsetForgeWidget;
+			target = 4B4813CEB941878BFB0D8DD9 /* MindsetForgeWidget */;
+			targetProxy = A735CB18C07A13344662AAD7 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -438,6 +821,87 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		047EC93FB42DC00D5B9FA602 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB31CF90195004384FC /* Generated.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = MindsetForgeWatchWidget/MindsetForgeWatchWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = LBSV796ZRL;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MindsetForgeWatchWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mindsetforge.mindsetforge.watchkitapp.MindsetForgeWatchWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		0EE35ACB9428F12AA4594CDC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F9AC7201ABE30330EE483B03 /* Debug.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = MindsetForgeWidget/MindsetForgeWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = LBSV796ZRL;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MindsetForgeWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mindsetforge.mindsetforge.MindsetForgeWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		124A4B7379C6ACD91CFEDFDA /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB31CF90195004384FC /* Generated.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = MindsetForgeWatchWidget/MindsetForgeWatchWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = LBSV796ZRL;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MindsetForgeWatchWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mindsetforge.mindsetforge.watchkitapp.MindsetForgeWatchWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Profile;
+		};
 		249021D3217E4FDB00AE95B9 /* Profile */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -481,7 +945,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
@@ -564,6 +1028,146 @@
 			};
 			name = Profile;
 		};
+		72C2DE915BBCFC02CFF1656D /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6CA19651CF3F27C3D905ED9F /* Release.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = MindsetForgeWidget/MindsetForgeWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = LBSV796ZRL;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MindsetForgeWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mindsetforge.mindsetforge.MindsetForgeWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		777CCE8D8718C13140FF5F38 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F832E69CAED9DC4C1D76EF0D /* Profile.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = MindsetForgeWidget/MindsetForgeWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = LBSV796ZRL;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MindsetForgeWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mindsetforge.mindsetforge.MindsetForgeWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Profile;
+		};
+		78472B868A38EB16E1F9109A /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB31CF90195004384FC /* Generated.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MindsetForgeWatch/MindsetForgeWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = LBSV796ZRL;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MindsetForgeWatch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mindsetforge.mindsetforge.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		8128051FD3104D4442DB8F55 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB31CF90195004384FC /* Generated.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MindsetForgeWatch/MindsetForgeWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = LBSV796ZRL;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MindsetForgeWatch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mindsetforge.mindsetforge.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Profile;
+		};
+		8D701B3F44E35C9DBAAE92DE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB31CF90195004384FC /* Generated.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = MindsetForgeWatchWidget/MindsetForgeWatchWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = LBSV796ZRL;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MindsetForgeWatchWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mindsetforge.mindsetforge.watchkitapp.MindsetForgeWatchWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
 		97C147031CF9000F007C117D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -613,7 +1217,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -664,7 +1268,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
@@ -724,6 +1328,34 @@
 			};
 			name = Release;
 		};
+		EC2546FDC3F94E2F44035620 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB31CF90195004384FC /* Generated.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MindsetForgeWatch/MindsetForgeWatch.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = LBSV796ZRL;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MindsetForgeWatch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mindsetforge.mindsetforge.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -733,6 +1365,36 @@
 				331C8088294A63A400263BE5 /* Debug */,
 				331C8089294A63A400263BE5 /* Release */,
 				331C808A294A63A400263BE5 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		37FFB1D41FD2BCFCD1EF1F19 /* Build configuration list for PBXNativeTarget "MindsetForgeWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				78472B868A38EB16E1F9109A /* Release */,
+				EC2546FDC3F94E2F44035620 /* Debug */,
+				8128051FD3104D4442DB8F55 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		639051DCCDAC54196681915F /* Build configuration list for PBXNativeTarget "MindsetForgeWatchWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				047EC93FB42DC00D5B9FA602 /* Release */,
+				8D701B3F44E35C9DBAAE92DE /* Debug */,
+				124A4B7379C6ACD91CFEDFDA /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		787260EEA957507EAA7CD32C /* Build configuration list for PBXNativeTarget "MindsetForgeWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				72C2DE915BBCFC02CFF1656D /* Release */,
+				0EE35ACB9428F12AA4594CDC /* Debug */,
+				777CCE8D8718C13140FF5F38 /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -10,6 +10,7 @@ import '../../core/widgets/shimmer_widget.dart';
 import '../../core/widgets/responsive_layout.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/utils/breakpoints.dart';
+import '../../core/utils/app_date_utils.dart';
 import '../../models/daily_completion.dart';
 import '../../models/user_profile.dart';
 import '../../providers/auth_provider.dart';
@@ -17,6 +18,9 @@ import '../../providers/daily_completion_provider.dart';
 import '../../providers/invite_prompt_provider.dart';
 import 'widgets/dashboard_header.dart';
 import 'widgets/today_hero_card.dart';
+import 'widgets/daily_wins_shared.dart';
+import 'widgets/plan_day_bottom_sheet.dart';
+import 'widgets/evening_focus_card.dart';
 import 'widgets/daily_routine_card.dart';
 import 'widgets/daily_habits_card.dart';
 import 'widgets/progress_overview_card.dart';
@@ -24,13 +28,69 @@ import 'widgets/getting_started_checklist.dart';
 import 'widgets/accountability_banner.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
-  const DashboardScreen({super.key});
+  /// When true (deep link `mindsetforge://focus` → `/dashboard?focus=plan`,
+  /// fired by the home-screen widget / watch), the dashboard opens the Plan Day
+  /// sheet on load if today's #1 focus hasn't been set yet.
+  final bool openPlanSheet;
+
+  /// A routine win field from `mindsetforge://action/<field>` →
+  /// `/dashboard?action=<field>` (the widget surfaced this as the next action).
+  /// On load the dashboard fires the matching navigation via `winNavCallback`.
+  final String? actionField;
+
+  const DashboardScreen({
+    super.key,
+    this.openPlanSheet = false,
+    this.actionField,
+  });
 
   @override
   ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  /// Guards against re-scheduling the deep-link action on every rebuild while
+  /// the query param is still present. Reset once the param is consumed.
+  bool _deepLinkScheduled = false;
+
+  /// Acts on the widget/watch deep links: `?focus=plan` opens the Plan Day
+  /// sheet when no focus is set; `?action=<field>` fires the matching routine
+  /// navigation via the shared `winNavCallback`. The query param is consumed so
+  /// the action can't retrigger on rebuild.
+  void _handleActionDeepLink(UserProfile profile) {
+    final field = widget.actionField;
+    final wantsPlan = widget.openPlanSheet;
+    if (!wantsPlan && (field == null || field.isEmpty)) {
+      _deepLinkScheduled = false;
+      return;
+    }
+    if (_deepLinkScheduled) return;
+    _deepLinkScheduled = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Drop the deep-link param so the action doesn't refire on rebuild.
+      context.go('/dashboard');
+
+      if (field != null && field.isNotEmpty) {
+        winNavCallback(
+          context: context,
+          ref: ref,
+          profile: profile,
+          field: field,
+        )();
+        return;
+      }
+
+      // `?focus=plan` → open Plan Day only when today's focus isn't set yet.
+      final hasFocusToday = profile.dailyFocusAction.isNotEmpty &&
+          profile.dailyFocusActionDate ==
+              AppDateUtils.todayStringWithGracePeriod();
+      if (hasFocusToday) return;
+      showPlanDaySheet(context, ref, profile);
+    });
+  }
+
   /// Fires an invite prompt after the current frame; the controller dedupes and
   /// enforces the "don't nag" rules, so callers only detect the moment.
   void _firePrompt(InviteTrigger trigger) {
@@ -91,6 +151,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               return const _DashboardSkeleton();
             }
 
+            // Honor the home-screen widget / watch deep links (plan / action).
+            _handleActionDeepLink(profile);
+
             final deepDiveComplete = profile.deepDive.isFullyComplete;
             // Whether to surface the accountability banner (partner support card,
             // or an invite nudge for settled-in subscribers without a partner).
@@ -113,6 +176,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             final showDeepDiveNudge =
                 profile.blueprintCompleted && !deepDiveComplete;
 
+            // Evening "last call": the evening routine owns the hero after 5 PM,
+            // so surface an incomplete #1 Focus as its own card beneath the hero
+            // rather than letting it slip out of view.
+            final hasFocusToday = profile.dailyFocusAction.isNotEmpty &&
+                profile.dailyFocusActionDate ==
+                    AppDateUtils.todayStringWithGracePeriod();
+            final showOpenFocusCard =
+                AppDateUtils.sessionPeriod() == 'evening' &&
+                    hasFocusToday &&
+                    !profile.dailyFocusActionCompleted;
+
             return LayoutBuilder(
               builder: (context, constraints) {
                 if (Breakpoints.isWideWidth(constraints.maxWidth)) {
@@ -121,6 +195,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     showAccountabilityBanner: showAccountabilityBanner,
                     showGettingStarted: !allOnboardingDone,
                     showDeepDiveNudge: showDeepDiveNudge,
+                    showOpenFocusCard: showOpenFocusCard,
                   );
                 }
                 return ResponsiveLayout(
@@ -186,6 +261,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   children: [
                                     TodayHeroCard(profile: profile),
                                     const SizedBox(height: AppSpacing.lg),
+                                    if (showOpenFocusCard) ...[
+                                      EveningFocusCard(profile: profile),
+                                      const SizedBox(height: AppSpacing.lg),
+                                    ],
                                     DailyRoutineCard(profile: profile),
                                   ],
                                 ),
@@ -275,12 +354,14 @@ class _DashboardDesktopBody extends StatelessWidget {
   final bool showAccountabilityBanner;
   final bool showGettingStarted;
   final bool showDeepDiveNudge;
+  final bool showOpenFocusCard;
 
   const _DashboardDesktopBody({
     required this.profile,
     required this.showAccountabilityBanner,
     required this.showGettingStarted,
     required this.showDeepDiveNudge,
+    required this.showOpenFocusCard,
   });
 
   @override
@@ -296,6 +377,10 @@ class _DashboardDesktopBody extends StatelessWidget {
         const SizedBox(height: AppSpacing.md),
         TodayHeroCard(profile: profile),
         const SizedBox(height: AppSpacing.lg),
+        if (showOpenFocusCard) ...[
+          EveningFocusCard(profile: profile),
+          const SizedBox(height: AppSpacing.lg),
+        ],
         DailyRoutineCard(profile: profile),
         const SizedBox(height: AppSpacing.sectionGap),
         const _DesktopSectionLabel(AppStrings.groupHabits),

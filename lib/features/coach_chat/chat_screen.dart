@@ -1473,6 +1473,7 @@ class _ChatInput extends StatelessWidget {
                   style: AppTextStyles.bodyMedium,
                   maxLines: 4,
                   minLines: 1,
+                  textCapitalization: TextCapitalization.sentences,
                   textInputAction: TextInputAction.send,
                   onSubmitted: (_) => onSend(),
                   cursorColor: AppColors.primary,

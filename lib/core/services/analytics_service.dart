@@ -30,7 +30,7 @@ class AnalyticsService {
   // ─── Identity ───────────────────────────────────────────────────────────────
 
   void identify(String uid, UserProfile profile) {
-    if (_mp == null) return;
+    if (_mp == null || kDebugMode) return;
     try {
       _mp!.identify(uid);
       final plan = profile.hasActiveSubscription ? 'premium' : 'free';
@@ -206,7 +206,7 @@ class AnalyticsService {
   // ─── Internal ───────────────────────────────────────────────────────────────
 
   void _track(String event, [Map<String, dynamic>? properties]) {
-    if (_mp == null) return;
+    if (_mp == null || kDebugMode) return;
     try {
       _mp!.track(event, properties: properties);
     } catch (e) {

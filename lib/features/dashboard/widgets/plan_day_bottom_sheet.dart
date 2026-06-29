@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/utils/app_date_utils.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../models/user_profile.dart';
 import '../../../providers/auth_provider.dart';
@@ -54,10 +55,7 @@ class _PlanDaySheetState extends ConsumerState<_PlanDaySheet> {
 
   final _customCtrl = TextEditingController();
 
-  String get _todayStr {
-    final now = DateTime.now();
-    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-  }
+  String get _todayStr => AppDateUtils.todayStringWithGracePeriod();
 
   @override
   void initState() {
@@ -220,6 +218,7 @@ class _PlanDaySheetState extends ConsumerState<_PlanDaySheet> {
                             child: TextField(
                               controller: _customCtrl,
                               style: AppTextStyles.bodyMedium,
+                              textCapitalization: TextCapitalization.sentences,
                               textInputAction: TextInputAction.done,
                               onSubmitted: (_) => _addCustomAction(),
                               decoration: InputDecoration(

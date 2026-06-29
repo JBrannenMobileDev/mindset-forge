@@ -294,6 +294,7 @@ class _Part1 extends StatelessWidget {
                               TextField(
                                 controller: customCtrl,
                                 autofocus: true,
+                                textCapitalization: TextCapitalization.sentences,
                                 style: AppTextStyles.bodyMedium,
                                 cursorColor: AppColors.primary,
                                 decoration: InputDecoration(
@@ -547,6 +548,7 @@ class _Part3 extends StatelessWidget {
                           controller: editCtrl,
                           autofocus: true,
                           maxLines: null,
+                          textCapitalization: TextCapitalization.sentences,
                           style: AppTextStyles.headlineSmall.copyWith(height: 1.6),
                           cursorColor: AppColors.primary,
                           decoration: const InputDecoration(

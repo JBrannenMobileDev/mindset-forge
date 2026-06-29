@@ -30,7 +30,8 @@ class NotificationScheduler {
   static const int _eveningBase = 2000; // + day offset (0..6)
   static const int _streakId = 3000; // today only
   static const int _windowDays = 7;
-  static const int _streakReminderAt = 5; // need <5/8 today to be "at risk"
+  // Need fewer than the streak threshold today to be "at risk".
+  static const int _streakReminderAt = DailyCompletion.streakThreshold;
   static const int _minStreakToProtect = 2;
 
   /// Cancels everything we own, then reschedules from the current profile.
@@ -251,10 +252,10 @@ class NotificationScheduler {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   DailyCompletion _todayCompletion(UserProfile profile) {
-    final key = AppDateUtils.todayString();
+    final key = AppDateUtils.todayStringWithGracePeriod();
     return profile.dailyCompletions.firstWhere(
       (c) => c.date == key,
-      orElse: DailyCompletion.forToday,
+      orElse: () => DailyCompletion(date: key),
     );
   }
 

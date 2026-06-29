@@ -56,7 +56,7 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
   void _initFromProfile() {
     final profile = _ref.read(currentUserProfileProvider).valueOrNull;
     if (profile == null) return;
-    final today = AppDateUtils.todayString();
+    final today = AppDateUtils.todayStringWithGracePeriod();
 
     if (profile.priorityActionsDate == today &&
         profile.priorityActions.isNotEmpty) {
@@ -131,7 +131,7 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
     final trimmed = text.trim();
     if (trimmed.isEmpty || state.actions.contains(trimmed)) return;
 
-    final today = AppDateUtils.todayString();
+    final today = AppDateUtils.todayStringWithGracePeriod();
     final actions = [...state.actions, trimmed];
 
     state = state.copyWith(actions: actions);
@@ -166,7 +166,7 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
       focusAction: focus,
     );
 
-    final today = AppDateUtils.todayString();
+    final today = AppDateUtils.todayStringWithGracePeriod();
     try {
       await _ref.read(firestoreServiceProvider).updateUserField(uid, {
         'priorityActions': actions,
@@ -191,7 +191,7 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
 
     state = state.copyWith(focusAction: text);
 
-    final today = AppDateUtils.todayString();
+    final today = AppDateUtils.todayStringWithGracePeriod();
     try {
       await _ref.read(firestoreServiceProvider).updateUserField(uid, {
         'dailyFocusAction': text,
@@ -220,7 +220,7 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
     try {
       final actions =
           await _ref.read(claudeServiceProvider).generatePriorityActions(profile);
-      final today = AppDateUtils.todayString();
+      final today = AppDateUtils.todayStringWithGracePeriod();
       await _ref.read(firestoreServiceProvider).updateUserField(uid, {
         'priorityActions': actions,
         'priorityActionsDate': today,

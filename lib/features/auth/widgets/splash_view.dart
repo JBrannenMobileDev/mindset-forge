@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
+import 'nebula_background.dart';
 
 /// Pure-presentation branded splash visuals: dark background, glowing logo,
 /// app name + tagline, and a subtle loading indicator.
@@ -22,8 +23,11 @@ class SplashView extends StatelessWidget {
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // Ambient radial glow for depth.
-          const Positioned.fill(child: _AmbientGlow()),
+          // Full-screen nebula backdrop — purple top, cyan bottom, calm dark
+          // centre band — matching the store feature graphic / app icon. Kept
+          // sharp here (no blur) since the splash is brief and its content sits
+          // on the calm centre band.
+          const NebulaBackground(),
           Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -67,27 +71,6 @@ class SplashView extends StatelessWidget {
                   .fadeIn(delay: 900.ms, duration: 600.ms),
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _AmbientGlow extends StatelessWidget {
-  const _AmbientGlow();
-
-  @override
-  Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment(0, -0.25),
-          radius: 0.9,
-          colors: [
-            Color(0x269B40FF),
-            Color(0x000A0A0F),
-          ],
-          stops: [0.0, 1.0],
-        ),
       ),
     );
   }

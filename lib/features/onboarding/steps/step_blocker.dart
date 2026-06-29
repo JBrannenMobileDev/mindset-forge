@@ -183,6 +183,7 @@ class _StepBlockerState extends State<StepBlocker> {
                         controller: _beliefCtrl,
                         style: AppTextStyles.bodyMedium,
                         cursorColor: AppColors.primary,
+                        textCapitalization: TextCapitalization.sentences,
                         onSubmitted: _addBelief,
                         decoration: InputDecoration(
                           hintText: 'Type your own...',

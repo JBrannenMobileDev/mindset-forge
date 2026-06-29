@@ -22,7 +22,7 @@ class IdentityCard extends ConsumerWidget {
     final uid = ref.read(authStateProvider).valueOrNull?.uid;
     if (uid == null) return;
 
-    final today = AppDateUtils.todayString();
+    final today = AppDateUtils.todayStringWithGracePeriod();
     final log = IdentityReadLog(date: today, readAt: DateTime.now());
     final updatedLog = [...profile.identityReadLog, log];
 
@@ -34,7 +34,7 @@ class IdentityCard extends ConsumerWidget {
   }
 
   bool _hasReadToday() {
-    final today = AppDateUtils.todayString();
+    final today = AppDateUtils.todayStringWithGracePeriod();
     return profile.identityReadLog.any((l) => l.date == today);
   }
 

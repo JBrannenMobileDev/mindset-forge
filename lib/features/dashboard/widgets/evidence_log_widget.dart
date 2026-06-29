@@ -10,6 +10,7 @@ import '../../../models/user_profile.dart';
 import '../../../models/evidence_entry.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/daily_completion_provider.dart';
+import '../../../providers/future_self_provider.dart';
 
 class EvidenceLogWidget extends ConsumerStatefulWidget {
   final UserProfile profile;
@@ -73,6 +74,22 @@ class _EvidenceLogWidgetState extends ConsumerState<EvidenceLogWidget> {
     final identity = widget.profile.identityStatement.trim();
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
+    // When a Future Self practice exists, anchor the log to today's rotating
+    // trait ("act like someone who is ...") instead of the generic identity
+    // statement. Falls back to the identity statement otherwise.
+    final trait = ref.watch(embodimentTraitTodayProvider);
+    final hasTrait = trait != null && trait.isNotEmpty;
+    final anchorAccent =
+        hasTrait ? AppColors.futureSelfAccent : AppColors.secondary;
+    final anchorLabel = hasTrait
+        ? AppStrings.evidenceTraitLabel
+        : AppStrings.evidenceIdentityLabel;
+    final anchorBody = hasTrait ? 'Someone who is $trait.' : identity;
+    final showAnchor = hasTrait || identity.isNotEmpty;
+    final prompt = hasTrait
+        ? AppStrings.evidenceTraitPrompt.replaceFirst('{trait}', trait)
+        : AppStrings.evidencePrompt;
+
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
       child: SafeArea(
@@ -103,8 +120,13 @@ class _EvidenceLogWidgetState extends ConsumerState<EvidenceLogWidget> {
               // Header
               Row(
                 children: [
-                  const Icon(Icons.nightlight_round,
-                      color: AppColors.secondary, size: 18),
+                  Icon(
+                    hasTrait
+                        ? Icons.auto_awesome_rounded
+                        : Icons.nightlight_round,
+                    color: anchorAccent,
+                    size: 18,
+                  ),
                   const SizedBox(width: AppSpacing.sm),
                   Text(
                     AppStrings.evidenceLog,
@@ -112,8 +134,8 @@ class _EvidenceLogWidgetState extends ConsumerState<EvidenceLogWidget> {
                   ),
                 ],
               ),
-              // Identity context block
-              if (identity.isNotEmpty) ...[
+              // Anchor context block (future-self trait, or identity statement)
+              if (showAnchor) ...[
                 const SizedBox(height: AppSpacing.md),
                 Container(
                   width: double.infinity,
@@ -127,15 +149,15 @@ class _EvidenceLogWidgetState extends ConsumerState<EvidenceLogWidget> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        AppStrings.evidenceIdentityLabel.toUpperCase(),
+                        anchorLabel.toUpperCase(),
                         style: AppTextStyles.labelSmall.copyWith(
-                          color: AppColors.secondary,
+                          color: anchorAccent,
                           letterSpacing: 0.5,
                         ),
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       Text(
-                        identity,
+                        anchorBody,
                         style: AppTextStyles.bodyMedium.copyWith(
                           color: AppColors.textPrimary,
                           fontStyle: FontStyle.italic,
@@ -148,7 +170,7 @@ class _EvidenceLogWidgetState extends ConsumerState<EvidenceLogWidget> {
               ],
               const SizedBox(height: AppSpacing.md),
               Text(
-                AppStrings.evidencePrompt,
+                prompt,
                 style: AppTextStyles.bodyMedium
                     .copyWith(color: AppColors.textSecondary),
               ),

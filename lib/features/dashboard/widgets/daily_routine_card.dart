@@ -44,7 +44,7 @@ class _DailyRoutineCardState extends ConsumerState<DailyRoutineCard> {
     final morningWithJournal = journalPref == 'morning' || journalPref == 'both';
     final eveningWithJournal = journalPref == 'evening' || journalPref == 'both';
 
-    final todayStr = AppDateUtils.todayString();
+    final todayStr = AppDateUtils.todayStringWithGracePeriod();
     final hasFocusToday = widget.profile.dailyFocusAction.isNotEmpty &&
         widget.profile.dailyFocusActionDate == todayStr;
 

@@ -391,6 +391,7 @@ class _AddAffirmationModalState extends ConsumerState<_AddAffirmationModal> {
                 autofocus: true,
                 maxLines: 4,
                 maxLength: 500,
+                textCapitalization: TextCapitalization.sentences,
                 style: AppTextStyles.bodyLarge,
                 cursorColor: AppColors.primary,
                 onChanged: (_) => setState(() {}),

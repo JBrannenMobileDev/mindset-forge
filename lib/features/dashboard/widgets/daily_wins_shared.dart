@@ -97,7 +97,7 @@ int bestStreak(List<DailyCompletion> completions) {
   DateTime? prev;
 
   for (final c in sorted) {
-    if (c.completedCount == 0) {
+    if (!c.countsForStreak) {
       current = 0;
       prev = null;
       continue;
@@ -175,19 +175,25 @@ VoidCallback winNavCallback({
           ),
           builder: (_) => GratitudeLogWidget(profile: profile),
         ),
-    'evidenceLogged' => () => showModalBottomSheet(
-          context: context,
-          backgroundColor: AppColors.surface,
-          isScrollControlled: true,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(AppSpacing.radiusXl),
-            ),
-          ),
-          builder: (_) => EvidenceLogWidget(profile: profile),
-        ),
+    'evidenceLogged' => () => showEvidenceLogSheet(context, profile),
     _ => () {},
   };
+}
+
+/// Opens the Evidence Log bottom sheet. Shared so the daily-win row and the
+/// on-track hero's embodiment trait open it identically.
+void showEvidenceLogSheet(BuildContext context, UserProfile profile) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(AppSpacing.radiusXl),
+      ),
+    ),
+    builder: (_) => EvidenceLogWidget(profile: profile),
+  );
 }
 
 /// Bottom sheet showing the user's identity statement with a read-confirm CTA.

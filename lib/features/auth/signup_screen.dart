@@ -72,6 +72,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final isPartnerInvite = PendingInviteStore.hasPending;
 
     return AuthScaffold(
+      mobileHeader: const AuthBrandHeaderCompact(),
       form: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -104,7 +105,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                       color: AppColors.textSecondary,
                     ),
                   ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
-                  const SizedBox(height: AppSpacing.xxl),
+                  const SizedBox(height: AppSpacing.lg),
                   Form(
                     key: _formKey,
                     child: Column(
@@ -113,6 +114,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                           label: AppStrings.displayName,
                           hint: 'Your full name',
                           controller: _nameCtrl,
+                          textCapitalization: TextCapitalization.words,
                           textInputAction: TextInputAction.next,
                           validator: (v) => Validators.required(v, field: 'Name'),
                         ),

@@ -5,6 +5,8 @@ import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/utils/breakpoints.dart';
+import 'auth_glass_pane.dart';
+import 'nebula_background.dart';
 
 /// Shared layout shell for the auth flow (welcome / login / signup / download).
 ///
@@ -24,16 +26,11 @@ class AuthScaffold extends StatelessWidget {
   /// Max width of the form pane card / mobile column.
   final double formMaxWidth;
 
-  /// When true, paints the ambient brand glow behind the mobile column (used by
-  /// the landing screen to preserve its hero backdrop).
-  final bool mobileGlow;
-
   const AuthScaffold({
     super.key,
     required this.form,
     this.mobileHeader,
     this.formMaxWidth = 440,
-    this.mobileGlow = false,
   });
 
   @override
@@ -67,8 +64,14 @@ class AuthScaffold extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (mobileHeader != null) mobileHeader!,
-                      form,
+                      if (mobileHeader != null) ...[
+                        mobileHeader!,
+                        const SizedBox(height: AppSpacing.xl),
+                      ],
+                      AuthGlassPane(child: form)
+                          .animate()
+                          .fadeIn(duration: 400.ms)
+                          .slideY(begin: 0.04, end: 0, duration: 400.ms),
                     ],
                   ),
                 ),
@@ -76,9 +79,13 @@ class AuthScaffold extends StatelessWidget {
             ),
           );
 
-          if (!mobileGlow) return mobileColumn;
+          // Mobile auth screens share the splash backdrop: full-bleed nebula
+          // image, here softened with a subtle blur and a dark scrim so the
+          // form reads as the focus, with the ambient brand glow on top.
           return Stack(
             children: [
+              const NebulaBackground(blurSigma: 8),
+              const Positioned.fill(child: _NebulaScrim()),
               const Positioned.fill(child: _AmbientGlow()),
               mobileColumn,
             ],
@@ -418,7 +425,7 @@ class AuthBrandBlock extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const _LogoMark(),
+        const AuthLogoMark(size: 200),
         const SizedBox(height: 28),
         Text.rich(
           TextSpan(
@@ -446,6 +453,65 @@ class AuthBrandBlock extends StatelessWidget {
   }
 }
 
+/// Compact brand header for the mobile login / signup screens: a small
+/// breathing logo mark above the wordmark, centered. Keeps those form-heavy
+/// screens from feeling top-heavy while still sitting the brand above the
+/// glass card for a consistent composition.
+class AuthBrandHeaderCompact extends StatelessWidget {
+  const AuthBrandHeaderCompact({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const AuthLogoMark(size: 88),
+        const SizedBox(height: AppSpacing.sm),
+        Text.rich(
+          TextSpan(
+            style: AppTextStyles.headlineMedium
+                .copyWith(color: AppColors.textPrimary),
+            children: const [
+              TextSpan(text: AppStrings.appNamePrefix),
+              TextSpan(
+                text: AppStrings.appNameAccent,
+                style: TextStyle(color: AppColors.primary),
+              ),
+            ],
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+}
+
+/// Soft dark scrim layered over the blurred nebula on mobile auth screens.
+/// Slightly darker at the vertical edges (where the nebula is busiest) and
+/// lighter through the centre, lifting form legibility without flattening the
+/// backdrop.
+class _NebulaScrim extends StatelessWidget {
+  const _NebulaScrim();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            AppColors.background.withValues(alpha: 0.45),
+            AppColors.background.withValues(alpha: 0.20),
+            AppColors.background.withValues(alpha: 0.45),
+          ],
+          stops: const [0.0, 0.5, 1.0],
+        ),
+      ),
+    );
+  }
+}
+
 class _AmbientGlow extends StatelessWidget {
   const _AmbientGlow();
 
@@ -467,27 +533,35 @@ class _AmbientGlow extends StatelessWidget {
   }
 }
 
-class _LogoMark extends StatelessWidget {
-  const _LogoMark();
+/// Breathing brain logo mark shared across the auth flow (splash brand block,
+/// login, signup). The brain PNG fills [size]; the glow halo and shadow scale
+/// proportionally so it reads consistently at any size.
+class AuthLogoMark extends StatelessWidget {
+  /// Edge length of the (square) logo. The PNG has generous transparent
+  /// padding baked in, so the visible brain mark is roughly 40% of this.
+  final double size;
+
+  const AuthLogoMark({super.key, this.size = 160});
 
   @override
   Widget build(BuildContext context) {
+    final glowSize = size * 0.6;
     return SizedBox(
-      width: 200,
-      height: 200,
+      width: size,
+      height: size,
       child: Stack(
         alignment: Alignment.center,
         children: [
           Container(
-            width: 120,
-            height: 120,
+            width: glowSize,
+            height: glowSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
                   color: AppColors.primary.withValues(alpha: 0.40),
-                  blurRadius: 56,
-                  spreadRadius: 8,
+                  blurRadius: size * 0.28,
+                  spreadRadius: size * 0.04,
                 ),
               ],
             ),
@@ -502,8 +576,8 @@ class _LogoMark extends StatelessWidget {
               .fade(begin: 0.4, end: 1.0, duration: 2000.ms),
           Image.asset(
             'assets/images/splash_logo.png',
-            width: 200,
-            height: 200,
+            width: size,
+            height: size,
             fit: BoxFit.contain,
           ),
         ],

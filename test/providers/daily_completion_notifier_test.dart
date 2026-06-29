@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mindsetforge/core/utils/app_date_utils.dart';
 import 'package:mindsetforge/models/daily_completion.dart';
 import 'package:mindsetforge/providers/auth_provider.dart';
 import 'package:mindsetforge/providers/daily_completion_provider.dart';
@@ -146,9 +147,10 @@ void main() {
       addTearDown(container.dispose);
 
       final state = container.read(dailyCompletionProvider);
-      final expected = DailyCompletion.forToday();
 
-      expect(state.date, expected.date);
+      // The notifier keys on the 4 AM–4 AM "active day" so progress survives
+      // the midnight–4 AM grace window instead of resetting at midnight.
+      expect(state.date, AppDateUtils.todayStringWithGracePeriod());
       expect(state.completedCount, 0);
       expect(state.isPerfectDay, isFalse);
     });

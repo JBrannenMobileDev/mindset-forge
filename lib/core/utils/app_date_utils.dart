@@ -40,11 +40,14 @@ abstract final class AppDateUtils {
     return formatDate(date);
   }
 
+  /// Greeting aligned to the same 4 AM–4 AM day model as [sessionPeriod]: the
+  /// midnight–4 AM grace window reads as evening (continuation of the prior
+  /// day's evening) rather than morning.
   static String greetingForTime() {
     final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
+    if (hour >= 4 && hour < 12) return 'Good morning';
+    if (hour >= 12 && hour < 17) return 'Good afternoon';
+    return 'Good evening'; // 17–23 and 0–3 (grace window)
   }
 
   /// Returns the current daily session period:

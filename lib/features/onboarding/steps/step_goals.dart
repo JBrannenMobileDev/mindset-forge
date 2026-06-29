@@ -490,6 +490,7 @@ class _StepGoalsState extends State<StepGoals> {
                   TextField(
                     controller: _titleCtrl,
                     autofocus: true,
+                    textCapitalization: TextCapitalization.words,
                     style: AppTextStyles.bodyLarge,
                     cursorColor: AppColors.primary,
                     decoration: InputDecoration(
@@ -547,6 +548,7 @@ class _StepGoalsState extends State<StepGoals> {
                     style: AppTextStyles.bodyLarge,
                     cursorColor: AppColors.primary,
                     maxLines: 2,
+                    textCapitalization: TextCapitalization.sentences,
                     decoration: InputDecoration(
                       hintText: AppStrings.goalWhyMattersHint,
                       hintStyle: AppTextStyles.bodyMedium

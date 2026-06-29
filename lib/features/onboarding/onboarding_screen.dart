@@ -14,6 +14,7 @@ import '../../providers/analytics_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/notification_provider.dart';
 import '../../providers/invite_prompt_provider.dart';
+import '../../core/widgets/widget_education_sheet.dart';
 import 'steps/step_welcome.dart';
 import 'steps/step_goals.dart';
 import 'steps/step_identity.dart';
@@ -151,6 +152,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
     await _askForNotifications();
     if (!mounted) return;
+
+    if (!updated.widgetPromptSeen) {
+      await showWidgetEducationSheet(context);
+      if (!mounted) return;
+    }
 
     await ref
         .read(invitePromptProvider)

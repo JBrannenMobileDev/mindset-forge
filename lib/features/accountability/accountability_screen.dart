@@ -322,6 +322,7 @@ class _InviteForm extends StatelessWidget {
             controller: nameCtrl,
             style: AppTextStyles.bodyMedium,
             cursorColor: AppColors.primary,
+            textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.next,
             decoration: _inputDecoration('Partner\'s name (optional)'),
           ),

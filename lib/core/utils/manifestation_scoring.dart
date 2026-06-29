@@ -11,6 +11,10 @@ import '../../models/manifestation_alignment.dart';
 abstract final class ManifestationScoring {
   static const int defaultWindowDays = 10;
 
+  /// A day counts toward the Action score if at least this fraction of
+  /// active habits were completed that day.
+  static const double habitDayThreshold = 0.7;
+
   /// Days since the account was created (0 on the signup day).
   static int daysSinceSignup(UserProfile p) {
     final created = DateTime(p.createdAt.year, p.createdAt.month, p.createdAt.day);
@@ -74,7 +78,7 @@ abstract final class ManifestationScoring {
             (t) => t.year == y && t.month == m && t.day == d,
           );
         }).length;
-        if (completed >= activeHabits.length * 0.7) habitDays++;
+        if (completed >= activeHabits.length * habitDayThreshold) habitDays++;
       }
     }
 

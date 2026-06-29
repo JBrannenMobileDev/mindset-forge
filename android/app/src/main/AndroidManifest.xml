@@ -3,6 +3,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Re-register scheduled local reminders after a device reboot -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Google Play in-app billing (RevenueCat subscriptions) -->
+    <uses-permission android:name="com.android.vending.BILLING"/>
     <application
         android:label="MindsetForge"
         android:name="${applicationName}"
@@ -56,6 +58,26 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
                 <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
+        <!-- Home-screen "Today's Focus" widget -->
+        <receiver
+            android:name=".FocusWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/focus_widget_info" />
+        </receiver>
+        <!-- home_widget: receives the widget "Mark done" background broadcast and
+             dispatches it to the Dart widgetInteractiveCallback. -->
+        <receiver
+            android:name="es.antonborri.home_widget.HomeWidgetBackgroundReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="es.antonborri.home_widget.action.BACKGROUND" />
             </intent-filter>
         </receiver>
         <!-- Default channel for background FCM notifications (app killed / in background).

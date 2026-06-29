@@ -69,7 +69,14 @@ class DailyCompletion {
 
   static const int totalCount = 8;
 
+  /// A day extends the streak when at least [streakThreshold] of the 8
+  /// required wins are done.
+  static const int streakThreshold = 5;
+
   double get completionPercent => completedCount / totalCount;
+
+  /// Whether this day counts toward the current/best streak.
+  bool get countsForStreak => completedCount >= streakThreshold;
 
   DailyCompletion copyWith({
     String? date,

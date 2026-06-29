@@ -16,6 +16,7 @@ import '../../models/habit.dart';
 import '../../providers/habits_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/claude_provider.dart';
+import '../../providers/future_self_provider.dart';
 import 'widgets/actions_tab_skeleton.dart';
 import 'widgets/sheet_handle.dart';
 
@@ -324,17 +325,29 @@ class _HabitFormSheetState extends ConsumerState<_HabitFormSheet> {
   final _identityCtrl = TextEditingController();
   String _frequency = 'daily';
   bool _isSaving = false;
+  bool _hasFutureSelf = false;
 
   @override
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.initialName ?? '');
-    // Prefill the identity from the user's existing identity statement so the
-    // habit ties to who they are already becoming.
-    final identity =
-        ref.read(currentUserProfileProvider).valueOrNull?.identityStatement ??
-            '';
-    if (identity.isNotEmpty) _identityCtrl.text = identity;
+    // Prefill the identity so the habit ties to who the user is becoming. When
+    // a Future Self practice exists, anchor it to that future self (today's
+    // rotating trait, else the identity anchor); otherwise fall back to the
+    // user's identity statement.
+    final profile = ref.read(currentUserProfileProvider).valueOrNull;
+    final setup = profile?.futureSelfSetup;
+    _hasFutureSelf = setup != null;
+    String prefill = profile?.identityStatement ?? '';
+    if (setup != null) {
+      final trait = ref.read(embodimentTraitTodayProvider);
+      if (trait != null && trait.isNotEmpty) {
+        prefill = 'I am someone who is $trait';
+      } else if (setup.identityAnchor.trim().isNotEmpty) {
+        prefill = 'I am someone who ${setup.identityAnchor.trim()}';
+      }
+    }
+    if (prefill.isNotEmpty) _identityCtrl.text = prefill;
   }
 
   @override
@@ -399,13 +412,21 @@ class _HabitFormSheetState extends ConsumerState<_HabitFormSheet> {
               ],
             ),
             const SizedBox(height: AppSpacing.lg),
-            const _HabitGuidanceCard(),
+            _HabitGuidanceCard(
+              title: _hasFutureSelf
+                  ? AppStrings.habitGuidanceFutureSelfTitle
+                  : AppStrings.habitGuidanceTitle,
+              body: _hasFutureSelf
+                  ? AppStrings.habitGuidanceFutureSelfBody
+                  : AppStrings.habitGuidanceBody,
+            ),
             const SizedBox(height: AppSpacing.lg),
             // Habit — the tiny routine
             AppTextField(
               label: AppStrings.habitNameLabel,
               hint: AppStrings.habitNameHint,
               controller: _nameCtrl,
+              textCapitalization: TextCapitalization.words,
             ),
             const SizedBox(height: AppSpacing.xs),
             const _FieldHint(AppStrings.habitNameGuidance),
@@ -415,6 +436,7 @@ class _HabitFormSheetState extends ConsumerState<_HabitFormSheet> {
               label: AppStrings.habitCueLabel,
               hint: AppStrings.habitTriggerHint,
               controller: _triggerCtrl,
+              textCapitalization: TextCapitalization.sentences,
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: AppSpacing.xs),
@@ -463,6 +485,7 @@ class _HabitFormSheetState extends ConsumerState<_HabitFormSheet> {
               label: AppStrings.habitIdentityLabel,
               hint: AppStrings.habitIdentityHint,
               controller: _identityCtrl,
+              textCapitalization: TextCapitalization.sentences,
             ),
             const SizedBox(height: AppSpacing.xs),
             const _FieldHint(AppStrings.habitIdentityGuidance),
@@ -625,7 +648,10 @@ class _HabitSuggestionsSheetState extends ConsumerState<_HabitSuggestionsSheet> 
 // ─── Form helpers (guidance card + inline field hint) ─────────────────────────
 
 class _HabitGuidanceCard extends StatelessWidget {
-  const _HabitGuidanceCard();
+  final String title;
+  final String body;
+
+  const _HabitGuidanceCard({required this.title, required this.body});
 
   @override
   Widget build(BuildContext context) {
@@ -646,12 +672,12 @@ class _HabitGuidanceCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(AppStrings.habitGuidanceTitle,
+                Text(title,
                     style: AppTextStyles.labelMedium
                         .copyWith(color: AppColors.primary)),
                 const SizedBox(height: 2),
                 Text(
-                  AppStrings.habitGuidanceBody,
+                  body,
                   style: AppTextStyles.bodySmall
                       .copyWith(color: AppColors.textSecondary),
                 ),

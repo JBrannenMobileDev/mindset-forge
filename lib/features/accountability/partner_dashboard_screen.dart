@@ -338,6 +338,7 @@ class _PartnerDashboardScreenState extends ConsumerState<PartnerDashboardScreen>
               TextField(
                 controller: _messageCtrl,
                 maxLines: 3,
+                textCapitalization: TextCapitalization.sentences,
                 style: AppTextStyles.bodyMedium,
                 cursorColor: AppColors.primary,
                 decoration: InputDecoration(

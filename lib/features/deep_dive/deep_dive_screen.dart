@@ -633,6 +633,7 @@ class _ModuleScreenState extends ConsumerState<_ModuleScreen> {
               TextField(
                 controller: _textCtrl,
                 maxLines: q.options != null ? 2 : 5,
+                textCapitalization: TextCapitalization.sentences,
                 style: AppTextStyles.bodyMedium,
                 cursorColor: widget.module.color,
                 decoration: InputDecoration(

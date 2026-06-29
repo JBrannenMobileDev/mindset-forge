@@ -80,6 +80,7 @@ class _StepLimitingBeliefsState extends State<StepLimitingBeliefs> {
                 child: TextField(
                   controller: _controller,
                   style: AppTextStyles.bodyLarge,
+                  textCapitalization: TextCapitalization.sentences,
                   textInputAction: TextInputAction.done,
                   onSubmitted: _addBelief,
                   decoration: InputDecoration(

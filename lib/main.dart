@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:home_widget/home_widget.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
@@ -17,18 +20,20 @@ import 'core/services/analytics_service.dart';
 import 'core/services/deep_link_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/pending_invite_store.dart';
+import 'core/services/widget_sync_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/widgets/splash_view.dart';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'providers/notification_provider.dart';
+import 'providers/widget_sync_provider.dart';
 
-// RevenueCat API keys
+// RevenueCat API keys (public SDK keys — safe to ship in the client).
 const _revenueCatApiKeyIos = 'appl_dKUUgDcXtEccZBfJkLEoToRdSri';
-const _revenueCatApiKeyAndroid = 'goog_REPLACE_WITH_ANDROID_KEY';
+const _revenueCatApiKeyAndroid = 'goog_nERDlnjwKvZeslXynNPyZMfzBee';
 
 // Mixpanel project token
-const _mixpanelToken = 'REPLACE_WITH_MIXPANEL_TOKEN';
+const _mixpanelToken = '2ab6ef7382cf88d859f8378f916974f0';
 
 /// Handle background FCM messages
 @pragma('vm:entry-point')
@@ -37,23 +42,41 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 void main() async {
-  final binding = WidgetsFlutterBinding.ensureInitialized();
-  // Hold the native splash on screen until the first Flutter frame paints so
-  // there is no gap between the OS launch screen and our SplashView.
-  FlutterNativeSplash.preserve(widgetsBinding: binding);
+  runZonedGuarded(
+    () async {
+      final binding = WidgetsFlutterBinding.ensureInitialized();
+      // Hold the native splash on screen until the first Flutter frame paints so
+      // there is no gap between the OS launch screen and our SplashView.
+      FlutterNativeSplash.preserve(widgetsBinding: binding);
 
-  // Catch all Flutter framework errors
-  FlutterError.onError = (details) {
-    FlutterError.presentError(details);
-    debugPrint('Flutter error: ${details.exceptionAsString()}');
-  };
+      // Route all Flutter framework errors to Crashlytics.
+      FlutterError.onError =
+          FirebaseCrashlytics.instance.recordFlutterFatalError;
 
-  // Register FCM background handler before Firebase init
-  if (!kIsWeb) {
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  }
+      // Register FCM background handler before Firebase init
+      if (!kIsWeb) {
+        FirebaseMessaging.onBackgroundMessage(
+          _firebaseMessagingBackgroundHandler,
+        );
+      }
 
-  runApp(const _InitApp());
+      // Wire the home-screen widget: register the background callback that the
+      // "Mark done" action invokes (iOS App Intent / Android broadcast). The App
+      // Group binding is iOS-only; Android stores widget data in SharedPreferences.
+      if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
+        if (Platform.isIOS) {
+          await HomeWidget.setAppGroupId(WidgetSyncService.appGroupId);
+        }
+        await HomeWidget.registerInteractivityCallback(
+          widgetInteractiveCallback,
+        );
+      }
+
+      runApp(const _InitApp());
+    },
+    (error, stack) =>
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true),
+  );
 }
 
 class _InitApp extends StatefulWidget {
@@ -91,6 +114,21 @@ class _InitAppState extends State<_InitApp> {
     } catch (e) {
       setState(() => _error = 'Firebase init failed:\n$e');
       return;
+    }
+
+    // Catch errors outside the Flutter framework (native plugins, isolates)
+    // and forward them to Crashlytics now that Firebase is initialized.
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+
+    // Tag crash reports with the signed-in user so crashes can be grouped by
+    // account in the Firebase console. Cleared to anonymous on sign-out.
+    if (!kIsWeb) {
+      FirebaseAuth.instance.authStateChanges().listen((user) {
+        FirebaseCrashlytics.instance.setUserIdentifier(user?.uid ?? '');
+      });
     }
 
     // Load any pending partner invite stashed before sign-in.
@@ -297,6 +335,9 @@ class _MindsetForgeAppState extends ConsumerState<MindsetForgeApp>
     final router = ref.watch(routerProvider);
     // Eagerly activate notification initialization whenever a user is signed in.
     ref.watch(notificationInitProvider);
+    // Keep the iOS widget + Apple Watch payload in sync with profile/completion
+    // changes, and handle watch glance actions.
+    ref.watch(widgetSyncInitProvider);
     // Reschedule local reminders whenever the profile changes (login, completion
     // updates, preference edits all flow through the profile stream).
     ref.listen(currentUserProfileProvider, (_, next) {

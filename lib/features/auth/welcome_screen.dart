@@ -21,13 +21,10 @@ class WelcomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AuthScaffold(
-      mobileGlow: true,
-      mobileHeader: const Padding(
-        padding: EdgeInsets.only(bottom: AppSpacing.xxl),
-        child: AuthBrandBlock(),
-      ),
+      mobileHeader: const AuthBrandBlock(),
       form: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
             AppStrings.welcomeFormTitle,

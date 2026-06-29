@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/widgets/widget_education_sheet.dart';
 import '../../../models/user_profile.dart';
 
 class GettingStartedChecklist extends StatelessWidget {
@@ -120,6 +121,11 @@ class GettingStartedChecklist extends StatelessWidget {
         onTap: () => context.push(
           profile.blueprintCompleted ? '/deep-dive' : '/blueprint-setup',
         ),
+      ),
+      _ChecklistItem(
+        label: 'Add the Focus Widget to your home screen',
+        isDone: profile.widgetPromptSeen,
+        onTap: () => showWidgetEducationSheet(context),
       ),
     ];
   }

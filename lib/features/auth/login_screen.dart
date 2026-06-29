@@ -48,26 +48,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final errorMessage = authState.errorMessage;
 
     return AuthScaffold(
+      mobileHeader: const AuthBrandHeaderCompact(),
       form: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-                  _LogoMark()
-                      .animate()
-                      .fadeIn(duration: 400.ms)
-                      .scale(begin: const Offset(0.8, 0.8), duration: 400.ms),
-                  const SizedBox(height: AppSpacing.lg),
                   Text(
                     'Welcome back',
                     style: AppTextStyles.displaySmall,
-                  ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
+                  ).animate().fadeIn(duration: 400.ms),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
                     'Continue your mindset journey',
                     style: AppTextStyles.bodyLarge.copyWith(
                       color: AppColors.textSecondary,
                     ),
-                  ).animate().fadeIn(delay: 150.ms, duration: 400.ms),
-                  const SizedBox(height: AppSpacing.xxl),
+                  ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
+                  const SizedBox(height: AppSpacing.lg),
                   Form(
                     key: _formKey,
                     child: Column(
@@ -190,32 +186,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _LogoMark extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primary, AppColors.secondary],
-        ),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primaryGlow,
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 28),
     );
   }
 }

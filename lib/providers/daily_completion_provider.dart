@@ -8,15 +8,17 @@ class DailyCompletionNotifier extends StateNotifier<DailyCompletion> {
   final Ref _ref;
 
   DailyCompletionNotifier(this._ref)
-      : super(DailyCompletion.forToday());
+      : super(DailyCompletion(date: AppDateUtils.todayStringWithGracePeriod()));
 
   void _initFromProfile() {
     final profile = _ref.read(currentUserProfileProvider).valueOrNull;
     if (profile != null) {
-      final today = AppDateUtils.todayString();
+      // Use the 4 AM–4 AM "active day" so the checklist keeps the prior day's
+      // progress during the midnight–4 AM grace window instead of resetting.
+      final today = AppDateUtils.todayStringWithGracePeriod();
       state = profile.dailyCompletions.firstWhere(
         (c) => c.date == today,
-        orElse: DailyCompletion.forToday,
+        orElse: () => DailyCompletion(date: today),
       );
     }
   }

@@ -116,6 +116,7 @@ class _GratitudeLogWidgetState extends ConsumerState<GratitudeLogWidget> {
                       controller: _controller,
                       style: AppTextStyles.bodyMedium,
                       cursorColor: AppColors.primary,
+                      textCapitalization: TextCapitalization.sentences,
                       textInputAction: TextInputAction.done,
                       autofocus: true,
                       onSubmitted: (_) => _save(),

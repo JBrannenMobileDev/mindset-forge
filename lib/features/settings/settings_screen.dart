@@ -9,6 +9,7 @@ import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/firebase/accountability_service.dart';
 import '../../core/widgets/app_card.dart';
+import '../../core/widgets/widget_education_sheet.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/auth_notifier.dart';
 import '../../providers/claude_provider.dart';
@@ -271,6 +272,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 title: 'Notifications',
                 subtitle: 'Reminders, streak alerts, and quiet hours',
                 onTap: () => context.push('/notification-settings'),
+              ),
+              const _CardDivider(),
+              _CardRow(
+                icon: Icons.widgets_outlined,
+                iconColor: AppColors.secondary,
+                title: 'Home Screen Widget',
+                subtitle: "Add Today's Focus to your home screen",
+                onTap: () => showWidgetEducationSheet(context),
               ),
             ],
           ),

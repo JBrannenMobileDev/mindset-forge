@@ -806,9 +806,15 @@ ${setup.amplifiers.isNotEmpty ? 'Character Traits (weave in naturally, do not st
     try {
       final deepDive = UserContextBuilder.deepDiveBlock(profile);
       final deepDiveContext = deepDive.isNotEmpty ? '$deepDive\n\n' : '';
+      final futureSelf = UserContextBuilder.futureSelfBlock(profile);
+      final futureSelfContext = futureSelf.isNotEmpty ? '$futureSelf\n\n' : '';
+      final futureSelfDirective = futureSelf.isNotEmpty
+          ? 'Anchor the habits in who they are becoming: pick habits their future self already does daily, '
+              'drawn from the future self\'s typical day and defining traits above. '
+          : '';
       final response = await complete(
         systemPrompt:
-            'You suggest 3 powerful identity-based habits. '
+            'You suggest 3 powerful identity-based habits for who the user is becoming. '
             'Respond with ONLY a raw JSON array — no markdown, no code fences, no explanation. '
             'Each element is an object with exactly three string keys: '
             '"name" (the habit name), "trigger" (the cue/when), "identityReinforces" (an "I am" statement). '
@@ -817,8 +823,10 @@ ${setup.amplifiers.isNotEmpty ? 'Character Traits (weave in naturally, do not st
             '${UserContextBuilder.coreBlock(profile)}\n\n'
             '${UserContextBuilder.goalsBlock(profile)}\n\n'
             '${UserContextBuilder.habitsBlock(profile)}\n\n'
+            '$futureSelfContext'
             '$deepDiveContext'
             'Suggest 3 habits that are NOT already in the existing habits list above. '
+            '$futureSelfDirective'
             'Each habit should reinforce the user\'s identity and support their active goals.',
         maxTokens: 500,
       );

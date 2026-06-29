@@ -13,7 +13,8 @@
 [![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20Functions-FFCA28?logo=firebase&logoColor=black)](https://firebase.google.com)
 [![Claude](https://img.shields.io/badge/AI-Claude%20Sonnet%204.5-D97757)](https://www.anthropic.com)
 [![Riverpod](https://img.shields.io/badge/State-Riverpod-3a86ff)](https://riverpod.dev)
-[![Platforms](https://img.shields.io/badge/Platforms-iOS%20%7C%20Android%20%7C%20Web%20%7C%20macOS-555)](#platform-support)
+[![Platforms](https://img.shields.io/badge/Platforms-iOS%20%7C%20Android%20%7C%20Web%20%7C%20macOS%20%7C%20watchOS-555)](#platform-support)
+[![watchOS](https://img.shields.io/badge/watchOS-10%2B-000?logo=apple&logoColor=white)](#home-screen-widgets--apple-watch)
 
 </div>
 
@@ -111,6 +112,14 @@ A radar-chart assessment across five traits (Confidence, Discipline, and more), 
 - Partners join **free** and see a **privacy-curated** view of the user's progress.
 - Partners can send encouragement (delivered via push), creating a built-in viral acquisition loop.
 
+### Home Screen Widgets & Apple Watch
+- **iOS WidgetKit extension** — a "Today's Focus" widget in five families (small, medium, large, plus Lock Screen rectangular & inline), with a nebula-style design that mirrors the in-app hero card.
+- **Android home widget** — `FocusWidgetProvider` rendering the same states (Set Focus / In Progress / Done) with a streak chip.
+- **Interactive "Mark Done"** — an iOS 17+ App Intent and an Android background broadcast let users complete today's focus and persist it to Firestore **without ever opening the app**.
+- **Apple Watch companion** (`MindsetForgeWatch`, watchOS 10+) — a glance-style screen showing the current session, streak, focus headline, a daily-wins progress bar, and a Mark Done button.
+- **Watch complications** across `.accessoryRectangular`, `.accessoryCircular`, `.accessoryInline`, and `.accessoryCorner`.
+- **Bi-directional sync** — `WidgetSyncService` builds a shared `WidgetPayload` JSON and pushes it to the iOS App Group and Android SharedPreferences, while `WatchBridge` (a MethodChannel) forwards the same payload to the watch over WatchConnectivity. The watch can fire `completeFocus` back to the phone, routing through the exact same Firestore logic as the in-app hero card so widget, watch, and app never drift.
+
 ### Progress & Insights
 Streaks, perfect-day tracking, an activity heatmap, and **AI-generated weekly insights** delivered via scheduled Cloud Functions.
 
@@ -135,6 +144,7 @@ Freemium model with a **RevenueCat**-powered subscription paywall gating premium
 | **Audio** | `just_audio` (binaural beats for Future Self practice) |
 | **Notifications** | FCM + `flutter_local_notifications` + timezone-aware scheduling |
 | **Deep Links** | `app_links` (custom scheme + universal links) |
+| **Widgets / Watch** | `home_widget` (iOS WidgetKit + Android App Widget), WatchConnectivity, native Swift extensions |
 
 ---
 
@@ -180,6 +190,36 @@ Flutter Widget
         ← structured JSON response
       ← parsed CoachReply (response, mode, framework, safety, memory_updates)
     ← optimistic UI update + coach memory persistence
+```
+
+### Widget & watch sync flow
+
+A single `WidgetPayload` is the source of truth for every off-app surface. `WidgetSyncService` rebuilds it whenever the profile or daily completion changes, fans it out to the iOS App Group, Android SharedPreferences, and the watch — and accepts `completeFocus` commands back from the widget and watch, routing them through the same Firestore logic as the in-app hero card.
+
+```mermaid
+flowchart LR
+  subgraph Flutter
+    Profile[UserProfile]
+    WSS[WidgetSyncService]
+    WB[WatchBridge]
+  end
+  subgraph iOS
+    AG["App Group JSON (widget_payload)"]
+    WK[WidgetKit Extension]
+    WCB[WatchConnectivityBridge]
+    WatchApp[Watch App]
+    Complications[Complications]
+  end
+  subgraph Android
+    FWP[FocusWidgetProvider]
+  end
+  Profile -->|on change| WSS
+  WSS --> AG --> WK
+  WSS --> FWP
+  WSS --> WB --> WCB --> WatchApp --> Complications
+  WatchApp -->|"completeFocus (WCSession)"| WCB --> Flutter
+  WK -->|"AppIntent (iOS 17+)"| Flutter
+  FWP -->|"broadcast"| Flutter
 ```
 
 ### Data model
@@ -280,6 +320,7 @@ Current automated coverage includes unit tests for core models (`Goal`, `Habit`,
 | **Android** | Fully supported (primary) |
 | **Web** | Supported (platform-specific services gracefully degrade) |
 | **macOS** | Supported |
+| **watchOS** | Companion app + complications (watchOS 10+) |
 
 Mobile is portrait-only by design.
 

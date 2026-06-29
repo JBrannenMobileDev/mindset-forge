@@ -929,6 +929,14 @@ function completedCount(c: CompletionDoc): number {
   return REQUIRED_KEYS.filter((k) => c[k] === true).length;
 }
 
+/** Mirrors DailyCompletion.streakThreshold on the client: a day counts toward
+ * the streak when at least this many of the 8 required wins are done. */
+const STREAK_THRESHOLD = 5;
+
+/** Mirrors ManifestationScoring.habitDayThreshold: a day counts toward the
+ * Action score if at least this fraction of active habits were completed. */
+const HABIT_DAY_THRESHOLD = 0.7;
+
 function localDateKey(d: Date): string {
   const m = (d.getMonth() + 1).toString().padStart(2, '0');
   const day = d.getDate().toString().padStart(2, '0');
@@ -938,41 +946,37 @@ function localDateKey(d: Date): string {
 /** Server-side port of UserProfile.currentStreak (5+ of 8 required items on consecutive days). */
 function computeStreak(completions: CompletionDoc[]): number {
   if (completions.length === 0) return 0;
-  const sorted = [...completions].sort((a, b) =>
-    (b.date ?? '').localeCompare(a.date ?? ''),
-  );
 
-  let streak = 0;
-  let checkDate = new Date();
-  for (const c of sorted) {
-    if (!c.date) break;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // Day-precision timestamps that qualify for the streak.
+  const qualifying = new Set<number>();
+  for (const c of completions) {
+    if (!c.date || completedCount(c) < STREAK_THRESHOLD) continue;
     const parts = c.date.split('-');
-    if (parts.length !== 3) break;
+    if (parts.length !== 3) continue;
     const date = new Date(
       parseInt(parts[0], 10),
       parseInt(parts[1], 10) - 1,
       parseInt(parts[2], 10),
     );
-    const checkOnly = new Date(
-      checkDate.getFullYear(),
-      checkDate.getMonth(),
-      checkDate.getDate(),
-    );
-    const prevDay = new Date(checkOnly);
-    prevDay.setDate(prevDay.getDate() - 1);
+    qualifying.add(date.getTime());
+  }
+  if (qualifying.size === 0) return 0;
 
-    if (date.getTime() === checkOnly.getTime() || date.getTime() === prevDay.getTime()) {
-      if (completedCount(c) >= 5) {
-        streak++;
-        const next = new Date(date);
-        next.setDate(next.getDate() - 1);
-        checkDate = next;
-      } else {
-        break;
-      }
-    } else {
-      break;
-    }
+  // Today is a grace day: while it's still in progress (not yet qualifying),
+  // anchor the streak at yesterday so an unfinished today doesn't read as a
+  // broken streak (mirrors UserProfile.currentStreak).
+  const cursor = new Date(today);
+  if (!qualifying.has(today.getTime())) {
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  let streak = 0;
+  while (qualifying.has(cursor.getTime())) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
   }
   return streak;
 }
@@ -1378,7 +1382,7 @@ function computeManifestationAlignment(
           return !isNaN(t.getTime()) && dateKey(t) === date;
         }),
       ).length;
-      if (completed >= activeHabits.length * 0.7) habitDays++;
+      if (completed >= activeHabits.length * HABIT_DAY_THRESHOLD) habitDays++;
     }
   }
 
@@ -1634,7 +1638,7 @@ export const partnerAccountabilityDaily = onSchedule(
       const firstName = (primary.displayName ?? 'Your partner').split(' ')[0];
 
       const nudge = primary.partnerNudge ?? {};
-      const isSlip = yCount < 5;
+      const isSlip = yCount < STREAK_THRESHOLD;
       const isPerfect = yCount >= 8;
       const isMilestone = STREAK_MILESTONES.includes(streak);
 
@@ -1753,7 +1757,7 @@ export const weeklyPartnerDigest = onSchedule(
           primary.timezone,
         );
         const c = byDate.get(key);
-        if (c && completedCount(c) >= 5) activeDays++;
+        if (c && completedCount(c) >= STREAK_THRESHOLD) activeDays++;
       }
 
       const streak = computeStreak(completions);

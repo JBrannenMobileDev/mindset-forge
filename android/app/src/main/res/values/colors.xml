@@ -4,4 +4,17 @@
          the app background (#0A0A0F) so there is no color flash between the
          native splash and the first Flutter frame. -->
     <color name="splashBackground">#FF0A0A0F</color>
+
+    <!-- Home-screen widget palette — mirrors lib/core/constants AppColors so the
+         widget matches the in-app "Today's Focus" hero. -->
+    <color name="widgetBackground">#FF1C1C27</color>
+    <color name="widgetBorder">#FF2A2A3A</color>
+    <color name="widgetPrimary">#FF9B40FF</color>
+    <color name="widgetOnPrimary">#FFFFFFFF</color>
+    <color name="widgetTextPrimary">#FFF0EFF8</color>
+    <color name="widgetTextSecondary">#FF8B8BA0</color>
+    <color name="widgetTextMuted">#FF4A4A60</color>
+    <color name="widgetWarning">#FFFFB547</color>
+    <color name="widgetSuccess">#FF4CAF7D</color>
+    <color name="widgetSuccessContainer">#1A4CAF7D</color>
 </resources>

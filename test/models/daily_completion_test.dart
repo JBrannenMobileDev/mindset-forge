@@ -137,6 +137,47 @@ void main() {
       expect(DailyCompletion.totalCount, 8);
     });
 
+    // ── countsForStreak ───────────────────────────────────────────────────────
+
+    group('countsForStreak', () {
+      // Builds a completion with [n] of the 8 required wins set true.
+      DailyCompletion withWins(int n) {
+        final flags = List<bool>.generate(8, (i) => i < n);
+        return DailyCompletion(
+          date: '2026-01-15',
+          habitsCompleted: flags[0],
+          dayPlanned: flags[1],
+          affirmationsMorning: flags[2],
+          affirmationsEvening: flags[3],
+          futureSelfCompleted: flags[4],
+          journalCompleted: flags[5],
+          chatCompleted: flags[6],
+          identityRead: flags[7],
+        );
+      }
+
+      test('streakThreshold is 5', () {
+        expect(DailyCompletion.streakThreshold, 5);
+      });
+
+      test('false just below the threshold (4 of 8)', () {
+        expect(withWins(4).countsForStreak, isFalse);
+      });
+
+      test('true exactly at the threshold (5 of 8)', () {
+        expect(withWins(5).countsForStreak, isTrue);
+      });
+
+      test('true above the threshold (8 of 8)', () {
+        expect(withWins(8).countsForStreak, isTrue);
+      });
+
+      test('false for default (all-false) completion', () {
+        const completion = DailyCompletion(date: '2026-01-15');
+        expect(completion.countsForStreak, isFalse);
+      });
+    });
+
     // ── fromJson ──────────────────────────────────────────────────────────────
 
     group('fromJson', () {

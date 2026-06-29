@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -6,12 +8,12 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/constants/app_strings.dart';
-import '../../../core/utils/app_date_utils.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../models/user_profile.dart';
-import '../../../models/daily_completion.dart';
+import '../../../models/hero_action.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/daily_completion_provider.dart';
+import '../../../providers/future_self_provider.dart';
 import 'daily_wins_shared.dart';
 import 'plan_day_bottom_sheet.dart';
 
@@ -81,76 +83,16 @@ class _TodayHeroCardState extends ConsumerState<TodayHeroCard> {
       _wasPerfect = false;
     }
 
-    // ── Journal placement based on user preference ────────────────────────
-    final journalPref = widget.profile.journalPreference;
-    const journalItem = WinItem(
-      'journalCompleted',
-      'Journal',
-      'Prime Mind',
-      Icons.edit_note_rounded,
-    );
-    final morningWithJournal = journalPref == 'morning' || journalPref == 'both';
-    final eveningWithJournal = journalPref == 'evening' || journalPref == 'both';
-
-    // ── Focus state for today ─────────────────────────────────────────────
-    final todayStr = AppDateUtils.todayString();
-    final hasFocusToday = widget.profile.dailyFocusAction.isNotEmpty &&
-        widget.profile.dailyFocusActionDate == todayStr;
-    final focusComplete = widget.profile.dailyFocusActionCompleted;
-
-    final planDayItem = WinItem(
-      'dayPlanned',
-      'Plan Day',
-      hasFocusToday ? 'Focus Set' : 'Select Focus',
-      Icons.check_circle_outline_rounded,
-    );
-
-    final effectiveMorning = [
-      ...morningWins.where(
-          (w) => w.field != 'journalCompleted' && w.field != 'dayPlanned'),
-      planDayItem,
-      if (morningWithJournal) journalItem,
-    ];
-    final effectiveEvening = [
-      if (eveningWithJournal) journalItem,
-      ...eveningWins,
-    ];
-
-    final morningRequired = effectiveMorning.where((w) => !w.isBonus).toList();
-    final eveningRequired = effectiveEvening.where((w) => !w.isBonus).toList();
-
-    // ── Time-aware phase ──────────────────────────────────────────────────
-    final period = AppDateUtils.sessionPeriod();
-    final eveningActive = period == 'evening';
-
-    final morningDone =
-        morningRequired.every((w) => getCompletionField(completion, w.field));
-    final eveningDone =
-        eveningRequired.every((w) => getCompletionField(completion, w.field));
-
-    final hero = _resolveHero(
-      completion: completion,
-      period: period,
-      morningRequired: morningRequired,
-      eveningRequired: eveningRequired,
-      morningDone: morningDone,
-      eveningDone: eveningDone,
-      hasFocusToday: hasFocusToday,
-      focusComplete: focusComplete,
-    );
-
-    // Evening edge: focus left open at the end of the day — surface a gentle,
-    // non-hero nudge so the evening routine still owns the hero slot.
-    final showFocusOpenNote = eveningActive && hasFocusToday && !focusComplete;
+    // Resolve the single "right now" action via the shared resolver (the same
+    // one the home-screen widget uses) so the hero and widget never drift.
+    final trait = ref.watch(embodimentTraitTodayProvider);
+    final hero =
+        _mapHeroAction(resolveHeroAction(widget.profile, completion), trait);
 
     return Stack(
       alignment: Alignment.topCenter,
       children: [
-        _HeroCard(
-          data: hero,
-          focusOpenNote:
-              showFocusOpenNote ? _FocusOpenNote(onComplete: _completeFocus) : null,
-        ).animate().fadeIn(duration: 400.ms),
+        _HeroCard(data: hero).animate().fadeIn(duration: 400.ms),
         ConfettiWidget(
           confettiController: _confettiCtrl,
           blastDirectionality: BlastDirectionality.explosive,
@@ -167,99 +109,89 @@ class _TodayHeroCardState extends ConsumerState<TodayHeroCard> {
     );
   }
 
-  // ── Hero resolution ──────────────────────────────────────────────────────
-  _HeroData _resolveHero({
-    required DailyCompletion completion,
-    required String period,
-    required List<WinItem> morningRequired,
-    required List<WinItem> eveningRequired,
-    required bool morningDone,
-    required bool eveningDone,
-    required bool hasFocusToday,
-    required bool focusComplete,
-  }) {
-    // Morning phase, routine unfinished → next morning item.
-    if (period == 'morning' && !morningDone) {
-      final item = firstIncomplete(completion, morningRequired)!;
-      return _HeroData(
-        icon: item.icon,
-        accent: AppColors.warning,
-        sessionLabel: AppStrings.morningSessionHero,
-        title: item.label,
-        subtitle: item.subtitle,
-        buttonLabel: item.sessionOnly ? 'Start Session' : 'Begin',
-        buttonIcon: Icons.arrow_forward_rounded,
-        onPressed: winNavCallback(
-          context: context,
-          ref: ref,
-          profile: widget.profile,
-          field: item.field,
-        ),
-      );
-    }
+  // ── Map the shared HeroAction onto this card's visual model ──────────────
+  _HeroData _mapHeroAction(HeroAction a, String? trait) {
+    final accent = switch (a.kind) {
+      HeroActionKind.morning => AppColors.warning,
+      HeroActionKind.evening => AppColors.secondary,
+      HeroActionKind.focus => AppColors.primary,
+      HeroActionKind.setFocus => AppColors.primary,
+      HeroActionKind.onTrack => AppColors.success,
+    };
 
-    // Evening phase, routine unfinished → next evening item.
-    if (period == 'evening' && !eveningDone) {
-      final item = firstIncomplete(completion, eveningRequired)!;
-      return _HeroData(
-        icon: item.icon,
-        accent: AppColors.secondary,
-        sessionLabel: AppStrings.eveningSessionHero,
-        title: item.label,
-        subtitle: item.subtitle,
-        buttonLabel: item.sessionOnly ? 'Start Session' : 'Begin',
-        buttonIcon: Icons.arrow_forward_rounded,
-        onPressed: winNavCallback(
-          context: context,
-          ref: ref,
-          profile: widget.profile,
-          field: item.field,
-        ),
-      );
+    switch (a.kind) {
+      case HeroActionKind.morning:
+      case HeroActionKind.evening:
+        return _HeroData(
+          icon: _iconForField(a.field),
+          accent: accent,
+          sessionLabel: a.sessionLabel,
+          title: a.title,
+          subtitle: a.subtitle,
+          buttonLabel: a.isSessionOnly ? 'Start Session' : 'Begin',
+          buttonIcon: Icons.arrow_forward_rounded,
+          onPressed: winNavCallback(
+            context: context,
+            ref: ref,
+            profile: widget.profile,
+            field: a.field,
+          ),
+        );
+      case HeroActionKind.focus:
+        return _HeroData(
+          icon: Icons.my_location_rounded,
+          accent: accent,
+          sessionLabel: a.sessionLabel,
+          title: a.title,
+          subtitle: a.subtitle,
+          buttonLabel: AppStrings.heroFocusButton,
+          buttonIcon: Icons.check_circle_outline_rounded,
+          isLoading: _focusCompleting,
+          onPressed: _focusCompleting ? null : _completeFocus,
+          isFocus: true,
+        );
+      case HeroActionKind.setFocus:
+        return _HeroData(
+          icon: Icons.my_location_rounded,
+          accent: accent,
+          sessionLabel: a.sessionLabel,
+          title: a.title,
+          subtitle: a.subtitle,
+          buttonLabel: AppStrings.heroSetFocusButton,
+          buttonIcon: Icons.add_rounded,
+          onPressed: () => showPlanDaySheet(context, ref, widget.profile),
+          isFocus: true,
+        );
+      case HeroActionKind.onTrack:
+        final hasTrait = trait != null && trait.isNotEmpty;
+        return _HeroData(
+          icon: Icons.check_circle_rounded,
+          accent: accent,
+          sessionLabel: a.sessionLabel,
+          title: a.title,
+          subtitle: a.subtitle,
+          traitLine: hasTrait
+              ? AppStrings.heroOnTrackTrait.replaceFirst('{trait}', trait)
+              : null,
+          onTraitTap: hasTrait
+              ? () => showEvidenceLogSheet(context, widget.profile)
+              : null,
+        );
     }
-
-    // Otherwise the day belongs to Today's Focus.
-    if (hasFocusToday && !focusComplete) {
-      return _HeroData(
-        icon: Icons.my_location_rounded,
-        accent: AppColors.primary,
-        sessionLabel: AppStrings.heroFocusSessionLabel,
-        title: AppStrings.focusCardTitle,
-        subtitle: widget.profile.dailyFocusAction,
-        buttonLabel: AppStrings.heroFocusButton,
-        buttonIcon: Icons.check_circle_outline_rounded,
-        isLoading: _focusCompleting,
-        onPressed: _focusCompleting ? null : _completeFocus,
-        isFocus: true,
-      );
-    }
-
-    if (!hasFocusToday) {
-      return _HeroData(
-        icon: Icons.my_location_rounded,
-        accent: AppColors.primary,
-        sessionLabel: AppStrings.heroFocusSessionLabel,
-        title: AppStrings.heroSetFocusLabel,
-        subtitle: AppStrings.heroSetFocusSubtitle,
-        buttonLabel: AppStrings.heroSetFocusButton,
-        buttonIcon: Icons.add_rounded,
-        onPressed: () => showPlanDaySheet(context, ref, widget.profile),
-        isFocus: true,
-      );
-    }
-
-    // Focus complete → calm "on track" / evening wrap-up state (no CTA).
-    final calmTitle = (period == 'evening' && eveningDone)
-        ? AppStrings.eveningRoutineComplete
-        : AppStrings.heroOnTrackLabel;
-    return _HeroData(
-      icon: Icons.check_circle_rounded,
-      accent: AppColors.success,
-      sessionLabel: AppStrings.heroFocusSessionLabel,
-      title: calmTitle,
-      subtitle: AppStrings.heroOnTrackSubtitle,
-    );
   }
+
+  IconData _iconForField(String field) => switch (field) {
+        'identityRead' => Icons.person_outline_rounded,
+        'affirmationsMorning' => Icons.wb_sunny_outlined,
+        'affirmationsEvening' => Icons.nightlight_round,
+        'futureSelfCompleted' => Icons.auto_awesome_rounded,
+        'journalCompleted' => Icons.edit_note_rounded,
+        'dayPlanned' => Icons.check_circle_outline_rounded,
+        'chatCompleted' => Icons.chat_bubble_outline_rounded,
+        'gratitudeLogged' => Icons.favorite_border_rounded,
+        'evidenceLogged' => Icons.emoji_events_outlined,
+        _ => Icons.bolt_rounded,
+      };
 }
 
 // ── Hero data ─────────────────────────────────────────────────────────────────
@@ -279,6 +211,11 @@ class _HeroData {
   /// purple-cyan nebula background (with a dark scrim for readability).
   final bool isFocus;
 
+  /// Optional Future Self embodiment lens shown on the on-track state ("Now
+  /// move like someone who is ..."), tappable via [onTraitTap] to log evidence.
+  final String? traitLine;
+  final VoidCallback? onTraitTap;
+
   const _HeroData({
     required this.icon,
     required this.accent,
@@ -290,29 +227,52 @@ class _HeroData {
     this.onPressed,
     this.isLoading = false,
     this.isFocus = false,
+    this.traitLine,
+    this.onTraitTap,
   });
 }
 
 // ── Hero card (gradient surface, glow, no dividers) ───────────────────────────
 
-class _HeroCard extends StatelessWidget {
+class _HeroCard extends StatefulWidget {
   final _HeroData data;
-  final Widget? focusOpenNote;
 
-  const _HeroCard({required this.data, this.focusOpenNote});
+  const _HeroCard({required this.data});
+
+  @override
+  State<_HeroCard> createState() => _HeroCardState();
+}
+
+class _HeroCardState extends State<_HeroCard>
+    with SingleTickerProviderStateMixin {
+  // Drives the comet that traverses the morning/evening card border. One full
+  // 0→1 sweep maps to one lap around the border via GradientRotation.
+  late final AnimationController _borderCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _borderCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _borderCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final data = widget.data;
     final accent = data.accent;
     final isFocus = data.isFocus;
 
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (focusOpenNote != null) ...[
-          focusOpenNote!,
-          const SizedBox(height: AppSpacing.md),
-        ],
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -359,6 +319,44 @@ class _HeroCard extends StatelessWidget {
           style: AppTextStyles.bodyMedium
               .copyWith(color: AppColors.textSecondary, height: 1.5),
         ),
+        if (data.traitLine != null) ...[
+          const SizedBox(height: AppSpacing.md),
+          GestureDetector(
+            onTap: data.onTraitTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.futureSelfAccent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                border: Border.all(
+                  color: AppColors.futureSelfAccent.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.auto_awesome_rounded,
+                      size: 16, color: AppColors.futureSelfAccent),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      data.traitLine!,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.futureSelfAccent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (data.onTraitTap != null)
+                    const Icon(Icons.arrow_forward_ios_rounded,
+                        size: 12, color: AppColors.futureSelfAccent),
+                ],
+              ),
+            ),
+          ),
+        ],
         if (data.buttonLabel != null) ...[
           const SizedBox(height: AppSpacing.md),
           AppPrimaryButton(
@@ -402,67 +400,85 @@ class _HeroCard extends StatelessWidget {
             stops: const [0.0, 0.4, 0.7, 1.0],
           )
         : LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
             colors: [
-              accent.withValues(alpha: 0.12),
+              Color.alphaBlend(
+                accent.withValues(alpha: 0.28),
+                AppColors.surfaceElevated,
+              ),
+              Color.alphaBlend(
+                accent.withValues(alpha: 0.10),
+                AppColors.surfaceElevated,
+              ),
               AppColors.surfaceElevated,
             ],
+            stops: const [0.0, 0.5, 1.0],
           );
 
-    return Container(
+    // Focus keeps its existing static treatment (flat border + purple glow).
+    if (isFocus) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          gradient: gradient,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+          border: Border.all(color: AppColors.border, width: 1),
+          boxShadow: const [
+            BoxShadow(color: AppColors.primaryGlow, blurRadius: 28),
+          ],
+        ),
+        child: content,
+      );
+    }
+
+    // Morning / evening: a thin vibrant accent ring with a "comet" highlight
+    // that continuously laps the border. The static card is passed as the
+    // AnimatedBuilder child so only the ring repaints each frame.
+    const borderWidth = 1.5;
+    const innerRadius = AppSpacing.radiusLg - borderWidth;
+
+    final card = Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         gradient: gradient,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-        border: Border.all(color: AppColors.border, width: 1),
+        borderRadius: BorderRadius.circular(innerRadius),
         boxShadow: [
           BoxShadow(
-            color:
-                isFocus ? AppColors.primaryGlow : accent.withValues(alpha: 0.12),
-            blurRadius: isFocus ? 28 : 24,
+            color: accent.withValues(alpha: 0.18),
+            blurRadius: 28,
           ),
         ],
       ),
       child: content,
     );
-  }
-}
 
-// ── Evening focus-open note (non-hero nudge) ──────────────────────────────────
-
-class _FocusOpenNote extends StatelessWidget {
-  final VoidCallback onComplete;
-
-  const _FocusOpenNote({required this.onComplete});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Icon(Icons.flag_outlined, size: 16, color: AppColors.textMuted),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Text(
-            AppStrings.focusStillOpenNote,
-            style: AppTextStyles.bodySmall
-                .copyWith(color: AppColors.textSecondary),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        GestureDetector(
-          onTap: onComplete,
-          behavior: HitTestBehavior.opaque,
-          child: Text(
-            'Mark done',
-            style: AppTextStyles.labelSmall.copyWith(
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w600,
+    return AnimatedBuilder(
+      animation: _borderCtrl,
+      builder: (context, child) {
+        return Container(
+          padding: const EdgeInsets.all(borderWidth),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+            gradient: SweepGradient(
+              transform: GradientRotation(_borderCtrl.value * 2 * math.pi),
+              colors: [
+                accent.withValues(alpha: 0.15),
+                accent.withValues(alpha: 0.15),
+                accent.withValues(alpha: 0.45),
+                accent,
+                accent.withValues(alpha: 0.15),
+                accent.withValues(alpha: 0.15),
+              ],
+              stops: const [0.0, 0.78, 0.85, 0.88, 0.94, 1.0],
             ),
           ),
-        ),
-      ],
+          child: child,
+        );
+      },
+      child: card,
     );
   }
 }

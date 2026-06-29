@@ -206,6 +206,32 @@ Mental Toughness Score: ${p.mentalToughnessScore.toStringAsFixed(0)}/100 ($tough
     return 'Current Habits (${active.length}):\n$lines';
   }
 
+  // ─── Future Self block ────────────────────────────────────────────────────
+
+  /// The future self the user has defined: the identity they are becoming,
+  /// their normalized future day, and the traits that define them. Use to
+  /// ground suggestions (e.g. habits) in who the user is becoming. Returns an
+  /// empty string when no Future Self practice has been set up.
+  static String futureSelfBlock(UserProfile p) {
+    final setup = p.futureSelfSetup;
+    if (setup == null) return '';
+
+    final parts = <String>[];
+    if (setup.identityAnchor.trim().isNotEmpty) {
+      parts.add(
+          'Who they are becoming: someone who ${setup.identityAnchor.trim()}');
+    }
+    if (setup.dailySnapshot.trim().isNotEmpty) {
+      parts.add('Their typical future day: ${setup.dailySnapshot.trim()}');
+    }
+    if (setup.amplifiers.isNotEmpty) {
+      parts.add('Defining traits: ${setup.amplifiers.join(', ')}');
+    }
+    if (parts.isEmpty) return '';
+
+    return 'FUTURE SELF (who they are becoming):\n${parts.join('\n')}';
+  }
+
   // ─── Recent activity block ────────────────────────────────────────────────
 
   /// Last 3 gratitude entries, last 3 evidence wins, streak, and perfect days.

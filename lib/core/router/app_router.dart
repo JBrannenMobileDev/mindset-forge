@@ -55,6 +55,29 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: notifier,
     initialLocation: '/splash',
     redirect: (context, state) {
+      // Home-screen widget / Apple Watch open the app with a raw custom-scheme
+      // URL (e.g. mindsetforge://focus). Flutter's deep linking hands that
+      // straight to GoRouter, which has no matching route and would render the
+      // "Page Not Found" screen. Translate the known widget/watch hosts to an
+      // in-app path here; the auth/onboarding gates below re-run on the result.
+      // `focus` carries intent to open the Plan Day sheet (the dashboard only
+      // acts on it when no focus is set yet).
+      if (state.uri.scheme == 'mindsetforge') {
+        switch (state.uri.host) {
+          case 'focus':
+            return '/dashboard?focus=plan';
+          case 'dashboard':
+            return '/dashboard';
+          // mindsetforge://action/<field> — a routine step tapped on the
+          // widget. The dashboard fires the matching in-app navigation.
+          case 'action':
+            final field = state.uri.pathSegments.isNotEmpty
+                ? state.uri.pathSegments.first
+                : '';
+            return field.isEmpty ? '/dashboard' : '/dashboard?action=$field';
+        }
+      }
+
       final authAsync = ref.read(authStateProvider);
       final profileAsync = ref.read(currentUserProfileProvider);
       final user = authAsync.valueOrNull;
@@ -193,7 +216,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: '/dashboard',
-            builder: (_, __) => const DashboardScreen(),
+            builder: (_, state) => DashboardScreen(
+              openPlanSheet: state.uri.queryParameters['focus'] == 'plan',
+              actionField: state.uri.queryParameters['action'],
+            ),
           ),
           GoRoute(
             path: '/chat',

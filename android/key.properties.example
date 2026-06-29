@@ -1,0 +1,18 @@
+# Release signing credentials for the Google Play upload keystore.
+#
+# Setup:
+#   1. Generate an upload keystore (keep the .jks OUTSIDE the repo):
+#        keytool -genkey -v -keystore ~/mindsetforge-upload.jks \
+#          -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#   2. Copy this file to `android/key.properties` (which is git-ignored).
+#   3. Fill in the values below.
+#   4. Back up the keystore + passwords securely — losing them means you can no
+#      longer ship updates (unless enrolled in Google Play App Signing).
+#
+# When android/key.properties is absent, the build falls back to debug signing
+# so local `flutter run` / `flutter build` still work.
+
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=upload
+storeFile=/Users/jonathanbrannen/mindsetforge-upload.jks

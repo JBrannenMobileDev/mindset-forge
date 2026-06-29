@@ -34,6 +34,7 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
   final List<String> _beliefsShifted = [];
   final List<String> _fearsOutwitted = [];
   bool _isGeneratingPrompt = false;
+  bool _isFreeWrite = false;
   bool _isSaving = false;
   bool _isSaved = false;
   final _contentCtrl = TextEditingController();
@@ -62,6 +63,9 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
     setState(() {
       _isGeneratingPrompt = true;
       _step = 2;
+      // Keep _isFreeWrite as-is during generation so the writing step can
+      // show an inline spinner instead of a full-screen one when the user
+      // requested a prompt from the escape hatch mid-entry.
     });
     try {
       final profile = ref.read(currentUserProfileProvider).valueOrNull;
@@ -77,12 +81,14 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
       setState(() {
         _prompt = result;
         _isGeneratingPrompt = false;
+        _isFreeWrite = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _prompt = 'What is on your mind today? Write freely.';
         _isGeneratingPrompt = false;
+        _isFreeWrite = false;
       });
     }
   }
@@ -168,11 +174,13 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
               ? 'New Entry'
               : _step == 1
                   ? 'How are you feeling?'
-                  : _step == 2
-                      ? 'Write'
-                      : _isSaved
-                          ? 'Entry Saved'
-                          : 'Wrap Up',
+                  : _step == 10
+                      ? 'New Entry'
+                      : _step == 2
+                          ? 'Write'
+                          : _isSaved
+                              ? 'Entry Saved'
+                              : 'Wrap Up',
           style: AppTextStyles.headlineSmall,
         ),
       ),
@@ -191,15 +199,30 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
               moods: _moods,
               onSelect: (mood) {
                 setState(() => _mood = mood);
-                _generatePrompt();
+                // Prime always gets a coach prompt — that IS the priming mechanism.
+                // Reflect and Grow give the user a choice.
+                if (_mode == 'prime') {
+                  _generatePrompt();
+                } else {
+                  setState(() => _step = 10);
+                }
               },
+            ),
+          10 => _PromptChoiceStep(
+              onCoachPrompt: _generatePrompt,
+              onFreeWrite: () => setState(() {
+                _isFreeWrite = true;
+                _step = 2;
+              }),
             ),
           2 => _WritingStep(
               prompt: _prompt,
               isGenerating: _isGeneratingPrompt,
+              isFreeWrite: _isFreeWrite,
               controller: _contentCtrl,
               onChanged: (_) => setState(() {}),
               onNext: () => setState(() => _step = 3),
+              onGetCoachPrompt: _generatePrompt,
             ),
           _ => _TagsStep(
               profile: ref.watch(currentUserProfileProvider).valueOrNull,
@@ -363,19 +386,123 @@ class _MoodSelector extends StatelessWidget {
   }
 }
 
+class _PromptChoiceStep extends StatelessWidget {
+  final VoidCallback onCoachPrompt;
+  final VoidCallback onFreeWrite;
+
+  const _PromptChoiceStep({
+    required this.onCoachPrompt,
+    required this.onFreeWrite,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.screenPaddingH),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('How do you want to write?', style: AppTextStyles.headlineMedium),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Your coach can spark you with a question, or you can go straight to the blank page.',
+            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+          ),
+          const Spacer(),
+          _buildTile(
+            icon: Icons.auto_awesome_rounded,
+            color: AppColors.primary,
+            title: 'Coach Prompt',
+            subtitle: 'Personalized to your goals & mood',
+            onTap: onCoachPrompt,
+            animationDelay: 0,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _buildTile(
+            icon: Icons.edit_note_rounded,
+            color: AppColors.secondary,
+            title: 'Free Write',
+            subtitle: 'Blank page, your words',
+            onTap: onFreeWrite,
+            animationDelay: 80,
+          ),
+          const Spacer(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTile({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    required int animationDelay,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceElevated,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+              ),
+              child: Icon(icon, color: color, size: 28),
+            ),
+            const SizedBox(width: AppSpacing.lg),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppTextStyles.headlineSmall),
+                  Text(
+                    subtitle,
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+          ],
+        ),
+      ),
+    )
+        .animate()
+        .fadeIn(delay: Duration(milliseconds: animationDelay), duration: 400.ms)
+        .slideY(begin: 0.15, duration: 400.ms, curve: Curves.easeOut);
+  }
+}
+
 class _WritingStep extends StatefulWidget {
   final String prompt;
   final bool isGenerating;
+  final bool isFreeWrite;
   final TextEditingController controller;
   final void Function(String) onChanged;
   final VoidCallback onNext;
+  final VoidCallback onGetCoachPrompt;
 
   const _WritingStep({
     required this.prompt,
     required this.isGenerating,
+    required this.isFreeWrite,
     required this.controller,
     required this.onChanged,
     required this.onNext,
+    required this.onGetCoachPrompt,
   });
 
   @override
@@ -388,7 +515,9 @@ class _WritingStepState extends State<_WritingStep> {
     final keyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
     final screenHeight = MediaQuery.of(context).size.height;
 
-    if (widget.isGenerating) {
+    // Full-screen spinner only for the initial coach-prompt load (not free-write
+    // escape hatch, where we keep the writing area visible).
+    if (widget.isGenerating && !widget.isFreeWrite) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -415,7 +544,46 @@ class _WritingStepState extends State<_WritingStep> {
                 if (widget.prompt.isNotEmpty)
                   _CollapsiblePromptCard(prompt: widget.prompt)
                       .animate()
-                      .fadeIn(duration: 500.ms),
+                      .fadeIn(duration: 500.ms)
+                else if (widget.isFreeWrite)
+                  // Escape hatch: inline spinner while fetching, button when idle
+                  widget.isGenerating
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: AppSpacing.sm),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Text(
+                                'Getting your coach prompt...',
+                                style: AppTextStyles.bodySmall.copyWith(
+                                    color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ).animate().fadeIn(duration: 300.ms)
+                      : TextButton.icon(
+                          onPressed: widget.onGetCoachPrompt,
+                          icon: const Icon(
+                            Icons.auto_awesome_rounded,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
+                          label: Text(
+                            'Need inspiration? Get a coach prompt',
+                            style: AppTextStyles.bodySmall
+                                .copyWith(color: AppColors.primary),
+                          ),
+                        ).animate().fadeIn(duration: 400.ms),
                 const SizedBox(height: AppSpacing.lg),
                 ConstrainedBox(
                   constraints: BoxConstraints(minHeight: screenHeight * 0.5),
@@ -424,10 +592,13 @@ class _WritingStepState extends State<_WritingStep> {
                     onChanged: widget.onChanged,
                     maxLines: null,
                     autofocus: true,
+                    textCapitalization: TextCapitalization.sentences,
                     style: AppTextStyles.bodyLarge.copyWith(height: 1.8),
                     cursorColor: AppColors.primary,
-                    decoration: const InputDecoration(
-                      hintText: AppStrings.writeYourThoughts,
+                    decoration: InputDecoration(
+                      hintText: widget.isFreeWrite
+                          ? 'Write whatever is on your mind...'
+                          : AppStrings.writeYourThoughts,
                       border: InputBorder.none,
                       enabledBorder: InputBorder.none,
                       focusedBorder: InputBorder.none,

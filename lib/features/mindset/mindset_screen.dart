@@ -325,6 +325,7 @@ class _IdentityCardState extends ConsumerState<_IdentityCard> {
               controller: _ctrl,
               autofocus: true,
               maxLines: 3,
+              textCapitalization: TextCapitalization.sentences,
               style: AppTextStyles.bodyLarge,
               cursorColor: AppColors.primary,
               decoration: InputDecoration(

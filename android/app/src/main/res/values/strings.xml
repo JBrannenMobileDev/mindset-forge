@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="focus_widget_label">Today\'s Focus</string>
+    <string name="focus_widget_description">See and complete your #1 focus for today.</string>
+</resources>

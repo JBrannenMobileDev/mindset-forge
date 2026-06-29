@@ -27,11 +27,11 @@ abstract final class AppStrings {
   static const String welcomeFormSubtitle =
       'Create your account and start your 7-day free trial.';
 
-  // App store links — TODO: replace placeholders with the live store URLs.
+  // App store links — TODO: replace the iOS placeholder with the live App Store URL.
   static const String iosAppStoreUrl =
       'https://apps.apple.com/app/idYOUR_APP_ID';
   static const String androidPlayStoreUrl =
-      'https://play.google.com/store/apps/details?id=YOUR_PACKAGE_NAME';
+      'https://play.google.com/store/apps/details?id=com.mindsetforge.mindsetforge';
 
   // Download-the-app screen (web account creation is mobile-only)
   static const String downloadTitle = 'Get the MindsetForge app';
@@ -206,6 +206,11 @@ abstract final class AppStrings {
       'What\'s one thing you did today that proves you\'re becoming this person?';
   static const String evidenceHint = 'I showed up by...';
   static const String evidenceIdentityLabel = 'Your identity';
+  // Future-self-anchored evidence framing. `{trait}` is replaced with today's
+  // rotating Future Self trait at the call site.
+  static const String evidenceTraitLabel = 'Your future self';
+  static const String evidenceTraitPrompt =
+      'Where did you act like someone who is {trait} today?';
   static const String gratitudeLog = 'Gratitude';
   static const String gratitudePrompt = 'What are you grateful for today?';
   static const String weeklyActivity = 'Weekly Activity';
@@ -243,6 +248,10 @@ abstract final class AppStrings {
   static const String heroOnTrackLabel = "You're On Track";
   static const String heroOnTrackSubtitle =
       'Your focus is done. Keep your habits rolling and ease into your evening.';
+  // Embodiment lens shown on the on-track hero when a Future Self practice
+  // exists. `{trait}` is replaced with today's rotating trait at the call site.
+  static const String heroOnTrackTrait =
+      'Now move like someone who is {trait}.';
   static const String focusStillOpenNote =
       'Your #1 focus is still open — close it out before you wind down.';
   static const String otherRoutineMorningLink = 'Morning recap';
@@ -373,6 +382,11 @@ abstract final class AppStrings {
   static const String habitGuidanceTitle = 'What makes a habit stick';
   static const String habitGuidanceBody =
       'Keep it tiny, anchor it to something you already do, and tie it to who you want to become.';
+  // Future-self framing for the habit form, used when a Future Self practice
+  // exists so habits are chosen for who the user is becoming.
+  static const String habitGuidanceFutureSelfTitle = 'Borrow your future self\'s habits';
+  static const String habitGuidanceFutureSelfBody =
+      'What does your future self already do every day? Pick one of their habits and start it now.';
   static const String habitNameLabel = 'Habit — what will you do?';
   static const String habitNameGuidance =
       'Start tiny — something you can do in under two minutes.';
@@ -699,6 +713,25 @@ abstract final class AppStrings {
       'Invite link copied to clipboard. Paste it to your partner.';
   static const String inviteCreateError =
       'Could not create invite. Please try again.';
+
+  // Home screen widget education prompt
+  static const String widgetSheetTitle = 'Keep your focus front and center';
+  static const String widgetSheetBody =
+      "Add the Today's Focus widget to your home screen so your #1 priority and streak greet you every time you pick up your phone.";
+  static const List<String> widgetSheetStepsIos = [
+    'Touch and hold an empty area of your home screen until the apps jiggle',
+    'Tap the + button in the top corner',
+    'Search for "MindsetForge" and pick a widget size',
+    'Tap "Add Widget", then tap Done',
+  ];
+  static const List<String> widgetSheetStepsAndroid = [
+    'Touch and hold an empty area of your home screen',
+    'Tap "Widgets"',
+    'Find "MindsetForge" in the list',
+    "Drag the Today's Focus widget onto your home screen",
+  ];
+  static const String widgetSheetCta = 'Got it';
+  static const String widgetSheetLater = 'Maybe later';
 
   // Suggested limiting beliefs
   static const List<String> suggestedBeliefs = [

@@ -21,6 +21,7 @@ class AppTextField extends StatelessWidget {
   final TextInputAction? textInputAction;
   final bool autofocus;
   final FocusNode? focusNode;
+  final TextCapitalization textCapitalization;
 
   const AppTextField({
     super.key,
@@ -42,6 +43,7 @@ class AppTextField extends StatelessWidget {
     this.textInputAction,
     this.autofocus = false,
     this.focusNode,
+    this.textCapitalization = TextCapitalization.none,
   });
 
   @override
@@ -68,6 +70,7 @@ class AppTextField extends StatelessWidget {
           textInputAction: textInputAction,
           autofocus: autofocus,
           focusNode: focusNode,
+          textCapitalization: textCapitalization,
           style: AppTextStyles.bodyLarge,
           cursorColor: AppColors.primary,
           decoration: InputDecoration(

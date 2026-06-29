@@ -209,6 +209,7 @@ class _AddPriorityRow extends StatelessWidget {
           child: TextField(
             controller: controller,
             style: AppTextStyles.bodyMedium,
+            textCapitalization: TextCapitalization.sentences,
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => onAdd(),
             decoration: InputDecoration(

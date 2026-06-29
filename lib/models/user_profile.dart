@@ -74,6 +74,10 @@ class UserProfile {
 
   /// True once the user opts out of all invite prompts ("Don't ask again").
   final bool invitePromptsDismissed;
+
+  /// True once the user has seen the home screen widget education prompt, so we
+  /// stop nudging them in the Getting Started checklist and post-onboarding.
+  final bool widgetPromptSeen;
   final CoachMemory coachMemory;
   final DateTime? coachDisclaimerAcceptedAt;
   final String? fcmToken;
@@ -135,6 +139,7 @@ class UserProfile {
     this.invitePromptsShown = const [],
     this.invitePromptSnoozedUntil,
     this.invitePromptsDismissed = false,
+    this.widgetPromptSeen = false,
     this.coachMemory = const CoachMemory(),
     this.coachDisclaimerAcceptedAt,
     this.fcmToken,
@@ -181,43 +186,48 @@ class UserProfile {
       displayName.isNotEmpty ? displayName.split(' ').first : 'there';
 
   DailyCompletion get todayCompletion {
+    // Use the 4 AM–4 AM "active day" so late-night (midnight–4 AM) progress
+    // stays attached to the prior day rather than resetting at midnight.
     final now = DateTime.now();
+    final adjusted = now.hour < 4 ? now.subtract(const Duration(days: 1)) : now;
     final todayStr =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+        '${adjusted.year}-${adjusted.month.toString().padLeft(2, '0')}-${adjusted.day.toString().padLeft(2, '0')}';
     return dailyCompletions.firstWhere(
       (c) => c.date == todayStr,
-      orElse: DailyCompletion.forToday,
+      orElse: () => DailyCompletion(date: todayStr),
     );
   }
 
   int get currentStreak {
     if (dailyCompletions.isEmpty) return 0;
-    final sorted = [...dailyCompletions]
-      ..sort((a, b) => b.date.compareTo(a.date));
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // Day-precision dates that qualify for the streak (5+ of 8 required wins).
+    final qualifying = <DateTime>{};
+    for (final c in dailyCompletions) {
+      if (!c.countsForStreak) continue;
+      final parts = c.date.split('-');
+      if (parts.length != 3) continue;
+      qualifying.add(
+        DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2])),
+      );
+    }
+    if (qualifying.isEmpty) return 0;
+
+    // Today is a grace day: while it's still in progress (not yet qualifying),
+    // anchor the streak at yesterday so an unfinished today doesn't read as a
+    // broken streak. If the day ends without qualifying, today becomes
+    // "yesterday" tomorrow and the streak resets then.
+    DateTime cursor = qualifying.contains(today)
+        ? today
+        : today.subtract(const Duration(days: 1));
 
     int streak = 0;
-    DateTime checkDate = DateTime.now();
-
-    for (final completion in sorted) {
-      final parts = completion.date.split('-');
-      final date = DateTime(
-        int.parse(parts[0]),
-        int.parse(parts[1]),
-        int.parse(parts[2]),
-      );
-      final checkDateOnly =
-          DateTime(checkDate.year, checkDate.month, checkDate.day);
-
-      if (date == checkDateOnly || date == checkDateOnly.subtract(const Duration(days: 1))) {
-        if (completion.completedCount >= 5) {
-          streak++;
-          checkDate = date.subtract(const Duration(days: 1));
-        } else {
-          break;
-        }
-      } else {
-        break;
-      }
+    while (qualifying.contains(cursor)) {
+      streak++;
+      cursor = cursor.subtract(const Duration(days: 1));
     }
     return streak;
   }
@@ -271,6 +281,7 @@ class UserProfile {
     List<String>? invitePromptsShown,
     DateTime? invitePromptSnoozedUntil,
     bool? invitePromptsDismissed,
+    bool? widgetPromptSeen,
     CoachMemory? coachMemory,
     DateTime? coachDisclaimerAcceptedAt,
     String? fcmToken,
@@ -331,6 +342,7 @@ class UserProfile {
           invitePromptSnoozedUntil ?? this.invitePromptSnoozedUntil,
       invitePromptsDismissed:
           invitePromptsDismissed ?? this.invitePromptsDismissed,
+      widgetPromptSeen: widgetPromptSeen ?? this.widgetPromptSeen,
       coachMemory: coachMemory ?? this.coachMemory,
       coachDisclaimerAcceptedAt:
           coachDisclaimerAcceptedAt ?? this.coachDisclaimerAcceptedAt,
@@ -476,6 +488,7 @@ class UserProfile {
           : null,
       invitePromptsDismissed:
           json['invitePromptsDismissed'] as bool? ?? false,
+      widgetPromptSeen: json['widgetPromptSeen'] as bool? ?? false,
       coachMemory: json['coachMemory'] != null
           ? CoachMemory.fromJson(json['coachMemory'] as Map<String, dynamic>)
           : const CoachMemory(),
@@ -548,6 +561,7 @@ class UserProfile {
         'invitePromptsShown': invitePromptsShown,
         'invitePromptSnoozedUntil': invitePromptSnoozedUntil?.toIso8601String(),
         'invitePromptsDismissed': invitePromptsDismissed,
+        'widgetPromptSeen': widgetPromptSeen,
         'coachMemory': coachMemory.toJson(),
         'coachDisclaimerAcceptedAt': coachDisclaimerAcceptedAt?.toIso8601String(),
         'fcmToken': fcmToken,

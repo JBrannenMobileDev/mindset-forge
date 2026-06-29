@@ -144,6 +144,7 @@ class _BlueprintTabState extends ConsumerState<BlueprintTab> {
         content: TextField(
           controller: ctrl,
           autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
           style: AppTextStyles.bodyLarge,
           decoration: const InputDecoration(hintText: 'I am not...'),
         ),

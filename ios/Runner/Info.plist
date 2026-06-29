@@ -49,6 +49,8 @@
 		<false/>
 		<key>NSUserNotificationsUsageDescription</key>
 		<string>We send you daily reminders and encouragement from your accountability partner to keep you on track.</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>MindsetForge uses the microphone only if you choose to record a voice note or speak an entry. Audio is never captured without your action.</string>
 		<key>UIBackgroundModes</key>
 		<array>
 			<string>remote-notification</string>
