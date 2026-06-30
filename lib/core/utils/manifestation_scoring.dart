@@ -11,8 +11,8 @@ import '../../models/manifestation_alignment.dart';
 abstract final class ManifestationScoring {
   static const int defaultWindowDays = 10;
 
-  /// A day counts toward the Action score if at least this fraction of
-  /// active habits were completed that day.
+  /// A day earns full Action credit once at least this fraction of active
+  /// habits is completed; below the bar the day earns its exact fraction.
   static const double habitDayThreshold = 0.7;
 
   /// Days since the account was created (0 on the signup day).
@@ -64,9 +64,12 @@ abstract final class ManifestationScoring {
       if (c.priorityActionsCompleted) priorityDays++;
     }
 
-    // Habits: count days where >= 70% of active habits were completed.
+    // Habits: capped-proportional credit per day. A day earns the exact
+    // fraction of active habits completed, capped to a full point once the
+    // [habitDayThreshold] (70%) bar is met. This keeps partial days fair
+    // (e.g. 2/3 = 0.67) without giving full credit away below the bar.
     final activeHabits = p.habits.where((h) => h.state == 'active').toList();
-    int habitDays = 0;
+    double habitCredit = 0;
     if (activeHabits.isNotEmpty) {
       for (final date in dates) {
         final parts = date.split('-');
@@ -78,17 +81,18 @@ abstract final class ManifestationScoring {
             (t) => t.year == y && t.month == m && t.day == d,
           );
         }).length;
-        if (completed >= activeHabits.length * habitDayThreshold) habitDays++;
+        final fraction = completed / activeHabits.length;
+        habitCredit += fraction >= habitDayThreshold ? 1.0 : fraction;
       }
     }
 
     final twoW = window * 2;
-    double pct(int count, int denom) =>
+    double pct(num count, int denom) =>
         denom <= 0 ? 0 : (count / denom * 100).clamp(0, 100).toDouble();
 
     final subconscious = pct(affirmationDays + visualizationDays, twoW);
     final thought = pct(journalDays + chatDays, twoW);
-    final action = pct(habitDays + priorityDays, twoW);
+    final action = pct(habitCredit + priorityDays, twoW);
 
     final activeGoals =
         p.goals.where((g) => g.status == 'active').toList();

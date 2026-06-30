@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../models/user_profile.dart';
 import '../../../models/daily_completion.dart';
@@ -54,6 +55,21 @@ const eveningWins = [
   WinItem('evidenceLogged', 'Evidence Log', 'Act like your future self', Icons.emoji_events_outlined, isBonus: true),
 ];
 
+/// Canonical list of the required daily wins (field, label) that make up a
+/// perfect day, in routine order. Single source of truth for explainer UIs so
+/// the "what counts" sheet never drifts from [DailyCompletion.isPerfectDay].
+const requiredWinSummary = <(String, String)>[
+  ('identityRead', 'Read your identity'),
+  ('affirmationsMorning', 'Morning affirmations'),
+  ('futureSelfCompleted', 'Future Self practice'),
+  ('journalCompleted', 'Journal'),
+  ('dayPlanned', 'Plan day — pick your #1 focus'),
+  ('focusCompleted', 'Complete your #1 focus'),
+  ('habitsCompleted', 'Daily habits'),
+  ('affirmationsEvening', 'Evening affirmations'),
+  ('chatCompleted', 'Coach check-in'),
+];
+
 // ── Field access helpers ──────────────────────────────────────────────────────
 
 /// Reads the boolean completion flag for [field] off a [DailyCompletion].
@@ -61,6 +77,7 @@ bool getCompletionField(DailyCompletion c, String field) {
   return switch (field) {
     'habitsCompleted' => c.habitsCompleted,
     'dayPlanned' => c.dayPlanned,
+    'focusCompleted' => c.focusCompleted,
     'priorityActionsCompleted' => c.priorityActionsCompleted,
     'affirmationsMorning' => c.affirmationsMorning,
     'affirmationsEvening' => c.affirmationsEvening,
@@ -178,6 +195,112 @@ VoidCallback winNavCallback({
     'evidenceLogged' => () => showEvidenceLogSheet(context, profile),
     _ => () {},
   };
+}
+
+/// Explains what counts toward a perfect day: lists every required win with its
+/// current completion state and flags the #1 focus as the key action. Opened
+/// from the dashboard momentum strip so "what's required" is never a mystery.
+void showDailyWinsInfoSheet(BuildContext context, DailyCompletion completion) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(AppSpacing.radiusXl),
+      ),
+    ),
+    builder: (_) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xl,
+          AppSpacing.md,
+          AppSpacing.xl,
+          AppSpacing.xl,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(AppStrings.dailyWinsInfoTitle,
+                style: AppTextStyles.headlineSmall),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              AppStrings.dailyWinsInfoBody,
+              style: AppTextStyles.bodyMedium
+                  .copyWith(color: AppColors.textSecondary, height: 1.5),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              '${completion.completedCount} / ${DailyCompletion.totalCount} done today',
+              style:
+                  AppTextStyles.labelSmall.copyWith(color: AppColors.textMuted),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            for (final win in requiredWinSummary)
+              _DailyWinInfoRow(
+                label: win.$2,
+                done: getCompletionField(completion, win.$1),
+                isFocus: win.$1 == 'focusCompleted',
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _DailyWinInfoRow extends StatelessWidget {
+  final String label;
+  final bool done;
+  final bool isFocus;
+
+  const _DailyWinInfoRow({
+    required this.label,
+    required this.done,
+    required this.isFocus,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+      child: Row(
+        children: [
+          Icon(
+            done
+                ? Icons.check_circle_rounded
+                : Icons.radio_button_unchecked_rounded,
+            size: 20,
+            color: done ? AppColors.success : AppColors.textMuted,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Text(
+              label,
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: done ? AppColors.textPrimary : AppColors.textSecondary,
+              ),
+            ),
+          ),
+          if (isFocus)
+            const Icon(Icons.star_rounded,
+                size: 16, color: AppColors.primary),
+        ],
+      ),
+    );
+  }
 }
 
 /// Opens the Evidence Log bottom sheet. Shared so the daily-win row and the

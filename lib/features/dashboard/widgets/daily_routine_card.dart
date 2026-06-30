@@ -10,7 +10,9 @@ import '../../../core/widgets/app_card.dart';
 import '../../../models/user_profile.dart';
 import '../../../models/daily_completion.dart';
 import '../../../providers/daily_completion_provider.dart';
+import '../../../providers/priority_actions_provider.dart';
 import 'daily_wins_shared.dart';
+import 'plan_day_bottom_sheet.dart';
 
 /// Quiet companion to [TodayHeroCard]: the full Morning + Evening routines as a
 /// single calm checklist card that mirrors the daily habits card's visual
@@ -55,6 +57,18 @@ class _DailyRoutineCardState extends ConsumerState<DailyRoutineCard> {
       Icons.check_circle_outline_rounded,
     );
 
+    // The #1 focus completion — its own required win so the "doing" that drives
+    // change is visible, not just implied by the hero. Subtitle surfaces the
+    // chosen focus, or prompts to pick one when none is set yet.
+    final focusItem = WinItem(
+      'focusCompleted',
+      AppStrings.focusWinLabel,
+      hasFocusToday
+          ? widget.profile.dailyFocusAction
+          : AppStrings.focusWinSetPrompt,
+      Icons.my_location_rounded,
+    );
+
     final effectiveMorning = [
       ...morningWins.where(
           (w) => w.field != 'journalCompleted' && w.field != 'dayPlanned'),
@@ -64,6 +78,7 @@ class _DailyRoutineCardState extends ConsumerState<DailyRoutineCard> {
     final effectiveEvening = [
       if (eveningWithJournal) journalItem,
       ...eveningWins,
+      focusItem,
     ];
 
     final morningRequired = effectiveMorning.where((w) => !w.isBonus).toList();
@@ -75,14 +90,37 @@ class _DailyRoutineCardState extends ConsumerState<DailyRoutineCard> {
     final morningActive = period == 'morning';
     final eveningActive = period == 'evening';
 
-    void toggle(String field, bool current) =>
-        toggleField(ref, field, current);
-    VoidCallback navFor(String field) => winNavCallback(
-          context: context,
-          ref: ref,
-          profile: widget.profile,
-          field: field,
-        );
+    // Completing the focus must route through the priority-actions notifier so
+    // the profile flag, completion win, and Action score all stay in sync (the
+    // generic toggle would only flip the local win flag). When no focus is set
+    // yet, send the user to Plan Day to pick one.
+    void completeFocus() {
+      if (hasFocusToday) {
+        ref
+            .read(priorityActionsProvider.notifier)
+            .toggleComplete(widget.profile.dailyFocusAction);
+      } else {
+        showPlanDaySheet(context, ref, widget.profile);
+      }
+    }
+
+    void toggle(String field, bool current) {
+      if (field == 'focusCompleted') {
+        completeFocus();
+        return;
+      }
+      toggleField(ref, field, current);
+    }
+
+    VoidCallback navFor(String field) {
+      if (field == 'focusCompleted') return completeFocus;
+      return winNavCallback(
+        context: context,
+        ref: ref,
+        profile: widget.profile,
+        field: field,
+      );
+    }
 
     final morningSection = _SessionSection(
       title: 'Morning Routine',

@@ -169,13 +169,14 @@ void main() {
       expect(container.read(dailyCompletionProvider).completedCount, 3);
     });
 
-    test('completing all 8 required fields makes isPerfectDay true', () async {
+    test('completing all 9 required fields makes isPerfectDay true', () async {
       final container = _makeContainer();
       addTearDown(container.dispose);
 
       final notifier = container.read(dailyCompletionProvider.notifier);
       await notifier.toggle('habitsCompleted', true);
       await notifier.toggle('dayPlanned', true);
+      await notifier.toggle('focusCompleted', true);
       await notifier.toggle('affirmationsMorning', true);
       await notifier.toggle('affirmationsEvening', true);
       await notifier.toggle('futureSelfCompleted', true);

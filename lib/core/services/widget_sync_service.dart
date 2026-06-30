@@ -121,9 +121,12 @@ Future<void> _completeFocusInBackground() async {
     final completions = [...profile.dailyCompletions];
     final idx = completions.indexWhere((c) => c.date == today);
     final base = idx >= 0 ? completions[idx] : DailyCompletion(date: today);
+    final nowIso = DateTime.now().toIso8601String();
     final times = Map<String, String>.from(base.completionTimes)
-      ..['priorityActionsCompleted'] = DateTime.now().toIso8601String();
+      ..['focusCompleted'] = nowIso
+      ..['priorityActionsCompleted'] = nowIso;
     final updated = base.copyWith(
+      focusCompleted: true,
       priorityActionsCompleted: true,
       completionTimes: times,
     );

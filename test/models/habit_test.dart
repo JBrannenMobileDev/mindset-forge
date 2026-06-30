@@ -5,6 +5,37 @@ void main() {
   group('Habit', () {
     final createdAt = DateTime(2025, 1, 1);
 
+    // ── activeDay (4 AM–4 AM grace window) ───────────────────────────────────
+
+    group('activeDay', () {
+      test('midnight–4 AM maps to the previous calendar day', () {
+        expect(Habit.activeDay(DateTime(2026, 6, 28, 0, 30)),
+            DateTime(2026, 6, 27));
+        expect(Habit.activeDay(DateTime(2026, 6, 28, 3, 59)),
+            DateTime(2026, 6, 27));
+      });
+
+      test('4 AM onward maps to the same calendar day', () {
+        expect(Habit.activeDay(DateTime(2026, 6, 28, 4, 0)),
+            DateTime(2026, 6, 28));
+        expect(Habit.activeDay(DateTime(2026, 6, 28, 23, 0)),
+            DateTime(2026, 6, 28));
+      });
+
+      test('an 11 PM completion and a 12:30 AM "now" share one active day', () {
+        // Late-night session: checked at 11 PM, viewed at 12:30 AM next calendar
+        // day — both belong to the same 4 AM–4 AM active day, so the habit must
+        // still read as completed instead of resetting at midnight.
+        expect(Habit.activeDay(DateTime(2026, 6, 27, 23, 0)),
+            Habit.activeDay(DateTime(2026, 6, 28, 0, 30)));
+      });
+
+      test('a 4:30 AM "now" rolls over to the new active day', () {
+        expect(Habit.activeDay(DateTime(2026, 6, 27, 23, 0)),
+            isNot(Habit.activeDay(DateTime(2026, 6, 28, 4, 30))));
+      });
+    });
+
     // ── isCompletedToday ─────────────────────────────────────────────────────
 
     group('isCompletedToday', () {

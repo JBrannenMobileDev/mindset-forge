@@ -92,6 +92,7 @@ class DashboardHeader extends ConsumerWidget {
           completedCount: completion.completedCount,
           totalCount: DailyCompletion.totalCount,
           isPerfect: completion.isPerfectDay,
+          onTodayTap: () => showDailyWinsInfoSheet(context, completion),
         ).animate().fadeIn(delay: 200.ms, duration: 500.ms),
       ],
     );
@@ -107,6 +108,7 @@ class _MomentumStrip extends StatelessWidget {
   final int completedCount;
   final int totalCount;
   final bool isPerfect;
+  final VoidCallback onTodayTap;
 
   const _MomentumStrip({
     required this.currentStreak,
@@ -114,6 +116,7 @@ class _MomentumStrip extends StatelessWidget {
     required this.completedCount,
     required this.totalCount,
     required this.isPerfect,
+    required this.onTodayTap,
   });
 
   @override
@@ -134,13 +137,18 @@ class _MomentumStrip extends StatelessWidget {
           label: 'best',
         ),
         const _MomentumDivider(),
-        _MomentumItem(
-          icon: isPerfect
-              ? Icons.workspace_premium_rounded
-              : Icons.check_circle_outline_rounded,
-          color: isPerfect ? AppColors.primary : AppColors.textSecondary,
-          value: isPerfect ? 'Perfect' : '$completedCount/$totalCount',
-          label: 'today',
+        GestureDetector(
+          onTap: onTodayTap,
+          behavior: HitTestBehavior.opaque,
+          child: _MomentumItem(
+            icon: isPerfect
+                ? Icons.workspace_premium_rounded
+                : Icons.check_circle_outline_rounded,
+            color: isPerfect ? AppColors.primary : AppColors.textSecondary,
+            value: isPerfect ? 'Perfect' : '$completedCount/$totalCount',
+            label: 'today',
+            trailingIcon: Icons.info_outline_rounded,
+          ),
         ),
       ],
     );
@@ -152,12 +160,14 @@ class _MomentumItem extends StatelessWidget {
   final Color color;
   final String value;
   final String label;
+  final IconData? trailingIcon;
 
   const _MomentumItem({
     required this.icon,
     required this.color,
     required this.value,
     required this.label,
+    this.trailingIcon,
   });
 
   @override
@@ -175,6 +185,10 @@ class _MomentumItem extends StatelessWidget {
           label,
           style: AppTextStyles.labelSmall.copyWith(color: AppColors.textMuted),
         ),
+        if (trailingIcon != null) ...[
+          const SizedBox(width: 4),
+          Icon(trailingIcon, size: 13, color: AppColors.textMuted),
+        ],
       ],
     );
   }

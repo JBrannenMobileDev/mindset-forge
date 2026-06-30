@@ -3,11 +3,12 @@ import 'package:mindsetforge/models/daily_completion.dart';
 import 'package:mindsetforge/models/user_profile.dart';
 import 'package:mindsetforge/models/widget_payload.dart';
 
-/// A `DailyCompletion` with all 8 required items done (a perfect day).
+/// A `DailyCompletion` with all 9 required items done (a perfect day).
 DailyCompletion _perfect(String date) => DailyCompletion(
       date: date,
       habitsCompleted: true,
       dayPlanned: true,
+      focusCompleted: true,
       affirmationsMorning: true,
       affirmationsEvening: true,
       futureSelfCompleted: true,
@@ -154,8 +155,8 @@ void main() {
       );
       expect(p.state, 'on_track');
       expect(p.accentKind, 'done');
-      expect(p.completedCount, 8);
-      expect(p.totalCount, 8);
+      expect(p.completedCount, 9);
+      expect(p.totalCount, 9);
     });
   });
 

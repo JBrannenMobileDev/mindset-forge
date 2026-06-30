@@ -50,6 +50,7 @@ class DailyCompletionNotifier extends StateNotifier<DailyCompletion> {
     return switch (field) {
       'habitsCompleted' => state.habitsCompleted,
       'dayPlanned' => state.dayPlanned,
+      'focusCompleted' => state.focusCompleted,
       'priorityActionsCompleted' => state.priorityActionsCompleted,
       'affirmationsMorning' => state.affirmationsMorning,
       'affirmationsEvening' => state.affirmationsEvening,
@@ -90,6 +91,8 @@ class DailyCompletionNotifier extends StateNotifier<DailyCompletion> {
         return state.copyWith(habitsCompleted: value);
       case 'dayPlanned':
         return state.copyWith(dayPlanned: value);
+      case 'focusCompleted':
+        return state.copyWith(focusCompleted: value);
       case 'priorityActionsCompleted':
         return state.copyWith(priorityActionsCompleted: value);
       case 'affirmationsMorning':

@@ -80,16 +80,20 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
     }
   }
 
-  /// Derives the two daily-win flags from the current state and persists them.
-  /// The user-picked #1 focus is the single source of truth:
-  /// `dayPlanned` = a focus has been picked; `priorityActionsCompleted` = that
-  /// focus is complete. Extra actions are optional and never affect either.
+  /// Derives the daily-win flags from the current state and persists them:
+  /// - `dayPlanned` = a #1 focus has been picked (the morning commitment).
+  /// - `focusCompleted` = that #1 focus is complete — the decisive action that
+  ///   counts toward the streak / perfect day.
+  /// - `priorityActionsCompleted` = at least one planned action is done; a
+  ///   scoring-only signal for the Action dimension (not the streak).
   Future<void> _syncDailyWins() async {
     final hasFocus = state.focusAction.isNotEmpty;
     final focusDone = hasFocus && state.completed.contains(state.focusAction);
+    final anyActionDone = state.actions.any(state.completed.contains);
     final dc = _ref.read(dailyCompletionProvider.notifier);
     await dc.toggle('dayPlanned', hasFocus);
-    await dc.toggle('priorityActionsCompleted', focusDone);
+    await dc.toggle('focusCompleted', focusDone);
+    await dc.toggle('priorityActionsCompleted', anyActionDone);
   }
 
   /// Toggle a single action's completion. This is the *doing*. Keeps
@@ -229,9 +233,10 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
         'dailyFocusActionDate': today,
         'dailyFocusActionCompleted': false,
       });
-      // No focus picked yet, so neither win is satisfied by generating.
+      // No focus picked yet, so no win is satisfied by generating.
       final dc = _ref.read(dailyCompletionProvider.notifier);
       await dc.toggle('dayPlanned', false);
+      await dc.toggle('focusCompleted', false);
       await dc.toggle('priorityActionsCompleted', false);
       _ref.read(analyticsServiceProvider).trackAiFeatureUsed('priority_actions');
       // State refreshes from the profile stream.

@@ -7,19 +7,20 @@ void main() {
     String dateKey(DateTime d) =>
         '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-    // A completion for [day] with [wins] of the 8 required items set true.
+    // A completion for [day] with [wins] of the 9 required items set true.
     DailyCompletion day(DateTime date, int wins) {
-      final flags = List<bool>.generate(8, (i) => i < wins);
+      final flags = List<bool>.generate(9, (i) => i < wins);
       return DailyCompletion(
         date: dateKey(date),
         habitsCompleted: flags[0],
         dayPlanned: flags[1],
-        affirmationsMorning: flags[2],
-        affirmationsEvening: flags[3],
-        futureSelfCompleted: flags[4],
-        journalCompleted: flags[5],
-        chatCompleted: flags[6],
-        identityRead: flags[7],
+        focusCompleted: flags[2],
+        affirmationsMorning: flags[3],
+        affirmationsEvening: flags[4],
+        futureSelfCompleted: flags[5],
+        journalCompleted: flags[6],
+        chatCompleted: flags[7],
+        identityRead: flags[8],
       );
     }
 

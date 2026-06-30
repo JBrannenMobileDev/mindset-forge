@@ -8,8 +8,14 @@ class DailyCompletion {
   /// "Plan Day" morning win — distinct from actually completing the actions.
   final bool dayPlanned;
 
-  /// Today's priority actions have actually been completed (the doing).
-  /// Tracked for scoring; does NOT count toward the streak on its own.
+  /// The user-picked #1 focus action has been completed (the doing). This is
+  /// the one decisive action that drives change, so it counts toward the
+  /// streak / perfect day.
+  final bool focusCompleted;
+
+  /// At least one of today's planned priority actions has been completed.
+  /// Scoring-only signal for the Action alignment dimension; does NOT count
+  /// toward the streak on its own.
   final bool priorityActionsCompleted;
   final bool affirmationsMorning;
   final bool affirmationsEvening;
@@ -30,6 +36,7 @@ class DailyCompletion {
     required this.date,
     this.habitsCompleted = false,
     this.dayPlanned = false,
+    this.focusCompleted = false,
     this.priorityActionsCompleted = false,
     this.affirmationsMorning = false,
     this.affirmationsEvening = false,
@@ -42,10 +49,11 @@ class DailyCompletion {
     this.completionTimes = const {},
   });
 
-  /// Perfect day = all 8 required items done.
+  /// Perfect day = all 9 required items done.
   bool get isPerfectDay =>
       habitsCompleted &&
       dayPlanned &&
+      focusCompleted &&
       affirmationsMorning &&
       affirmationsEvening &&
       futureSelfCompleted &&
@@ -58,6 +66,7 @@ class DailyCompletion {
     return [
       habitsCompleted,
       dayPlanned,
+      focusCompleted,
       affirmationsMorning,
       affirmationsEvening,
       futureSelfCompleted,
@@ -67,9 +76,9 @@ class DailyCompletion {
     ].where((v) => v).length;
   }
 
-  static const int totalCount = 8;
+  static const int totalCount = 9;
 
-  /// A day extends the streak when at least [streakThreshold] of the 8
+  /// A day extends the streak when at least [streakThreshold] of the 9
   /// required wins are done.
   static const int streakThreshold = 5;
 
@@ -82,6 +91,7 @@ class DailyCompletion {
     String? date,
     bool? habitsCompleted,
     bool? dayPlanned,
+    bool? focusCompleted,
     bool? priorityActionsCompleted,
     bool? affirmationsMorning,
     bool? affirmationsEvening,
@@ -97,6 +107,7 @@ class DailyCompletion {
       date: date ?? this.date,
       habitsCompleted: habitsCompleted ?? this.habitsCompleted,
       dayPlanned: dayPlanned ?? this.dayPlanned,
+      focusCompleted: focusCompleted ?? this.focusCompleted,
       priorityActionsCompleted:
           priorityActionsCompleted ?? this.priorityActionsCompleted,
       affirmationsMorning: affirmationsMorning ?? this.affirmationsMorning,
@@ -128,6 +139,7 @@ class DailyCompletion {
       dayPlanned: json['dayPlanned'] as bool? ??
           json['priorityActionsCompleted'] as bool? ??
           false,
+      focusCompleted: json['focusCompleted'] as bool? ?? false,
       priorityActionsCompleted:
           json['priorityActionsCompleted'] as bool? ?? false,
       affirmationsMorning: json['affirmationsMorning'] as bool? ?? false,
@@ -147,6 +159,7 @@ class DailyCompletion {
         'date': date,
         'habitsCompleted': habitsCompleted,
         'dayPlanned': dayPlanned,
+        'focusCompleted': focusCompleted,
         'priorityActionsCompleted': priorityActionsCompleted,
         'affirmationsMorning': affirmationsMorning,
         'affirmationsEvening': affirmationsEvening,

@@ -25,24 +25,25 @@ class Habit {
     required this.createdAt,
   });
 
+  /// Active day (4 AM–4 AM): midnight–4 AM counts as the prior day, matching
+  /// `AppDateUtils.todayStringWithGracePeriod()` so late-night progress and
+  /// streaks don't reset at midnight while the session period is still evening.
+  static DateTime activeDay(DateTime d) {
+    final a = d.hour < 4 ? d.subtract(const Duration(days: 1)) : d;
+    return DateTime(a.year, a.month, a.day);
+  }
+
   int get currentStreak {
     if (completionHistory.isEmpty) return 0;
 
     final sorted = [...completionHistory]
       ..sort((a, b) => b.compareTo(a));
 
-    final today = DateTime.now();
-    final todayDate = DateTime(today.year, today.month, today.day);
-
     int streak = 0;
-    DateTime checkDate = todayDate;
+    DateTime checkDate = activeDay(DateTime.now());
 
     for (final completion in sorted) {
-      final completionDate = DateTime(
-        completion.year,
-        completion.month,
-        completion.day,
-      );
+      final completionDate = activeDay(completion);
 
       if (completionDate == checkDate ||
           completionDate == checkDate.subtract(const Duration(days: 1))) {
@@ -58,9 +59,7 @@ class Habit {
 
   bool get isCompletedToday {
     if (lastCompletedDate == null) return false;
-    final now = DateTime.now();
-    final last = lastCompletedDate!;
-    return last.year == now.year && last.month == now.month && last.day == now.day;
+    return activeDay(lastCompletedDate!) == activeDay(DateTime.now());
   }
 
   Habit copyWith({

@@ -6,11 +6,12 @@ void main() {
     // ── isPerfectDay ──────────────────────────────────────────────────────────
 
     group('isPerfectDay', () {
-      test('true when all 8 required items are done', () {
+      test('true when all 9 required items are done', () {
         const completion = DailyCompletion(
           date: '2026-01-15',
           habitsCompleted: true,
           dayPlanned: true,
+          focusCompleted: true,
           affirmationsMorning: true,
           affirmationsEvening: true,
           futureSelfCompleted: true,
@@ -26,6 +27,7 @@ void main() {
           date: '2026-01-15',
           habitsCompleted: true,
           dayPlanned: true,
+          focusCompleted: true,
           affirmationsMorning: true,
           affirmationsEvening: true,
           futureSelfCompleted: true,
@@ -37,11 +39,12 @@ void main() {
       });
 
       test('bonus items do not affect isPerfectDay', () {
-        // All 8 required true + both bonus false → still perfect
+        // All 9 required true + both bonus false → still perfect
         const completion = DailyCompletion(
           date: '2026-01-15',
           habitsCompleted: true,
           dayPlanned: true,
+          focusCompleted: true,
           affirmationsMorning: true,
           affirmationsEvening: true,
           futureSelfCompleted: true,
@@ -80,11 +83,12 @@ void main() {
         expect(completion.completedCount, 2);
       });
 
-      test('8 when all required are done', () {
+      test('9 when all required are done', () {
         const completion = DailyCompletion(
           date: '2026-01-15',
           habitsCompleted: true,
           dayPlanned: true,
+          focusCompleted: true,
           affirmationsMorning: true,
           affirmationsEvening: true,
           futureSelfCompleted: true,
@@ -104,7 +108,7 @@ void main() {
         expect(completion.completionPercent, 0.0);
       });
 
-      test('0.5 when 4 of 8 done', () {
+      test('reflects the fraction of required wins done (4 of 9)', () {
         const completion = DailyCompletion(
           date: '2026-01-15',
           habitsCompleted: true,
@@ -112,14 +116,15 @@ void main() {
           affirmationsMorning: true,
           affirmationsEvening: true,
         );
-        expect(completion.completionPercent, 0.5);
+        expect(completion.completionPercent, closeTo(4 / 9, 1e-9));
       });
 
-      test('1.0 when all 8 done', () {
+      test('1.0 when all 9 done', () {
         const completion = DailyCompletion(
           date: '2026-01-15',
           habitsCompleted: true,
           dayPlanned: true,
+          focusCompleted: true,
           affirmationsMorning: true,
           affirmationsEvening: true,
           futureSelfCompleted: true,
@@ -133,26 +138,27 @@ void main() {
 
     // ── totalCount constant ───────────────────────────────────────────────────
 
-    test('totalCount is 8', () {
-      expect(DailyCompletion.totalCount, 8);
+    test('totalCount is 9', () {
+      expect(DailyCompletion.totalCount, 9);
     });
 
     // ── countsForStreak ───────────────────────────────────────────────────────
 
     group('countsForStreak', () {
-      // Builds a completion with [n] of the 8 required wins set true.
+      // Builds a completion with [n] of the 9 required wins set true.
       DailyCompletion withWins(int n) {
-        final flags = List<bool>.generate(8, (i) => i < n);
+        final flags = List<bool>.generate(9, (i) => i < n);
         return DailyCompletion(
           date: '2026-01-15',
           habitsCompleted: flags[0],
           dayPlanned: flags[1],
-          affirmationsMorning: flags[2],
-          affirmationsEvening: flags[3],
-          futureSelfCompleted: flags[4],
-          journalCompleted: flags[5],
-          chatCompleted: flags[6],
-          identityRead: flags[7],
+          focusCompleted: flags[2],
+          affirmationsMorning: flags[3],
+          affirmationsEvening: flags[4],
+          futureSelfCompleted: flags[5],
+          journalCompleted: flags[6],
+          chatCompleted: flags[7],
+          identityRead: flags[8],
         );
       }
 
@@ -160,16 +166,16 @@ void main() {
         expect(DailyCompletion.streakThreshold, 5);
       });
 
-      test('false just below the threshold (4 of 8)', () {
+      test('false just below the threshold (4 of 9)', () {
         expect(withWins(4).countsForStreak, isFalse);
       });
 
-      test('true exactly at the threshold (5 of 8)', () {
+      test('true exactly at the threshold (5 of 9)', () {
         expect(withWins(5).countsForStreak, isTrue);
       });
 
-      test('true above the threshold (8 of 8)', () {
-        expect(withWins(8).countsForStreak, isTrue);
+      test('true above the threshold (9 of 9)', () {
+        expect(withWins(9).countsForStreak, isTrue);
       });
 
       test('false for default (all-false) completion', () {

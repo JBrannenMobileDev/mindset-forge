@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/utils/boot_log.dart';
 import '../../providers/auth_provider.dart';
 import 'widgets/splash_view.dart';
 
@@ -29,11 +30,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     if (!mounted || _navigated || !_minDelayPassed) return;
 
     final authAsync = ref.read(authStateProvider);
+    bootLog('SplashScreen auth loading=${authAsync.isLoading} '
+        'user=${authAsync.valueOrNull?.uid}');
     if (authAsync.isLoading) return;
 
     final user = authAsync.valueOrNull;
     if (user != null) {
       final profileAsync = ref.read(currentUserProfileProvider);
+      bootLog('SplashScreen profile loading=${profileAsync.isLoading} '
+          'hasValue=${profileAsync.hasValue}');
       if (profileAsync.isLoading) return; // wait for next rebuild
     }
 

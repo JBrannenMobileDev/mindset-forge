@@ -58,9 +58,11 @@ class _TodayHeroCardState extends ConsumerState<TodayHeroCard> {
           'dailyFocusActionCompleted': true,
         });
       }
-      await ref
-          .read(dailyCompletionProvider.notifier)
-          .toggle('priorityActionsCompleted', true);
+      final dc = ref.read(dailyCompletionProvider.notifier);
+      // The #1 focus is the streak-counting win; completing it also satisfies
+      // the scoring-only "any priority action done" signal.
+      await dc.toggle('focusCompleted', true);
+      await dc.toggle('priorityActionsCompleted', true);
       if (!mounted) return;
       setState(() => _focusCompleting = false);
       _confettiCtrl.play();

@@ -4,19 +4,20 @@ import 'package:mindsetforge/features/dashboard/widgets/daily_wins_shared.dart';
 
 void main() {
   group('bestStreak', () {
-    // Builds a completion for [date] with [wins] of the 8 required items set.
+    // Builds a completion for [date] with [wins] of the 9 required items set.
     DailyCompletion day(String date, int wins) {
-      final flags = List<bool>.generate(8, (i) => i < wins);
+      final flags = List<bool>.generate(9, (i) => i < wins);
       return DailyCompletion(
         date: date,
         habitsCompleted: flags[0],
         dayPlanned: flags[1],
-        affirmationsMorning: flags[2],
-        affirmationsEvening: flags[3],
-        futureSelfCompleted: flags[4],
-        journalCompleted: flags[5],
-        chatCompleted: flags[6],
-        identityRead: flags[7],
+        focusCompleted: flags[2],
+        affirmationsMorning: flags[3],
+        affirmationsEvening: flags[4],
+        futureSelfCompleted: flags[5],
+        journalCompleted: flags[6],
+        chatCompleted: flags[7],
+        identityRead: flags[8],
       );
     }
 
@@ -25,7 +26,7 @@ void main() {
     });
 
     test('ignores days below the streak threshold', () {
-      // Three consecutive days, each with only 4/8 wins → no qualifying day.
+      // Three consecutive days, each with only 4/9 wins → no qualifying day.
       final completions = [
         day('2026-01-15', 4),
         day('2026-01-16', 4),

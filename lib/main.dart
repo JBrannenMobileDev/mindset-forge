@@ -22,6 +22,7 @@ import 'core/services/notification_service.dart';
 import 'core/services/pending_invite_store.dart';
 import 'core/services/widget_sync_service.dart';
 import 'core/theme/app_theme.dart';
+import 'core/utils/boot_log.dart';
 import 'features/auth/widgets/splash_view.dart';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
@@ -45,33 +46,53 @@ void main() async {
   runZonedGuarded(
     () async {
       final binding = WidgetsFlutterBinding.ensureInitialized();
+      bootLog('binding ready');
       // Hold the native splash on screen until the first Flutter frame paints so
       // there is no gap between the OS launch screen and our SplashView.
       FlutterNativeSplash.preserve(widgetsBinding: binding);
+      bootLog('native splash preserved');
+
+      // Firebase MUST be initialized before any Firebase service is touched
+      // (Crashlytics error handler, FCM background handler below). Accessing a
+      // Firebase plugin before initializeApp can throw/hang before runApp, which
+      // leaves the native splash up forever. _InitApp guards a second call.
+      try {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+        bootLog('Firebase.initializeApp (main) done');
+      } catch (e) {
+        bootLog('Firebase.initializeApp (main) FAILED: $e');
+      }
 
       // Route all Flutter framework errors to Crashlytics.
       FlutterError.onError =
           FirebaseCrashlytics.instance.recordFlutterFatalError;
+      bootLog('crashlytics handler set');
 
       // Register FCM background handler before Firebase init
       if (!kIsWeb) {
         FirebaseMessaging.onBackgroundMessage(
           _firebaseMessagingBackgroundHandler,
         );
+        bootLog('fcm background handler set');
       }
 
       // Wire the home-screen widget: register the background callback that the
       // "Mark done" action invokes (iOS App Intent / Android broadcast). The App
       // Group binding is iOS-only; Android stores widget data in SharedPreferences.
       if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
+        bootLog('home_widget setup start');
         if (Platform.isIOS) {
           await HomeWidget.setAppGroupId(WidgetSyncService.appGroupId);
         }
         await HomeWidget.registerInteractivityCallback(
           widgetInteractiveCallback,
         );
+        bootLog('home_widget setup done');
       }
 
+      bootLog('calling runApp');
       runApp(const _InitApp());
     },
     (error, stack) =>
@@ -107,11 +128,18 @@ class _InitAppState extends State<_InitApp> {
   }
 
   Future<void> _init() async {
+    bootLog('_init start — Firebase.initializeApp');
     try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
+      // Already initialized in main() before runApp; only initialize here if
+      // that didn't happen (e.g. web) to avoid a duplicate-app throw.
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      }
+      bootLog('Firebase.initializeApp done');
     } catch (e) {
+      bootLog('Firebase.initializeApp FAILED: $e');
       setState(() => _error = 'Firebase init failed:\n$e');
       return;
     }
@@ -131,24 +159,44 @@ class _InitAppState extends State<_InitApp> {
       });
     }
 
-    // Load any pending partner invite stashed before sign-in.
-    await PendingInviteStore.load();
-
-    // Configure RevenueCat
-    await _initRevenueCat();
-
-    // Configure local notifications
-    await _initLocalNotifications();
-
-    // Initialise Mixpanel analytics
-    await AnalyticsService.init(_mixpanelToken);
+    // None of the steps below are required to render the app. Each is guarded
+    // and time-boxed so a slow network or a throwing plugin can never trap the
+    // user on the splash screen — we always proceed to the router, which gates
+    // on auth itself. Failures are logged (and forwarded to Crashlytics) so the
+    // offending step is identifiable instead of silently hanging.
+    await _guardStartupStep('pendingInvite', PendingInviteStore.load);
+    await _guardStartupStep('revenueCat', _initRevenueCat);
+    await _guardStartupStep('localNotifications', _initLocalNotifications);
+    await _guardStartupStep('analytics', () => AnalyticsService.init(_mixpanelToken));
 
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
     if (!kIsWeb) {
       SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     }
 
+    bootLog('all startup steps done — setting ready');
     if (mounted) setState(() => _ready = true);
+  }
+
+  /// Runs a non-critical startup step with a hard timeout and error guard so the
+  /// app never gets stuck on the splash because one initializer hung or threw.
+  Future<void> _guardStartupStep(
+    String label,
+    Future<void> Function() step,
+  ) async {
+    bootLog('step "$label" start');
+    try {
+      await step().timeout(const Duration(seconds: 8));
+      bootLog('step "$label" done');
+    } catch (e, stack) {
+      debugPrint('Startup step "$label" failed (continuing): $e');
+      FirebaseCrashlytics.instance.recordError(
+        e,
+        stack,
+        reason: 'startup step "$label" failed',
+        fatal: false,
+      );
+    }
   }
 
   Future<void> _initRevenueCat() async {
@@ -230,6 +278,7 @@ class _InitAppState extends State<_InitApp> {
 
   @override
   Widget build(BuildContext context) {
+    bootLog('_InitApp.build ready=$_ready error=${_error != null}');
     if (_error != null) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,

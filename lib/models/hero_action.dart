@@ -49,6 +49,7 @@ bool _completionField(DailyCompletion c, String field) {
   return switch (field) {
     'habitsCompleted' => c.habitsCompleted,
     'dayPlanned' => c.dayPlanned,
+    'focusCompleted' => c.focusCompleted,
     'priorityActionsCompleted' => c.priorityActionsCompleted,
     'affirmationsMorning' => c.affirmationsMorning,
     'affirmationsEvening' => c.affirmationsEvening,

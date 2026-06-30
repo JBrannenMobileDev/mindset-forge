@@ -259,6 +259,14 @@ abstract final class AppStrings {
   static const String dailyRoutine = 'Daily Routine';
   static const String groupHabits = 'Habits';
 
+  // Focus win + perfect-day explainer
+  static const String focusWinLabel = 'Complete Focus';
+  static const String focusWinSetPrompt = 'Pick your #1 focus first';
+  static const String dailyWinsInfoTitle = 'What makes a perfect day';
+  static const String dailyWinsInfoBody =
+      'Finish all of today\'s daily wins to earn a perfect day. Completing your '
+      '#1 focus is the action that drives real change — it\'s required.';
+
   // Goals
   static const String goals = 'Goals';
   static const String habits = 'Habits';

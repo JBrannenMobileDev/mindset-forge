@@ -44,9 +44,9 @@ Future<void> _completeFocusFromWatch(Ref ref) async {
         'dailyFocusActionCompleted': true,
       });
     }
-    await ref
-        .read(dailyCompletionProvider.notifier)
-        .toggle('priorityActionsCompleted', true);
+    final dc = ref.read(dailyCompletionProvider.notifier);
+    await dc.toggle('focusCompleted', true);
+    await dc.toggle('priorityActionsCompleted', true);
     // The profile/completion listeners above will re-sync the watch + widget.
   } catch (e) {
     debugPrint('widgetSync: completeFocus from watch failed: $e');

@@ -138,6 +138,7 @@ class _PlanDaySheetState extends ConsumerState<_PlanDaySheet> {
         // is freshly picked so its completion resets to false.
         final dc = ref.read(dailyCompletionProvider.notifier);
         await dc.toggle('dayPlanned', true);
+        await dc.toggle('focusCompleted', false);
         await dc.toggle('priorityActionsCompleted', false);
       }
       if (mounted) Navigator.of(context).pop();
