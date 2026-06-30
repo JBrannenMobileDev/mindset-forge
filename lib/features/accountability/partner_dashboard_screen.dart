@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
+import '../../core/widgets/week_streak_chain.dart';
 import '../../models/partner_progress.dart';
 import '../../providers/accountability_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -171,6 +173,34 @@ class _PartnerDashboardScreenState extends ConsumerState<PartnerDashboardScreen>
     ).animate().fadeIn(delay: 80.ms);
   }
 
+  /// Maps the partner's `weeklyActivity` (oldest → newest, today last) to the
+  /// shared streak-chain visual. No tap handler / pulse: the partner views
+  /// consistency only and can't act on the user's behalf.
+  List<StreakDayData> _weekDays(PartnerProgress progress) {
+    const letters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    final days = progress.weeklyActivity;
+    return List.generate(days.length, (i) {
+      final day = days[i];
+      final isToday = i == days.length - 1;
+      final StreakDayState state;
+      if (day.isPerfect) {
+        state = StreakDayState.perfect;
+      } else if (day.countsForStreak) {
+        state = StreakDayState.qualifying;
+      } else if (isToday) {
+        state = StreakDayState.pending;
+      } else {
+        state = StreakDayState.missed;
+      }
+
+      // Locale-independent weekday letter from the YYYY-MM-DD key.
+      final parsed = DateTime.tryParse(day.date);
+      final letter = parsed != null ? letters[parsed.weekday - 1] : '';
+
+      return StreakDayData(letter: letter, state: state, isToday: isToday);
+    });
+  }
+
   Widget _buildContent() {
     final progress = _progress!;
     final streak = progress.currentStreak;
@@ -268,6 +298,17 @@ class _PartnerDashboardScreenState extends ConsumerState<PartnerDashboardScreen>
         ),
 
         const SizedBox(height: AppSpacing.lg),
+
+        // This week — 7-day consistency chain (qualifying / perfect / missed).
+        // Chain only: shows consistency, never which specific wins were logged.
+        if (progress.weeklyActivity.isNotEmpty) ...[
+          Text(AppStrings.partnerWeekTitle, style: AppTextStyles.headlineSmall),
+          const SizedBox(height: AppSpacing.md),
+          AppCard(
+            child: WeekStreakChain(days: _weekDays(progress)),
+          ).animate().fadeIn(delay: 220.ms),
+          const SizedBox(height: AppSpacing.lg),
+        ],
 
         // Today's evidence
         if (progress.todayEvidence != null &&

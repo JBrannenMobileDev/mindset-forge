@@ -55,6 +55,16 @@ class WidgetPayload {
   final int completedCount;
   final int totalCount;
 
+  /// Last 7 days of streak qualification (oldest → newest, index 6 = today).
+  /// `weekStreak[6]` reflects today's live qualification (5+ of 9 wins).
+  final List<bool> weekStreak;
+
+  /// Single-char weekday letters aligned to [weekStreak] (e.g. M T W T F S S).
+  final List<String> weekLabels;
+
+  /// Nudge line shown beneath the 7-day chain in the focus-complete state.
+  final String weekCaption;
+
   final String displayName;
   final String firstName;
   final String updatedAt; // ISO8601
@@ -76,6 +86,9 @@ class WidgetPayload {
     required this.streak,
     required this.completedCount,
     required this.totalCount,
+    required this.weekStreak,
+    required this.weekLabels,
+    required this.weekCaption,
     required this.displayName,
     required this.firstName,
     required this.updatedAt,
@@ -101,6 +114,9 @@ class WidgetPayload {
       streak: 0,
       completedCount: 0,
       totalCount: DailyCompletion.totalCount,
+      weekStreak: List<bool>.filled(7, false),
+      weekLabels: _weekLabels(at),
+      weekCaption: '',
       displayName: '',
       firstName: 'there',
       updatedAt: at.toIso8601String(),
@@ -130,6 +146,12 @@ class WidgetPayload {
     final headline = isFocusKind ? action.subtitle : action.title;
     final subline = isFocusKind ? '' : action.subtitle;
 
+    final weekStreak = _weekStreak(profile, dc, at);
+    final weekCaption = dc.countsForStreak
+        ? AppStrings.widgetStreakSafe
+        : '${dc.completedCount}/${DailyCompletion.totalCount} today — '
+            '${AppStrings.widgetStreakFinish}';
+
     return WidgetPayload(
       state: action.legacyState,
       focusText: hasFocusToday ? profile.dailyFocusAction : '',
@@ -147,6 +169,9 @@ class WidgetPayload {
       streak: profile.currentStreak,
       completedCount: dc.completedCount,
       totalCount: DailyCompletion.totalCount,
+      weekStreak: weekStreak,
+      weekLabels: _weekLabels(at),
+      weekCaption: weekCaption,
       displayName: profile.displayName,
       firstName: profile.firstName,
       updatedAt: at.toIso8601String(),
@@ -162,6 +187,46 @@ class WidgetPayload {
 
   static String _dateString(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  /// The grace-aware active day as a date (midnight–4 AM counts as prior day).
+  static DateTime _activeDay(DateTime d) {
+    final base = DateTime(d.year, d.month, d.day);
+    return d.hour < 4 ? base.subtract(const Duration(days: 1)) : base;
+  }
+
+  /// The last 7 active days, oldest → newest (index 6 = today).
+  static List<DateTime> _last7Days(DateTime at) {
+    final today = _activeDay(at);
+    return List.generate(7, (i) => today.subtract(Duration(days: 6 - i)));
+  }
+
+  /// Per-day streak qualification for the last 7 days. Today (index 6) uses the
+  /// live completion record; prior days look up history. Mirrors the dashboard
+  /// `_StreakStrip` so the widget and app never disagree.
+  static List<bool> _weekStreak(
+    UserProfile profile,
+    DailyCompletion today,
+    DateTime at,
+  ) {
+    final days = _last7Days(at);
+    final todayKey = _dateString(days.last);
+    return days.map((d) {
+      final key = _dateString(d);
+      if (key == todayKey) return today.countsForStreak;
+      final c = profile.dailyCompletions.firstWhere(
+        (x) => x.date == key,
+        orElse: () => DailyCompletion(date: key),
+      );
+      return c.countsForStreak;
+    }).toList();
+  }
+
+  /// Single-char weekday letters aligned to [_last7Days]. Locale-independent
+  /// (DateTime.weekday: 1 = Mon … 7 = Sun) so it stays in sync with native.
+  static List<String> _weekLabels(DateTime at) {
+    const letters = ['M', 'T', 'W', 'T', 'F', 'S', 'S']; // Mon → Sun
+    return _last7Days(at).map((d) => letters[d.weekday - 1]).toList();
+  }
 
   /// The "active day" key (4 AM–4 AM): midnight–4 AM counts as the prior day so
   /// the widget's completion count and focus check don't reset at midnight
@@ -199,6 +264,9 @@ class WidgetPayload {
         'streak': streak,
         'completedCount': completedCount,
         'totalCount': totalCount,
+        'weekStreak': weekStreak,
+        'weekLabels': weekLabels,
+        'weekCaption': weekCaption,
         'displayName': displayName,
         'firstName': firstName,
         'updatedAt': updatedAt,
@@ -222,6 +290,15 @@ class WidgetPayload {
         completedCount: (json['completedCount'] as num?)?.toInt() ?? 0,
         totalCount:
             (json['totalCount'] as num?)?.toInt() ?? DailyCompletion.totalCount,
+        weekStreak: (json['weekStreak'] as List?)
+                ?.map((e) => e as bool? ?? false)
+                .toList() ??
+            const [],
+        weekLabels: (json['weekLabels'] as List?)
+                ?.map((e) => e as String? ?? '')
+                .toList() ??
+            const [],
+        weekCaption: json['weekCaption'] as String? ?? '',
         displayName: json['displayName'] as String? ?? '',
         firstName: json['firstName'] as String? ?? 'there',
         updatedAt: json['updatedAt'] as String? ?? '',

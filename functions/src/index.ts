@@ -906,6 +906,7 @@ type CompletionDoc = {
   date?: string;
   habitsCompleted?: boolean;
   dayPlanned?: boolean;
+  focusCompleted?: boolean;
   affirmationsMorning?: boolean;
   affirmationsEvening?: boolean;
   futureSelfCompleted?: boolean;
@@ -914,9 +915,13 @@ type CompletionDoc = {
   identityRead?: boolean;
 };
 
+// Mirrors DailyCompletion.isPerfectDay / completedCount on the client (9 wins,
+// including `focusCompleted`). Keep this in sync so partner-facing streak,
+// today %, and perfect-day counts match what the user sees in-app.
 const REQUIRED_KEYS: (keyof CompletionDoc)[] = [
   'habitsCompleted',
   'dayPlanned',
+  'focusCompleted',
   'affirmationsMorning',
   'affirmationsEvening',
   'futureSelfCompleted',
@@ -930,7 +935,7 @@ function completedCount(c: CompletionDoc): number {
 }
 
 /** Mirrors DailyCompletion.streakThreshold on the client: a day counts toward
- * the streak when at least this many of the 8 required wins are done. */
+ * the streak when at least this many of the 9 required wins are done. */
 const STREAK_THRESHOLD = 5;
 
 /** Mirrors ManifestationScoring.habitDayThreshold: a day counts toward the
@@ -943,7 +948,7 @@ function localDateKey(d: Date): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
-/** Server-side port of UserProfile.currentStreak (5+ of 8 required items on consecutive days). */
+/** Server-side port of UserProfile.currentStreak (5+ of 9 required items on consecutive days). */
 function computeStreak(completions: CompletionDoc[]): number {
   if (completions.length === 0) return 0;
 
@@ -1031,20 +1036,35 @@ export const getPartnerProgress = onCall({ invoker: 'public' }, async (request) 
   const todayKey = localDateKey(new Date());
   const today = completions.find((c) => c.date === todayKey);
   const todayCount = today ? completedCount(today) : 0;
-  const perfectDayCount = completions.filter((c) => completedCount(c) >= 8).length;
+  const perfectDayCount = completions.filter(
+    (c) => completedCount(c) >= REQUIRED_KEYS.length,
+  ).length;
 
-  // Weekly activity grid: completed-count for each of the last 7 days (today last).
+  // Weekly activity grid: per-day win count for the last 7 days (today last),
+  // with streak/perfect flags so the client renders the same chain the user
+  // sees on their own dashboard without re-deriving thresholds.
   const byDate = new Map<string, CompletionDoc>();
   for (const c of completions) {
     if (c.date) byDate.set(c.date, c);
   }
-  const weeklyActivity: Array<{ date: string; completedCount: number }> = [];
+  const weeklyActivity: Array<{
+    date: string;
+    completedCount: number;
+    countsForStreak: boolean;
+    isPerfect: boolean;
+  }> = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const key = localDateKey(d);
     const c = byDate.get(key);
-    weeklyActivity.push({ date: key, completedCount: c ? completedCount(c) : 0 });
+    const count = c ? completedCount(c) : 0;
+    weeklyActivity.push({
+      date: key,
+      completedCount: count,
+      countsForStreak: count >= STREAK_THRESHOLD,
+      isPerfect: count >= REQUIRED_KEYS.length,
+    });
   }
 
   // Today's evidence text (content only, never the rest of the evidence log).
@@ -1069,8 +1089,8 @@ export const getPartnerProgress = onCall({ invoker: 'public' }, async (request) 
     currentStreak: computeStreak(completions),
     perfectDayCount,
     todayCompletedCount: todayCount,
-    todayTotalCount: 8,
-    todayCompletionPercent: Math.round((todayCount / 8) * 100),
+    todayTotalCount: REQUIRED_KEYS.length,
+    todayCompletionPercent: Math.round((todayCount / REQUIRED_KEYS.length) * 100),
     activeGoals,
     weeklyActivity,
     todayEvidence: todayEvidence?.content ?? null,

@@ -75,16 +75,35 @@ class _PriorityActionsContentState
   Widget build(BuildContext context) {
     final state = ref.watch(priorityActionsProvider);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.screenPaddingH,
-        AppSpacing.lg,
-        AppSpacing.screenPaddingH,
-        100,
-      ),
-      children: state.isPlanned
-          ? _plannedChildren(state)
-          : _emptyChildren(state),
+    if (!state.isPlanned) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.screenPaddingH,
+          AppSpacing.lg,
+          AppSpacing.screenPaddingH,
+          100,
+        ),
+        children: _emptyChildren(state),
+      );
+    }
+
+    // Planned state: scrollable list with the add-composer docked to the
+    // bottom (industry-standard quick-add pattern).
+    return Column(
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.screenPaddingH,
+              AppSpacing.lg,
+              AppSpacing.screenPaddingH,
+              AppSpacing.md,
+            ),
+            children: _plannedChildren(state),
+          ),
+        ),
+        _DockedComposer(controller: _addCtrl, onAdd: _add),
+      ],
     );
   }
 
@@ -170,7 +189,7 @@ class _PriorityActionsContentState
       const SizedBox(height: AppSpacing.md),
       ...state.actions.asMap().entries.map(
             (e) => Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.md),
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               child: _PriorityActionCard(
                 action: e.value,
                 isCompleted: state.completed.contains(e.value),
@@ -189,9 +208,37 @@ class _PriorityActionsContentState
                   ),
             ),
           ),
-      const SizedBox(height: AppSpacing.xs),
-      _AddPriorityRow(controller: _addCtrl, onAdd: _add),
     ];
+  }
+}
+
+/// Docks [_AddPriorityRow] to the bottom of the planned list: a surface bar
+/// with a top divider that floats above the translucent bottom nav.
+class _DockedComposer extends StatelessWidget {
+  final TextEditingController controller;
+  final VoidCallback onAdd;
+
+  const _DockedComposer({required this.controller, required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    final safeBottom = MediaQuery.of(context).padding.bottom;
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.screenPaddingH,
+        AppSpacing.md,
+        AppSpacing.screenPaddingH,
+        AppSpacing.md +
+            safeBottom +
+            AppSpacing.bottomNavHeight +
+            AppSpacing.bottomNavMargin,
+      ),
+      child: _AddPriorityRow(controller: controller, onAdd: onAdd),
+    );
   }
 }
 
@@ -277,6 +324,11 @@ class _PriorityActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm + 4,
+      ),
+      borderRadius: AppSpacing.radiusMd,
       backgroundColor:
           isCompleted ? AppColors.primaryContainer : AppColors.surfaceElevated,
       borderColor: isFocus
@@ -284,153 +336,87 @@ class _PriorityActionCard extends StatelessWidget {
           : (isCompleted
               ? AppColors.primary.withValues(alpha: 0.3)
               : AppColors.border),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Completion circle — primary action, stays prominent on the left.
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: GestureDetector(
-                onTap: onToggleComplete,
-                behavior: HitTestBehavior.opaque,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: isCompleted ? AppColors.primary : Colors.transparent,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color:
-                          isCompleted ? AppColors.primary : AppColors.border,
-                      width: 2,
-                    ),
-                  ),
-                  child: isCompleted
-                      ? const Icon(Icons.check_rounded,
-                          color: Colors.white, size: 16)
-                      : null,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Completion circle — primary action, stays prominent on the left.
+          GestureDetector(
+            onTap: onToggleComplete,
+            behavior: HitTestBehavior.opaque,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: isCompleted ? AppColors.primary : Colors.transparent,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isCompleted ? AppColors.primary : AppColors.border,
+                  width: 2,
                 ),
               ),
+              child: isCompleted
+                  ? const Icon(Icons.check_rounded,
+                      color: Colors.white, size: 14)
+                  : null,
             ),
-            const SizedBox(width: AppSpacing.md),
-            // Text-forward column: focus badge → action text → footer controls.
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (isFocus) ...[
-                    _FocusBadge(),
-                    const SizedBox(height: AppSpacing.xs),
-                  ],
-                  Text(
-                    action,
-                    style: AppTextStyles.bodyLarge.copyWith(
-                      height: 1.45,
-                      color: isCompleted
-                          ? AppColors.primary
-                          : AppColors.textPrimary,
-                      decoration:
-                          isCompleted ? TextDecoration.lineThrough : null,
-                      decorationColor: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  // Footer: focus toggle (labelled) + overflow menu.
-                  Row(
-                    children: [
-                      GestureDetector(
-                        onTap: onSetFocus,
-                        behavior: HitTestBehavior.opaque,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              isFocus
-                                  ? Icons.star_rounded
-                                  : Icons.star_outline_rounded,
-                              color: isFocus
-                                  ? AppColors.primary
-                                  : AppColors.textMuted,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              isFocus
-                                  ? AppStrings.priorityActionsFocusLabel
-                                  : AppStrings.priorityActionsSetFocus,
-                              style: AppTextStyles.labelSmall.copyWith(
-                                color: isFocus
-                                    ? AppColors.primary
-                                    : AppColors.textMuted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Spacer(),
-                      PopupMenuButton<String>(
-                        icon: const Icon(Icons.more_horiz_rounded,
-                            color: AppColors.textMuted, size: 18),
-                        color: AppColors.surfaceElevated,
-                        padding: EdgeInsets.zero,
-                        shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppSpacing.radiusMd),
-                          side: const BorderSide(color: AppColors.border),
-                        ),
-                        onSelected: (v) {
-                          if (v == 'remove') onRemove();
-                        },
-                        itemBuilder: (_) => [
-                          PopupMenuItem<String>(
-                            value: 'remove',
-                            child: Row(
-                              children: [
-                                const Icon(Icons.delete_outline_rounded,
-                                    color: AppColors.error, size: 18),
-                                const SizedBox(width: AppSpacing.sm),
-                                Text(AppStrings.delete,
-                                    style: AppTextStyles.bodyMedium
-                                        .copyWith(color: AppColors.error)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              action,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.bodyMedium.copyWith(
+                height: 1.3,
+                color:
+                    isCompleted ? AppColors.primary : AppColors.textPrimary,
+                decoration: isCompleted ? TextDecoration.lineThrough : null,
+                decorationColor: AppColors.primary,
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Focus badge ──────────────────────────────────────────────────────────────
-
-class _FocusBadge extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sm + 2, vertical: AppSpacing.xs - 1),
-      decoration: BoxDecoration(
-        color: AppColors.primaryContainer,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.star_rounded, color: AppColors.primary, size: 11),
-          const SizedBox(width: 3),
-          Text(
-            AppStrings.priorityActionsFocusLabel,
-            style: AppTextStyles.labelSmall.copyWith(color: AppColors.primary),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          // Focus toggle — icon-only to keep the row compact.
+          GestureDetector(
+            onTap: onSetFocus,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.xs),
+              child: Icon(
+                isFocus ? Icons.star_rounded : Icons.star_outline_rounded,
+                color: isFocus ? AppColors.primary : AppColors.textMuted,
+                size: 20,
+              ),
+            ),
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_horiz_rounded,
+                color: AppColors.textMuted, size: 18),
+            color: AppColors.surfaceElevated,
+            padding: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+              side: const BorderSide(color: AppColors.border),
+            ),
+            onSelected: (v) {
+              if (v == 'remove') onRemove();
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem<String>(
+                value: 'remove',
+                child: Row(
+                  children: [
+                    const Icon(Icons.delete_outline_rounded,
+                        color: AppColors.error, size: 18),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text(AppStrings.delete,
+                        style: AppTextStyles.bodyMedium
+                            .copyWith(color: AppColors.error)),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),

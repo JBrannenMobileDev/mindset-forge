@@ -72,6 +72,35 @@ abstract final class AppStrings {
   static const String partnerSignupBanner =
       "You've been invited to be an accountability partner. Partners join free — no subscription needed.";
 
+  // Partner dashboard
+  static const String partnerWeekTitle = 'This week';
+
+  // Partner visibility disclosure (what a partner can / can't see)
+  static const String partnerVisibilityTitle = 'What your partner can see';
+  static const String partnerVisibilitySeeStreak =
+      'Your streak and this week\'s consistency';
+  static const String partnerVisibilitySeeProgress =
+      "Today's completion progress";
+  static const String partnerVisibilitySeeGoals = 'Active goals and progress';
+  static const String partnerVisibilitySeeEvidence =
+      "Today's evidence note, if you log one";
+  static const String partnerVisibilitySeeIdentity = 'Your identity statement';
+  static const String partnerVisibilitySeeSlip =
+      'A nudge on a day you miss';
+
+  static const String partnerVisibilityPrivateTitle = 'Always private';
+  static const String partnerVisibilityPrivateJournal = 'Journal entries';
+  static const String partnerVisibilityPrivateChat = 'AI chat conversations';
+  static const String partnerVisibilityPrivateBeliefs =
+      'Beliefs and fears';
+  static const String partnerVisibilityPrivateCoach = 'Coach memory';
+
+  // Compact one-liners for the invite prompt sheet
+  static const String partnerVisibilitySeeSummary =
+      'Sees your streak, daily progress, goals and a nudge if you miss a day.';
+  static const String partnerVisibilityPrivateSummary =
+      'Your journal, chats, beliefs and coach stay private.';
+
   // Legal / agreement
   static const String termsTitle = 'Terms of Service';
   static const String privacyTitle = 'Privacy Policy';
@@ -266,6 +295,22 @@ abstract final class AppStrings {
   static const String dailyWinsInfoBody =
       'Finish all of today\'s daily wins to earn a perfect day. Completing your '
       '#1 focus is the action that drives real change — it\'s required.';
+
+  // Streak strip (dashboard header)
+  static const String streakDayStreak = 'day streak';
+  static const String streakDaysStreak = 'days streak';
+  static const String streakStartToday = 'Start your streak today';
+  static const String streakKeepGoing = 'Complete today to keep your streak';
+  static const String streakLockedIn = 'Locked in for today — keep it rolling';
+  static const String streakPerfectWeek = 'Perfect week. You\'re unstoppable.';
+  static const String streakBest = 'best';
+  static const String streakToday = 'today';
+
+  // Per-day streak recap sheet
+  static const String dayRecapEmpty = 'No wins logged this day';
+  static const String dayRecapPerfect = 'Perfect day';
+  static const String dayRecapStreakDay = 'Streak day';
+  static const String dayRecapBonus = 'Bonus';
 
   // Goals
   static const String goals = 'Goals';
@@ -721,6 +766,10 @@ abstract final class AppStrings {
       'Invite link copied to clipboard. Paste it to your partner.';
   static const String inviteCreateError =
       'Could not create invite. Please try again.';
+
+  // Home screen widget — 7-day streak chain (focus-complete state)
+  static const String widgetStreakSafe = "Today's locked in — streak safe";
+  static const String widgetStreakFinish = 'finish to extend your streak';
 
   // Home screen widget education prompt
   static const String widgetSheetTitle = 'Keep your focus front and center';

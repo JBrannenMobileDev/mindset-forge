@@ -164,6 +164,63 @@ private struct ProgressDots: View {
     }
 }
 
+/// 7-day streak chain for the focus-complete state. Mirrors the in-app
+/// dashboard: a flame-filled circle for qualifying days, an in-progress ring
+/// for today (focus done ≠ streak earned), and empty dots for missed days.
+private struct WeekStreakRow: View {
+    let weekStreak: [Bool]
+    let weekLabels: [String]
+    var dot: CGFloat = 26
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(0 ..< weekStreak.count, id: \.self) { i in
+                let isToday = i == weekStreak.count - 1
+                VStack(spacing: 5) {
+                    Text(weekLabels.indices.contains(i) ? weekLabels[i] : "")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(isToday ? MFColors.successBright : MFColors.textMuted)
+                    cell(qualifying: weekStreak[i], isToday: isToday)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func cell(qualifying: Bool, isToday: Bool) -> some View {
+        if qualifying {
+            ZStack {
+                Circle().fill(MFColors.warning)
+                Image(systemName: "flame.fill")
+                    .font(.system(size: dot * 0.42, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            .frame(width: dot, height: dot)
+            .overlay(
+                Group {
+                    if isToday {
+                        Circle().strokeBorder(MFColors.successBright, lineWidth: 2)
+                    }
+                }
+            )
+        } else if isToday {
+            ZStack {
+                Circle().fill(MFColors.success.opacity(0.15))
+                Circle().strokeBorder(MFColors.successBright, lineWidth: 2)
+                Image(systemName: "flame.fill")
+                    .font(.system(size: dot * 0.42, weight: .bold))
+                    .foregroundColor(MFColors.successBright)
+            }
+            .frame(width: dot, height: dot)
+        } else {
+            Circle()
+                .fill(MFColors.textMuted.opacity(0.2))
+                .frame(width: dot, height: dot)
+        }
+    }
+}
+
 /// Contextual action: interactive Mark Done (iOS 17+), a done badge, or a
 /// "set focus" prompt. Non-interactive states rely on the whole-widget URL.
 private struct FocusAction: View {
@@ -283,26 +340,46 @@ struct MediumFocusView: View {
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
                 .fixedSize(horizontal: false, vertical: true)
-            if payload.hasSubline {
+            // In the done state the streak chain + caption replace the subline.
+            if payload.hasSubline && !(payload.isDone && payload.hasWeekStreak) {
                 Text(payload.subline)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(MFColors.textSecondary)
                     .lineLimit(1)
             }
             Spacer(minLength: 6)
-            HStack(alignment: .center) {
-                FocusAction(payload: payload, accent: accent)
-                Spacer()
-                if payload.hasProgress {
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text("\(payload.completedCount)/\(payload.totalCount) today")
+            if payload.isDone && payload.hasWeekStreak {
+                VStack(alignment: .leading, spacing: 8) {
+                    WeekStreakRow(
+                        weekStreak: payload.weekStreak,
+                        weekLabels: payload.weekLabels,
+                        dot: 22
+                    )
+                    HStack(alignment: .center) {
+                        FocusAction(payload: payload, accent: accent)
+                        Spacer()
+                        Text(payload.weekCaption)
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundColor(MFColors.textSecondary)
-                        ProgressDots(
-                            filled: payload.completedCount,
-                            total: payload.totalCount,
-                            accent: bright
-                        )
+                            .lineLimit(2)
+                            .multilineTextAlignment(.trailing)
+                    }
+                }
+            } else {
+                HStack(alignment: .center) {
+                    FocusAction(payload: payload, accent: accent)
+                    Spacer()
+                    if payload.hasProgress {
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text("\(payload.completedCount)/\(payload.totalCount) today")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(MFColors.textSecondary)
+                            ProgressDots(
+                                filled: payload.completedCount,
+                                total: payload.totalCount,
+                                accent: bright
+                            )
+                        }
                     }
                 }
             }
@@ -343,7 +420,20 @@ struct LargeFocusView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
-            if payload.hasProgress {
+            if payload.isDone && payload.hasWeekStreak {
+                VStack(alignment: .leading, spacing: 10) {
+                    WeekStreakRow(
+                        weekStreak: payload.weekStreak,
+                        weekLabels: payload.weekLabels,
+                        dot: 30
+                    )
+                    Text(payload.weekCaption)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(MFColors.textSecondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else if payload.hasProgress {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("\(payload.completedCount) of \(payload.totalCount) complete today")
                         .font(.system(size: 12, weight: .semibold))

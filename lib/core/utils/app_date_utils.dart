@@ -61,6 +61,19 @@ abstract final class AppDateUtils {
     return 'evening'; // 17–23 and 0–3
   }
 
+  /// Coarse time-of-day bucket for the dashboard's visual accent:
+  /// - 'morning'   → 4 AM – 11:59 AM (sunrise)
+  /// - 'afternoon' → 12 PM – 4:59 PM (sun)
+  /// - 'night'     → 5 PM – 3:59 AM (moon, includes grace hours)
+  ///
+  /// Flutter-free by design: the icon/color mapping lives in the widget layer.
+  static String timeOfDayKey() {
+    final hour = DateTime.now().hour;
+    if (hour >= 4 && hour < 12) return 'morning';
+    if (hour >= 12 && hour < 17) return 'afternoon';
+    return 'night'; // 17–23 and 0–3 (grace window)
+  }
+
   static bool isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 

@@ -8,6 +8,7 @@ import '../../core/constants/app_text_styles.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/partner_visibility_card.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/accountability_provider.dart';
 import 'invite_share.dart';
@@ -314,9 +315,11 @@ class _InviteForm extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Create a free invite link and share it with anyone. Your partner gets free app access and can view your progress, send encouragement, and keep you on track.',
+            'Create a free invite link and share it with anyone. They get free app access and can cheer you on — here\'s exactly what they\'ll see.',
             style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
           ),
+          const SizedBox(height: AppSpacing.md),
+          const PartnerVisibilityCard(),
           const SizedBox(height: AppSpacing.md),
           TextField(
             controller: nameCtrl,

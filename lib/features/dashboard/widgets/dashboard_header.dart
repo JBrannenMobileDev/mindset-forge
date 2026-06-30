@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/utils/app_date_utils.dart';
 import '../../../core/widgets/shimmer_widget.dart';
+import '../../../core/widgets/week_streak_chain.dart';
 import '../../../models/daily_completion.dart';
 import '../../../models/user_profile.dart';
 import '../../../providers/daily_completion_provider.dart';
@@ -37,12 +39,18 @@ class DashboardHeader extends ConsumerWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(
-              AppDateUtils.formatWeekdayLong(DateTime.now()).toUpperCase(),
-              style: AppTextStyles.overline.copyWith(
-                color: AppColors.textMuted,
-                letterSpacing: 1.2,
-              ),
+            Row(
+              children: [
+                const _TimeOfDayBadge(),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  AppDateUtils.formatWeekdayLong(DateTime.now()).toUpperCase(),
+                  style: AppTextStyles.overline.copyWith(
+                    color: AppColors.textMuted,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ],
             ).animate().fadeIn(duration: 400.ms),
             GestureDetector(
               onTap: () => context.push('/settings'),
@@ -84,73 +92,198 @@ class DashboardHeader extends ConsumerWidget {
             ),
           ).animate().fadeIn(duration: 600.ms),
 
-        // ── Zone 3: Momentum strip (streak, best, today's progress) ──────────
+        // ── Zone 3: Streak strip (7-day chain + best + today's progress) ─────
         const SizedBox(height: AppSpacing.md),
-        _MomentumStrip(
+        _StreakStrip(
           currentStreak: profile.currentStreak,
           bestStreak: bestStreak(profile.dailyCompletions),
-          completedCount: completion.completedCount,
-          totalCount: DailyCompletion.totalCount,
-          isPerfect: completion.isPerfectDay,
-          onTodayTap: () => showDailyWinsInfoSheet(context, completion),
+          completion: completion,
+          dailyCompletions: profile.dailyCompletions,
+          onTap: () => showDailyWinsInfoSheet(context, completion),
         ).animate().fadeIn(delay: 200.ms, duration: 500.ms),
       ],
     );
   }
 }
 
-/// Slim, card-less momentum row under the greeting: current streak, best
-/// streak, and today's win progress. Always visible so momentum is felt the
-/// moment the dashboard opens.
-class _MomentumStrip extends StatelessWidget {
-  final int currentStreak;
-  final int bestStreak;
-  final int completedCount;
-  final int totalCount;
-  final bool isPerfect;
-  final VoidCallback onTodayTap;
-
-  const _MomentumStrip({
-    required this.currentStreak,
-    required this.bestStreak,
-    required this.completedCount,
-    required this.totalCount,
-    required this.isPerfect,
-    required this.onTodayTap,
-  });
+/// Small rounded badge with a time-of-day icon (sunrise / sun / moon), tinted
+/// with the matching session accent. A refined visual accent beside the date —
+/// keeps the date for orientation while adding warmth.
+class _TimeOfDayBadge extends StatelessWidget {
+  const _TimeOfDayBadge();
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _MomentumItem(
-          icon: Icons.local_fire_department_rounded,
-          color: AppColors.warning,
-          value: '$currentStreak',
-          label: currentStreak == 1 ? 'day streak' : 'days streak',
-        ),
-        const _MomentumDivider(),
-        _MomentumItem(
-          icon: Icons.emoji_events_rounded,
-          color: AppColors.secondary,
-          value: '$bestStreak',
-          label: 'best',
-        ),
-        const _MomentumDivider(),
-        GestureDetector(
-          onTap: onTodayTap,
-          behavior: HitTestBehavior.opaque,
-          child: _MomentumItem(
-            icon: isPerfect
-                ? Icons.workspace_premium_rounded
-                : Icons.check_circle_outline_rounded,
-            color: isPerfect ? AppColors.primary : AppColors.textSecondary,
-            value: isPerfect ? 'Perfect' : '$completedCount/$totalCount',
-            label: 'today',
-            trailingIcon: Icons.info_outline_rounded,
+    final (IconData icon, Color accent) = switch (AppDateUtils.timeOfDayKey()) {
+      'morning' => (Icons.wb_twilight_rounded, AppColors.warning),
+      'afternoon' => (Icons.wb_sunny_rounded, AppColors.warning),
+      _ => (Icons.bedtime_rounded, AppColors.secondary),
+    };
+
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+      ),
+      child: Icon(icon, size: 16, color: accent),
+    );
+  }
+}
+
+/// Streak-forward momentum block under the greeting: a 7-day chain of daily
+/// wins (Duolingo-style) with today highlighted as the next link to complete,
+/// a prominent streak count, a motivating subtitle, and the best/today stats.
+/// Tapping anywhere opens the daily-wins explainer.
+class _StreakStrip extends StatelessWidget {
+  final int currentStreak;
+  final int bestStreak;
+  final DailyCompletion completion;
+  final List<DailyCompletion> dailyCompletions;
+  final VoidCallback onTap;
+
+  const _StreakStrip({
+    required this.currentStreak,
+    required this.bestStreak,
+    required this.completion,
+    required this.dailyCompletions,
+    required this.onTap,
+  });
+
+  /// The last 7 days ending on the grace-aware "today" so the final cell lines
+  /// up with the stored daily-completion record even in the midnight–4 AM window.
+  List<DateTime> _last7Days() {
+    final now = DateTime.now();
+    final base = DateTime(now.year, now.month, now.day);
+    final graceToday =
+        now.hour < 4 ? base.subtract(const Duration(days: 1)) : base;
+    return List.generate(7, (i) => graceToday.subtract(Duration(days: 6 - i)));
+  }
+
+  String _key(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    final days = _last7Days();
+    final todayKey = _key(days.last);
+
+    // Per-day records: live today's record for the last cell, history lookups
+    // for the prior six. Kept as full records so a tap can recap the day.
+    final dayCompletions = days.map((d) {
+      final key = _key(d);
+      if (key == todayKey) return completion;
+      return dailyCompletions.firstWhere(
+        (x) => x.date == key,
+        orElse: () => DailyCompletion(date: key),
+      );
+    }).toList();
+    final qualifying = dayCompletions.map((c) => c.countsForStreak).toList();
+
+    final todayDone = completion.countsForStreak;
+    final perfectWeek = qualifying.every((q) => q);
+
+    final (String subtitle, Color subtitleColor) = switch ((
+      currentStreak,
+      todayDone,
+      perfectWeek,
+    )) {
+      (0, false, _) => (AppStrings.streakStartToday, AppColors.textSecondary),
+      (_, true, true) => (AppStrings.streakPerfectWeek, AppColors.success),
+      (_, true, false) => (AppStrings.streakLockedIn, AppColors.success),
+      _ => (AppStrings.streakKeepGoing, AppColors.warning),
+    };
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Headline: prominent streak count + tappable hint.
+          Row(
+            children: [
+              const Icon(Icons.local_fire_department_rounded,
+                  size: 22, color: AppColors.warning),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                '$currentStreak',
+                style: AppTextStyles.headlineLarge,
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Text(
+                  currentStreak == 1
+                      ? AppStrings.streakDayStreak
+                      : AppStrings.streakDaysStreak,
+                  style: AppTextStyles.labelLarge
+                      .copyWith(color: AppColors.textMuted),
+                ),
+              ),
+              const Spacer(),
+              const Icon(Icons.info_outline_rounded,
+                  size: 16, color: AppColors.textMuted),
+            ],
           ),
-        ),
-      ],
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            subtitle,
+            style: AppTextStyles.bodySmall.copyWith(color: subtitleColor),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          // 7-day chain.
+          WeekStreakChain(
+            pulseToday: true,
+            days: List.generate(days.length, (i) {
+              final isToday = i == days.length - 1;
+              final c = dayCompletions[i];
+              final StreakDayState state;
+              if (c.isPerfectDay) {
+                state = StreakDayState.perfect;
+              } else if (qualifying[i]) {
+                state = StreakDayState.qualifying;
+              } else if (isToday) {
+                state = StreakDayState.pending;
+              } else {
+                state = StreakDayState.missed;
+              }
+              return StreakDayData(
+                letter: AppDateUtils.weekdayShort(days[i]).substring(0, 1),
+                state: state,
+                isToday: isToday,
+                onTap: () => showDayRecapSheet(context, days[i], c),
+              );
+            }),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          // Best + today's progress preserved as a compact secondary row.
+          Row(
+            children: [
+              _MomentumItem(
+                icon: Icons.emoji_events_rounded,
+                color: AppColors.secondary,
+                value: '$bestStreak',
+                label: AppStrings.streakBest,
+              ),
+              const _MomentumDivider(),
+              _MomentumItem(
+                icon: completion.isPerfectDay
+                    ? Icons.workspace_premium_rounded
+                    : Icons.check_circle_outline_rounded,
+                color: completion.isPerfectDay
+                    ? AppColors.primary
+                    : AppColors.textSecondary,
+                value: completion.isPerfectDay
+                    ? 'Perfect'
+                    : '${completion.completedCount}/${DailyCompletion.totalCount}',
+                label: AppStrings.streakToday,
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

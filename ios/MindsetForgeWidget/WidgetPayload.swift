@@ -26,6 +26,14 @@ struct WidgetPayload: Codable {
     var streak: Int
     var completedCount: Int
     var totalCount: Int
+
+    /// Last 7 days of streak qualification (oldest → newest, index 6 = today).
+    var weekStreak: [Bool]
+    /// Single-char weekday letters aligned to `weekStreak` (M T W T F S S).
+    var weekLabels: [String]
+    /// Nudge line shown beneath the 7-day chain in the focus-complete state.
+    var weekCaption: String
+
     var displayName: String
     var firstName: String
     var updatedAt: String
@@ -50,6 +58,9 @@ struct WidgetPayload: Codable {
         streak: 0,
         completedCount: 0,
         totalCount: 8,
+        weekStreak: [],
+        weekLabels: [],
+        weekCaption: "",
         displayName: "",
         firstName: "there",
         updatedAt: ""
@@ -79,6 +90,9 @@ struct WidgetPayload: Codable {
 
     /// Whether a secondary line should render under the headline.
     var hasSubline: Bool { !subline.isEmpty }
+
+    /// Whether a full 7-day streak chain is available to render.
+    var hasWeekStreak: Bool { weekStreak.count == 7 && weekLabels.count == 7 }
 }
 
 // MARK: - Resilient decoding
@@ -91,7 +105,9 @@ extension WidgetPayload {
         case state, focusText, focusDate, focusCompleted, hasFocusToday
         case sessionPeriod, actionField, sessionLabel, headline, subline
         case accentKind, canCompleteInWidget, deepLink
-        case streak, completedCount, totalCount, displayName, firstName, updatedAt
+        case streak, completedCount, totalCount
+        case weekStreak, weekLabels, weekCaption
+        case displayName, firstName, updatedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -115,6 +131,9 @@ extension WidgetPayload {
         streak = try c.decodeIfPresent(Int.self, forKey: .streak) ?? 0
         completedCount = try c.decodeIfPresent(Int.self, forKey: .completedCount) ?? 0
         totalCount = try c.decodeIfPresent(Int.self, forKey: .totalCount) ?? 8
+        weekStreak = try c.decodeIfPresent([Bool].self, forKey: .weekStreak) ?? []
+        weekLabels = try c.decodeIfPresent([String].self, forKey: .weekLabels) ?? []
+        weekCaption = try c.decodeIfPresent(String.self, forKey: .weekCaption) ?? ""
         displayName = try c.decodeIfPresent(String.self, forKey: .displayName) ?? ""
         firstName = try c.decodeIfPresent(String.self, forKey: .firstName) ?? "there"
         updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt) ?? ""

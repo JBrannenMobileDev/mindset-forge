@@ -81,13 +81,25 @@ class PartnerGoal {
 class PartnerActivityDay {
   final String date;
   final int completedCount;
+  final bool countsForStreak;
+  final bool isPerfect;
 
-  const PartnerActivityDay({required this.date, this.completedCount = 0});
+  const PartnerActivityDay({
+    required this.date,
+    this.completedCount = 0,
+    this.countsForStreak = false,
+    this.isPerfect = false,
+  });
 
   factory PartnerActivityDay.fromJson(Map<String, dynamic> json) {
+    final count = (json['completedCount'] as num?)?.toInt() ?? 0;
     return PartnerActivityDay(
       date: json['date'] as String? ?? '',
-      completedCount: (json['completedCount'] as num?)?.toInt() ?? 0,
+      completedCount: count,
+      // Fall back to the client thresholds so a pre-deploy payload (without
+      // these flags) still renders the chain correctly.
+      countsForStreak: json['countsForStreak'] as bool? ?? (count >= 5),
+      isPerfect: json['isPerfect'] as bool? ?? (count >= 9),
     );
   }
 }

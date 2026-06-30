@@ -63,11 +63,13 @@ class FocusWidgetProvider : HomeWidgetProvider() {
 
         when (payload.state) {
             "set_focus" -> {
+                hideWeekRow(views)
                 views.setTextViewText(R.id.focus_text, "Set your #1 focus for today")
                 stylePrimaryButton(context, views, "Set focus")
                 views.setOnClickPendingIntent(R.id.focus_button, openPendingIntent)
             }
             "focus_open" -> {
+                hideWeekRow(views)
                 views.setTextViewText(R.id.focus_text, payload.focusText)
                 stylePrimaryButton(context, views, "Mark done")
                 val completePendingIntent = HomeWidgetBackgroundIntent.getBroadcast(
@@ -77,11 +79,81 @@ class FocusWidgetProvider : HomeWidgetProvider() {
                 views.setOnClickPendingIntent(R.id.focus_button, completePendingIntent)
             }
             else -> {
-                // focus_done / on_track — focus complete for today.
-                views.setTextViewText(R.id.focus_text, payload.focusText)
+                // focus_done / on_track — focus complete for today. Lead with the
+                // resolver headline ("You're On Track") and show the 7-day chain.
+                val headline = payload.headline.ifEmpty { payload.focusText }
+                views.setTextViewText(R.id.focus_text, headline)
+                bindWeekRow(context, views, payload)
                 styleDoneButton(context, views)
                 views.setOnClickPendingIntent(R.id.focus_button, openPendingIntent)
             }
+        }
+    }
+
+    /** Day-cell view ids in order (oldest → newest, index 6 = today). */
+    private val dayIds = intArrayOf(
+        R.id.focus_day_0, R.id.focus_day_1, R.id.focus_day_2, R.id.focus_day_3,
+        R.id.focus_day_4, R.id.focus_day_5, R.id.focus_day_6,
+    )
+    private val dayLabelIds = intArrayOf(
+        R.id.focus_day_label_0, R.id.focus_day_label_1, R.id.focus_day_label_2,
+        R.id.focus_day_label_3, R.id.focus_day_label_4, R.id.focus_day_label_5,
+        R.id.focus_day_label_6,
+    )
+
+    private fun hideWeekRow(views: RemoteViews) {
+        views.setViewVisibility(R.id.focus_week_row, android.view.View.GONE)
+        views.setViewVisibility(R.id.focus_week_caption, android.view.View.GONE)
+    }
+
+    /** Renders the 7-day streak chain. Today (index 6) reads as in-progress when
+     *  it has not yet qualified, since completing the focus alone doesn't earn
+     *  the streak day (needs 5+/9 wins). */
+    private fun bindWeekRow(context: Context, views: RemoteViews, payload: Payload) {
+        if (payload.weekStreak.size != 7) {
+            hideWeekRow(views)
+            return
+        }
+        views.setViewVisibility(R.id.focus_week_row, android.view.View.VISIBLE)
+
+        val flame = "\uD83D\uDD25"
+        val white = ContextCompat.getColor(context, R.color.widgetOnPrimary)
+        val success = ContextCompat.getColor(context, R.color.widgetSuccess)
+        val muted = ContextCompat.getColor(context, R.color.widgetTextMuted)
+
+        for (i in 0 until 7) {
+            val isToday = i == 6
+            val qualifying = payload.weekStreak[i]
+
+            // Weekday letter.
+            val label = payload.weekLabels.getOrElse(i) { "" }
+            views.setTextViewText(dayLabelIds[i], label)
+            views.setTextColor(dayLabelIds[i], if (isToday) success else muted)
+
+            // Status dot.
+            when {
+                qualifying -> {
+                    views.setInt(dayIds[i], "setBackgroundResource", R.drawable.focus_widget_day_filled)
+                    views.setTextViewText(dayIds[i], flame)
+                    views.setTextColor(dayIds[i], white)
+                }
+                isToday -> {
+                    views.setInt(dayIds[i], "setBackgroundResource", R.drawable.focus_widget_day_today)
+                    views.setTextViewText(dayIds[i], flame)
+                    views.setTextColor(dayIds[i], success)
+                }
+                else -> {
+                    views.setInt(dayIds[i], "setBackgroundResource", R.drawable.focus_widget_day_empty)
+                    views.setTextViewText(dayIds[i], "")
+                }
+            }
+        }
+
+        if (payload.weekCaption.isNotEmpty()) {
+            views.setViewVisibility(R.id.focus_week_caption, android.view.View.VISIBLE)
+            views.setTextViewText(R.id.focus_week_caption, payload.weekCaption)
+        } else {
+            views.setViewVisibility(R.id.focus_week_caption, android.view.View.GONE)
         }
     }
 
@@ -114,16 +186,38 @@ class FocusWidgetProvider : HomeWidgetProvider() {
             Payload(
                 state = json.optString("state", "set_focus"),
                 focusText = json.optString("focusText", ""),
+                headline = json.optString("headline", ""),
                 streak = json.optInt("streak", 0),
+                completedCount = json.optInt("completedCount", 0),
+                totalCount = json.optInt("totalCount", 9),
+                weekStreak = json.optJSONArray("weekStreak").toBoolList(),
+                weekLabels = json.optJSONArray("weekLabels").toStringList(),
+                weekCaption = json.optString("weekCaption", ""),
             )
         } catch (e: Exception) {
             Payload()
         }
     }
 
+    private fun org.json.JSONArray?.toBoolList(): List<Boolean> {
+        if (this == null) return emptyList()
+        return (0 until length()).map { optBoolean(it, false) }
+    }
+
+    private fun org.json.JSONArray?.toStringList(): List<String> {
+        if (this == null) return emptyList()
+        return (0 until length()).map { optString(it, "") }
+    }
+
     private data class Payload(
         val state: String = "set_focus",
         val focusText: String = "",
+        val headline: String = "",
         val streak: Int = 0,
+        val completedCount: Int = 0,
+        val totalCount: Int = 9,
+        val weekStreak: List<Boolean> = emptyList(),
+        val weekLabels: List<String> = emptyList(),
+        val weekCaption: String = "",
     )
 }

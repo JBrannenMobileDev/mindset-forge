@@ -5,6 +5,7 @@ import '../constants/app_spacing.dart';
 import '../constants/app_strings.dart';
 import '../constants/app_text_styles.dart';
 import 'app_button.dart';
+import 'partner_visibility_card.dart';
 
 /// What the user chose on the invite prompt, so the coordinator can snooze /
 /// dismiss / trigger the share flow accordingly.
@@ -46,7 +47,7 @@ class _InvitePartnerSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg,
           AppSpacing.md,
@@ -89,6 +90,8 @@ class _InvitePartnerSheet extends StatelessWidget {
               body,
               style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
             ),
+            const SizedBox(height: AppSpacing.md),
+            const PartnerVisibilityCard(compact: true),
             const SizedBox(height: AppSpacing.lg),
             AppPrimaryButton(
               label: AppStrings.invitePromptCta,

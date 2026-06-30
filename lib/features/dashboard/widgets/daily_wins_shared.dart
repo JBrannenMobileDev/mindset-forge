@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/utils/app_date_utils.dart';
 import '../../../models/user_profile.dart';
 import '../../../models/daily_completion.dart';
 import '../../../providers/affirmations_provider.dart';
@@ -259,6 +260,148 @@ void showDailyWinsInfoSheet(BuildContext context, DailyCompletion completion) {
       ),
     ),
   );
+}
+
+/// Per-day recap: shows which wins were completed on [date], opened by tapping
+/// a day in the dashboard streak chain. Reuses [requiredWinSummary] and
+/// [getCompletionField] so it can never drift from the real win definitions.
+void showDayRecapSheet(
+  BuildContext context,
+  DateTime date,
+  DailyCompletion completion,
+) {
+  final bonus = <(String, bool)>[
+    if (completion.gratitudeLogged) ('Gratitude', true),
+    if (completion.evidenceLogged) ('Evidence Log', true),
+  ];
+
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surface,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(AppSpacing.radiusXl),
+      ),
+    ),
+    builder: (_) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xl,
+          AppSpacing.md,
+          AppSpacing.xl,
+          AppSpacing.xl,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(AppDateUtils.formatWeekdayLong(date),
+                style: AppTextStyles.headlineSmall),
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              children: [
+                Text(
+                  '${completion.completedCount} of ${DailyCompletion.totalCount} wins',
+                  style: AppTextStyles.labelSmall
+                      .copyWith(color: AppColors.textMuted),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                if (completion.isPerfectDay)
+                  _RecapBadge(
+                    icon: Icons.workspace_premium_rounded,
+                    label: AppStrings.dayRecapPerfect,
+                    color: AppColors.primary,
+                  )
+                else if (completion.countsForStreak)
+                  _RecapBadge(
+                    icon: Icons.local_fire_department_rounded,
+                    label: AppStrings.dayRecapStreakDay,
+                    color: AppColors.warning,
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            if (completion.completedCount == 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                child: Center(
+                  child: Text(
+                    AppStrings.dayRecapEmpty,
+                    style: AppTextStyles.bodyMedium
+                        .copyWith(color: AppColors.textSecondary),
+                  ),
+                ),
+              )
+            else ...[
+              for (final win in requiredWinSummary)
+                _DailyWinInfoRow(
+                  label: win.$2,
+                  done: getCompletionField(completion, win.$1),
+                  isFocus: win.$1 == 'focusCompleted',
+                ),
+              if (bonus.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  AppStrings.dayRecapBonus,
+                  style: AppTextStyles.overline
+                      .copyWith(color: AppColors.textMuted),
+                ),
+                for (final b in bonus)
+                  _DailyWinInfoRow(label: b.$1, done: b.$2, isFocus: false),
+              ],
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _RecapBadge extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _RecapBadge({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm + 2, vertical: AppSpacing.xs - 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 12),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: AppTextStyles.labelSmall.copyWith(color: color),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _DailyWinInfoRow extends StatelessWidget {

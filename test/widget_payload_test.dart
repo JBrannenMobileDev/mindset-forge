@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mindsetforge/core/constants/app_strings.dart';
 import 'package:mindsetforge/models/daily_completion.dart';
 import 'package:mindsetforge/models/user_profile.dart';
 import 'package:mindsetforge/models/widget_payload.dart';
@@ -243,6 +244,71 @@ void main() {
     });
   });
 
+  group('WidgetPayload 7-day streak chain', () {
+    // A `DailyCompletion` with exactly 5 of 9 required wins — the streak
+    // threshold (`countsForStreak == true`).
+    DailyCompletion qualifying(String date) => DailyCompletion(
+          date: date,
+          habitsCompleted: true,
+          dayPlanned: true,
+          focusCompleted: true,
+          journalCompleted: true,
+          identityRead: true,
+        );
+
+    test('weekStreak is always 7 days, ending on today (index 6)', () {
+      final p = WidgetPayload.fromProfile(
+        profile(completions: [qualifying(today)]),
+        now: midday,
+      );
+      expect(p.weekStreak.length, 7);
+      expect(p.weekLabels.length, 7);
+      // Today qualifies (5/9), so the final cell is filled.
+      expect(p.weekStreak.last, true);
+    });
+
+    test('today not yet qualifying -> last cell false', () {
+      final p = WidgetPayload.fromProfile(
+        profile(
+          completions: const [
+            DailyCompletion(date: today, journalCompleted: true)
+          ],
+        ),
+        now: midday,
+      );
+      expect(p.weekStreak.last, false);
+    });
+
+    test('caption switches on the 5/9 threshold', () {
+      final safe = WidgetPayload.fromProfile(
+        profile(completions: [qualifying(today)]),
+        now: midday,
+      );
+      expect(safe.weekCaption, AppStrings.widgetStreakSafe);
+
+      final inProgress = WidgetPayload.fromProfile(
+        profile(
+          completions: const [
+            DailyCompletion(date: today, journalCompleted: true)
+          ],
+        ),
+        now: midday,
+      );
+      expect(inProgress.weekCaption, contains(AppStrings.widgetStreakFinish));
+      expect(inProgress.weekCaption, contains('1/9'));
+    });
+
+    test('a prior qualifying day fills its cell', () {
+      final p = WidgetPayload.fromProfile(
+        profile(completions: [qualifying('2026-06-25')]),
+        now: midday,
+      );
+      // 2026-06-25 is two days before today (index 4 in a 7-day window).
+      expect(p.weekStreak[4], true);
+      expect(p.weekStreak.last, false); // today still empty
+    });
+  });
+
   group('WidgetPayload JSON round trip', () {
     test('encodes and decodes losslessly', () {
       final original = WidgetPayload.fromProfile(
@@ -263,6 +329,9 @@ void main() {
       expect(restored.accentKind, original.accentKind);
       expect(restored.canCompleteInWidget, original.canCompleteInWidget);
       expect(restored.deepLink, original.deepLink);
+      expect(restored.weekStreak, original.weekStreak);
+      expect(restored.weekLabels, original.weekLabels);
+      expect(restored.weekCaption, original.weekCaption);
     });
 
     test('empty payload has sane defaults', () {
