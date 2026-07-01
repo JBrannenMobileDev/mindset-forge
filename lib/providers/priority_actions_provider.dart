@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/services/analytics_service.dart';
 import '../core/utils/app_date_utils.dart';
+import '../models/user_profile.dart';
 import 'auth_provider.dart';
 import 'claude_provider.dart';
 import 'daily_completion_provider.dart';
@@ -51,6 +52,10 @@ class PriorityActionsState {
 class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
   final Ref _ref;
 
+  /// Guards the one-shot day-rollover write so the profile-stream re-trigger
+  /// it causes doesn't kick off a second rollover.
+  bool _rollingOver = false;
+
   PriorityActionsNotifier(this._ref) : super(const PriorityActionsState());
 
   void _initFromProfile() {
@@ -63,20 +68,70 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
       final focus = profile.dailyFocusActionDate == today
           ? profile.dailyFocusAction
           : '';
+      // completedPriorityActions is the single source of truth for what's
+      // done — including the #1 focus, which the dashboard/watch complete by
+      // adding it to this list.
       final completed = profile.completedPriorityActions.toSet();
-      // The Focus banner marks the focus done via dailyFocusActionCompleted
-      // only; reconcile that into the completed set so the tab agrees.
-      if (focus.isNotEmpty && profile.dailyFocusActionCompleted) {
-        completed.add(focus);
-      }
       state = state.copyWith(
         actions: profile.priorityActions,
         focusAction: focus,
         completed: completed,
       );
+    } else if (profile.priorityActions.isNotEmpty) {
+      // Stale list from a previous day — carry unfinished actions forward.
+      _rolloverDay(profile, today);
     } else {
-      // Not planned for today — reset to an empty (but not generating) state.
+      // Nothing planned at all — reset to an empty (but not generating) state.
       state = PriorityActionsState(isGenerating: state.isGenerating);
+    }
+  }
+
+  /// Rolls a previous day's list into today: unfinished actions carry over,
+  /// completed ones are dropped, and the #1 focus resets so the user re-picks
+  /// it each morning. Persists once (guarded by [_rollingOver]) so the list is
+  /// re-stamped with today's date and the daily-win flags reset.
+  Future<void> _rolloverDay(UserProfile profile, String today) async {
+    if (_rollingOver) return;
+
+    final completedYesterday = profile.completedPriorityActions.toSet();
+    final carried = profile.priorityActions
+        .where((a) => !completedYesterday.contains(a))
+        .toList();
+
+    if (carried.isEmpty) {
+      // Everything was finished yesterday — start fresh.
+      state = PriorityActionsState(isGenerating: state.isGenerating);
+      return;
+    }
+
+    // Optimistic in-memory update: today's list is the carried items, no
+    // completions, no focus.
+    state = state.copyWith(
+      actions: carried,
+      focusAction: '',
+      completed: <String>{},
+    );
+
+    final uid = _ref.read(authStateProvider).valueOrNull?.uid;
+    if (uid == null) return;
+
+    _rollingOver = true;
+    try {
+      await _ref.read(firestoreServiceProvider).updateUserField(uid, {
+        'priorityActions': carried,
+        'priorityActionsDate': today,
+        'completedPriorityActions': <String>[],
+        'dailyFocusAction': '',
+        'dailyFocusActionDate': today,
+      });
+      final dc = _ref.read(dailyCompletionProvider.notifier);
+      await dc.toggle('dayPlanned', false);
+      await dc.toggle('focusCompleted', false);
+      await dc.toggle('priorityActionsCompleted', false);
+    } catch (e) {
+      debugPrint('PriorityActionsNotifier._rolloverDay failed: $e');
+    } finally {
+      _rollingOver = false;
     }
   }
 
@@ -96,9 +151,11 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
     await dc.toggle('priorityActionsCompleted', anyActionDone);
   }
 
-  /// Toggle a single action's completion. This is the *doing*. Keeps
-  /// `dailyFocusActionCompleted` (drives the Today's Focus hero) aligned; the
-  /// win flags follow the #1 focus via [_syncDailyWins].
+  /// Toggle a single action's completion. This is the *doing*.
+  /// `completedPriorityActions` is the single source of truth for what's done
+  /// (including the #1 focus, read by the dashboard via
+  /// `UserProfile.isDailyFocusComplete`); the win flags follow via
+  /// [_syncDailyWins].
   Future<void> toggleComplete(String action) async {
     final uid = _ref.read(authStateProvider).valueOrNull?.uid;
     if (uid == null) return;
@@ -112,18 +169,24 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
     // Optimistic update.
     state = state.copyWith(completed: completed);
 
-    final focusDone =
-        state.focusAction.isNotEmpty && completed.contains(state.focusAction);
-
     try {
       await _ref.read(firestoreServiceProvider).updateUserField(uid, {
         'completedPriorityActions': completed.toList(),
-        'dailyFocusActionCompleted': focusDone,
       });
       await _syncDailyWins();
     } catch (e) {
       debugPrint('PriorityActionsNotifier.toggleComplete failed: $e');
     }
+  }
+
+  /// Completes the current #1 focus from an external surface (dashboard hero,
+  /// evening focus card, watch). Routes through [toggleComplete] so the
+  /// authoritative completed list and the daily-win flags move together.
+  /// No-op if there's no focus or it's already complete.
+  Future<void> completeFocus() async {
+    final focus = state.focusAction;
+    if (focus.isEmpty || state.completed.contains(focus)) return;
+    await toggleComplete(focus);
   }
 
   /// Add a new priority action to today's list. Never auto-assigns the #1
@@ -162,7 +225,6 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
     final completed = Set<String>.from(state.completed)..remove(text);
     final focusCleared = state.focusAction == text;
     final focus = focusCleared ? '' : state.focusAction;
-    final focusDone = focus.isNotEmpty && completed.contains(focus);
 
     state = state.copyWith(
       actions: actions,
@@ -178,7 +240,6 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
         'completedPriorityActions': completed.toList(),
         'dailyFocusAction': focus,
         'dailyFocusActionDate': today,
-        'dailyFocusActionCompleted': focusDone,
       });
       // Win flags follow the #1 focus (cleared above if it was removed).
       await _syncDailyWins();
@@ -200,7 +261,6 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
       await _ref.read(firestoreServiceProvider).updateUserField(uid, {
         'dailyFocusAction': text,
         'dailyFocusActionDate': today,
-        'dailyFocusActionCompleted': state.completed.contains(text),
       });
       // Explicit pick — this is what satisfies the "Plan Day" win.
       await _syncDailyWins();
@@ -231,7 +291,6 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
         'completedPriorityActions': <String>[],
         'dailyFocusAction': '',
         'dailyFocusActionDate': today,
-        'dailyFocusActionCompleted': false,
       });
       // No focus picked yet, so no win is satisfied by generating.
       final dc = _ref.read(dailyCompletionProvider.notifier);

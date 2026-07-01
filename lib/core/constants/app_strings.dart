@@ -303,6 +303,10 @@ abstract final class AppStrings {
   static const String streakKeepGoing = 'Complete today to keep your streak';
   static const String streakLockedIn = 'Locked in for today — keep it rolling';
   static const String streakPerfectWeek = 'Perfect week. You\'re unstoppable.';
+  static const String streakFlawlessWeek =
+      'Flawless week — every single win, seven days straight.';
+  static const String streakPerfectWeekBadge = 'PERFECT WEEK';
+  static const String streakFlawlessWeekBadge = 'FLAWLESS WEEK';
   static const String streakBest = 'best';
   static const String streakToday = 'today';
 
@@ -400,9 +404,9 @@ abstract final class AppStrings {
       "Your #1 focus is done. That's a winning day.";
   static const String priorityActionsFocusSet =
       'Complete your starred #1 focus to win the day. The rest are bonus.';
-  static const String priorityActionsEmptyTitle = 'Plan your priorities';
+  static const String priorityActionsEmptyTitle = "Plan today's priorities";
   static const String priorityActionsEmptySubtitle =
-      'Add the few actions that move you closest to who you want to become, or let your coach suggest some.';
+      "Add the few actions that move you closest to who you want to become, or let your coach suggest some. Anything you don't finish rolls over to tomorrow.";
   static const String priorityActionsHeader = "TODAY'S PRIORITIES";
   static const String priorityActionsFocusLabel = 'TOP PRIORITY';
   static const String priorityActionsSetFocus = 'Set as top priority';
@@ -479,6 +483,7 @@ abstract final class AppStrings {
   static const String coachMode = 'Coach';
   static const String futureSelfMode = 'Future Self';
   static const String newSession = 'New Session';
+  static const String discussWithCoach = 'Discuss with Coach';
   static const String sessions = 'Sessions';
   static const String typeMessage = 'Type a message...';
   static const String futureSelfPlaceholder = 'Ask your future self...';

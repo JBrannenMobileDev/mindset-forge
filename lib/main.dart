@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -17,12 +18,14 @@ import 'core/constants/app_text_styles.dart';
 import 'core/firebase/firestore_service.dart';
 import 'core/router/app_router.dart';
 import 'core/services/analytics_service.dart';
+import 'core/services/consent_service.dart';
 import 'core/services/deep_link_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/pending_invite_store.dart';
 import 'core/services/widget_sync_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/boot_log.dart';
+import 'core/widgets/cookie_consent_banner.dart';
 import 'features/auth/widgets/splash_view.dart';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
@@ -33,8 +36,8 @@ import 'providers/widget_sync_provider.dart';
 const _revenueCatApiKeyIos = 'appl_dKUUgDcXtEccZBfJkLEoToRdSri';
 const _revenueCatApiKeyAndroid = 'goog_nERDlnjwKvZeslXynNPyZMfzBee';
 
-// Mixpanel project token
-const _mixpanelToken = '2ab6ef7382cf88d859f8378f916974f0';
+// App Check reCAPTCHA v3 site key for the web app (public — safe to ship).
+const _recaptchaV3SiteKey = '6Ld6Tz4tAAAAAKc7HFs4rXeFvReyPzuDku47yNjH';
 
 /// Handle background FCM messages
 @pragma('vm:entry-point')
@@ -63,6 +66,27 @@ void main() async {
         bootLog('Firebase.initializeApp (main) done');
       } catch (e) {
         bootLog('Firebase.initializeApp (main) FAILED: $e');
+      }
+
+      // App Check attests that requests originate from a genuine app build
+      // (App Attest on iOS, Play Integrity on Android, reCAPTCHA v3 on web).
+      // Activated here so new builds start sending tokens now; server-side
+      // enforcement (enforceAppCheck) stays OFF until every user is on a build
+      // that ships this, so older builds keep working in the meantime. Wrapped
+      // so an attestation failure can never block boot while enforcement is off.
+      try {
+        await FirebaseAppCheck.instance.activate(
+          webProvider: ReCaptchaV3Provider(_recaptchaV3SiteKey),
+          appleProvider: kDebugMode
+              ? AppleProvider.debug
+              : AppleProvider.appAttestWithDeviceCheckFallback,
+          androidProvider: kDebugMode
+              ? AndroidProvider.debug
+              : AndroidProvider.playIntegrity,
+        );
+        bootLog('app check activated');
+      } catch (e) {
+        bootLog('FirebaseAppCheck.activate FAILED: $e');
       }
 
       // Route all Flutter framework errors to Crashlytics.
@@ -165,9 +189,10 @@ class _InitAppState extends State<_InitApp> {
     // on auth itself. Failures are logged (and forwarded to Crashlytics) so the
     // offending step is identifiable instead of silently hanging.
     await _guardStartupStep('pendingInvite', PendingInviteStore.load);
+    await _guardStartupStep('consent', ConsentService.load);
     await _guardStartupStep('revenueCat', _initRevenueCat);
     await _guardStartupStep('localNotifications', _initLocalNotifications);
-    await _guardStartupStep('analytics', () => AnalyticsService.init(_mixpanelToken));
+    await _guardStartupStep('analytics', _initAnalytics);
 
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
     if (!kIsWeb) {
@@ -274,6 +299,14 @@ class _InitAppState extends State<_InitApp> {
   Future<void> _initLocalNotifications() async {
     if (kIsWeb) return; // flutter_local_notifications doesn't support web
     await NotificationService().initPlugin();
+  }
+
+  /// On web, analytics (Mixpanel) are non-essential cookies and must wait for
+  /// the user's consent — the cookie banner initializes them on accept. On
+  /// mobile, analytics run at startup as before.
+  Future<void> _initAnalytics() async {
+    if (kIsWeb && !ConsentService.granted) return;
+    await AnalyticsService.init();
   }
 
   @override
@@ -411,6 +444,14 @@ class _MindsetForgeAppState extends ConsumerState<MindsetForgeApp>
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.dark,
       routerConfig: router,
+      // Overlay the web cookie-consent banner above all routes. Renders nothing
+      // on mobile or once the user has chosen.
+      builder: (context, child) => Stack(
+        children: [
+          if (child != null) child,
+          const CookieConsentBanner(),
+        ],
+      ),
     );
   }
 }

@@ -7,6 +7,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/shimmer_widget.dart';
@@ -408,6 +409,15 @@ class _EntryReaderPane extends ConsumerWidget {
             Text(
               entry.content,
               style: AppTextStyles.bodyLarge.copyWith(height: 1.8),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            AppPrimaryButton(
+              label: AppStrings.discussWithCoach,
+              icon: Icons.chat_bubble_outline_rounded,
+              onPressed: () => context.go('/chat', extra: {
+                'journalContext': entry.content,
+                'journalPrompt': entry.prompt,
+              }),
             ),
           ],
         ),

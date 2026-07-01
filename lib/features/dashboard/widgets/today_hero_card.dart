@@ -11,9 +11,9 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../models/user_profile.dart';
 import '../../../models/hero_action.dart';
-import '../../../providers/auth_provider.dart';
 import '../../../providers/daily_completion_provider.dart';
 import '../../../providers/future_self_provider.dart';
+import '../../../providers/priority_actions_provider.dart';
 import 'daily_wins_shared.dart';
 import 'plan_day_bottom_sheet.dart';
 
@@ -47,22 +47,12 @@ class _TodayHeroCardState extends ConsumerState<TodayHeroCard> {
     super.dispose();
   }
 
-  /// Marks Today's Focus complete: persists the profile flag and the matching
-  /// daily-completion flag, then celebrates.
+  /// Marks Today's Focus complete by adding it to the authoritative completed
+  /// list (which also drives the tab and the win flags), then celebrates.
   Future<void> _completeFocus() async {
     setState(() => _focusCompleting = true);
     try {
-      final uid = ref.read(authStateProvider).valueOrNull?.uid;
-      if (uid != null) {
-        await ref.read(firestoreServiceProvider).updateUserField(uid, {
-          'dailyFocusActionCompleted': true,
-        });
-      }
-      final dc = ref.read(dailyCompletionProvider.notifier);
-      // The #1 focus is the streak-counting win; completing it also satisfies
-      // the scoring-only "any priority action done" signal.
-      await dc.toggle('focusCompleted', true);
-      await dc.toggle('priorityActionsCompleted', true);
+      await ref.read(priorityActionsProvider.notifier).completeFocus();
       if (!mounted) return;
       setState(() => _focusCompleting = false);
       _confettiCtrl.play();

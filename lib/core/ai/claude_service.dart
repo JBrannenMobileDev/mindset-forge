@@ -280,7 +280,7 @@ RULES — NEVER BREAK THESE:
         final raw = await completeConversation(
           systemPrompt: _coachUserContext(profile),
           messages: messages,
-          maxTokens: 1100,
+          maxTokens: 1500,
         );
         return CoachReply.parse(raw);
       } catch (e) {

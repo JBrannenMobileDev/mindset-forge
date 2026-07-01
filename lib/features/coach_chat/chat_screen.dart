@@ -422,7 +422,12 @@ class _ChatViewState extends ConsumerState<_ChatView> {
   /// The coach's reply will naturally end with a follow-up question per the system prompt.
   Future<void> _autoStartFromJournal() async {
     if (!mounted) return;
-    if (ref.read(activeChatProvider) == null) {
+    // Start a fresh coach session when there is none, or when the active one
+    // belongs to a different mode (e.g. a stale Future Self session) — otherwise
+    // the coach tab strands on the empty state while the journal message is
+    // appended to the wrong session.
+    final active = ref.read(activeChatProvider);
+    if (active == null || active.mode != widget.mode) {
       widget.onNewSession();
       // Let the provider update before sending.
       await Future.delayed(Duration.zero);

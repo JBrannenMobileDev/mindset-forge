@@ -55,10 +55,13 @@ private struct FocusBackground: View {
 
     var body: some View {
         let accent = focusAccent(for: payload)
+        // Softer wash for the calm, completed state; fuller for active states.
+        let topStop = payload.isDone ? 0.26 : 0.42
+        let midStop = payload.isDone ? 0.07 : 0.12
         ZStack {
             MFColors.surfaceElevated
             LinearGradient(
-                colors: [accent.opacity(0.42), accent.opacity(0.12), .clear],
+                colors: [accent.opacity(topStop), accent.opacity(midStop), .clear],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -347,23 +350,22 @@ struct MediumFocusView: View {
                     .foregroundColor(MFColors.textSecondary)
                     .lineLimit(1)
             }
-            Spacer(minLength: 6)
+            Spacer(minLength: 4)
             if payload.isDone && payload.hasWeekStreak {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     WeekStreakRow(
                         weekStreak: payload.weekStreak,
                         weekLabels: payload.weekLabels,
-                        dot: 22
+                        dot: 20
                     )
-                    HStack(alignment: .center) {
-                        FocusAction(payload: payload, accent: accent)
-                        Spacer()
-                        Text(payload.weekCaption)
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(MFColors.textSecondary)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.trailing)
-                    }
+                    // The "Evening Complete" headline already conveys done, so
+                    // the caption gets the full width instead of a redundant pill.
+                    Text(payload.weekCaption)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(MFColors.textSecondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.9)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } else {
                 HStack(alignment: .center) {

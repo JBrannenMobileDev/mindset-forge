@@ -39,7 +39,9 @@ void main() {
     ).copyWith(
       dailyFocusAction: focus,
       dailyFocusActionDate: focusDate,
-      dailyFocusActionCompleted: focusComplete,
+      // Focus completion is now derived from the completed list.
+      completedPriorityActions:
+          focusComplete && focus.isNotEmpty ? [focus] : const [],
       journalPreference: journalPreference,
       dailyCompletions: completions,
     );

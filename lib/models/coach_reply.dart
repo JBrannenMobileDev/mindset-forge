@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../core/constants/app_strings.dart';
+
 /// A belief→reframe pair the coach surfaced during a turn.
 class CoachBeliefReframe {
   final String belief;
@@ -100,33 +102,126 @@ class CoachReply {
   factory CoachReply.plain(String text) => CoachReply(response: text);
 
   /// Parses the raw model output. The model is instructed to return a single
-  /// JSON object; we extract the outermost `{...}` and decode it. Any failure
-  /// falls back to treating the entire string as the response text.
+  /// JSON object; but it can misbehave (prepend prose, wrap the object in a
+  /// ```json fence, or get truncated mid-object when it hits the token cap).
+  ///
+  /// The parse is defensive in three tiers so raw/broken JSON can NEVER reach
+  /// the chat bubble:
+  ///   1. Strict decode of the outermost `{...}`.
+  ///   2. Salvage the `"response"` string field directly (survives truncation,
+  ///      since `response` is the first key in the contract).
+  ///   3. Strip any code fences / JSON object and show the remaining prose,
+  ///      falling back to a generic retry line if nothing readable is left.
   factory CoachReply.parse(String raw) {
-    try {
-      final start = raw.indexOf('{');
-      final end = raw.lastIndexOf('}');
-      if (start == -1 || end <= start) return CoachReply.plain(raw.trim());
-
-      final jsonStr = raw.substring(start, end + 1);
-      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-
+    // Tier 1 — strict decode.
+    final data = _tryDecodeObject(raw);
+    if (data != null) {
       final text = (data['response'] as String?)?.trim();
-      if (text == null || text.isEmpty) return CoachReply.plain(raw.trim());
-
-      return CoachReply(
-        response: text,
-        mode: _parseMode(data['mode'] as String?),
-        framework: data['framework'] as String? ?? '',
-        safety: _parseSafety(data['safety'] as String?),
-        memory: data['memory_updates'] is Map<String, dynamic>
-            ? CoachMemoryUpdate.fromJson(
-                data['memory_updates'] as Map<String, dynamic>)
-            : const CoachMemoryUpdate(),
-      );
-    } catch (_) {
-      return CoachReply.plain(raw.trim());
+      if (text != null && text.isNotEmpty) {
+        return CoachReply(
+          response: text,
+          mode: _parseMode(data['mode'] as String?),
+          framework: data['framework'] as String? ?? '',
+          safety: _parseSafety(data['safety'] as String?),
+          memory: data['memory_updates'] is Map<String, dynamic>
+              ? CoachMemoryUpdate.fromJson(
+                  data['memory_updates'] as Map<String, dynamic>)
+              : const CoachMemoryUpdate(),
+        );
+      }
     }
+
+    // Tier 2 — salvage the response field from malformed/truncated JSON.
+    final salvaged = _extractStringField(raw, 'response');
+    if (salvaged != null && salvaged.trim().isNotEmpty) {
+      return CoachReply(
+        response: salvaged.trim(),
+        mode: _parseMode(_extractStringField(raw, 'mode')),
+        framework: _extractStringField(raw, 'framework') ?? '',
+        safety: _parseSafety(_extractStringField(raw, 'safety')),
+      );
+    }
+
+    // Tier 3 — strip fences/JSON and show whatever prose remains.
+    final cleaned = _stripJsonAndFences(raw).trim();
+    return CoachReply.plain(
+        cleaned.isNotEmpty ? cleaned : AppStrings.coachErrorRetry);
+  }
+
+  /// Decodes the outermost `{...}` object, or returns null if that fails.
+  static Map<String, dynamic>? _tryDecodeObject(String raw) {
+    final start = raw.indexOf('{');
+    final end = raw.lastIndexOf('}');
+    if (start == -1 || end <= start) return null;
+    try {
+      final decoded = jsonDecode(raw.substring(start, end + 1));
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Extracts the JSON string value for [key] from possibly-malformed or
+  /// truncated output. Walks the characters after `"key"\s*:\s*"`, honoring
+  /// `\"` escapes, and stops at the first unescaped `"` (or end-of-string if
+  /// the model was cut off). The collected literal is JSON-unescaped so `\n`,
+  /// `\"`, etc. render correctly. Returns null when the key isn't present.
+  static String? _extractStringField(String raw, String key) {
+    final match = RegExp('"${RegExp.escape(key)}"\\s*:\\s*"').firstMatch(raw);
+    if (match == null) return null;
+
+    final buf = StringBuffer();
+    var i = match.end;
+    var closed = false;
+    while (i < raw.length) {
+      final c = raw[i];
+      if (c == r'\') {
+        if (i + 1 >= raw.length) break; // dangling escape (truncated)
+        buf.write(c);
+        buf.write(raw[i + 1]);
+        i += 2;
+        continue;
+      }
+      if (c == '"') {
+        closed = true;
+        break;
+      }
+      buf.write(c);
+      i++;
+    }
+
+    var literal = buf.toString();
+    if (!closed && literal.endsWith(r'\')) {
+      // Drop a lone trailing backslash left by truncation so decode succeeds.
+      literal = literal.substring(0, literal.length - 1);
+    }
+    if (literal.isEmpty && !closed) return null;
+    try {
+      return jsonDecode('"$literal"') as String;
+    } catch (_) {
+      // Best-effort manual unescape if the literal still isn't valid JSON.
+      return literal
+          .replaceAll(r'\n', '\n')
+          .replaceAll(r'\t', '\t')
+          .replaceAll(r'\"', '"')
+          .replaceAll(r'\\', r'\');
+    }
+  }
+
+  /// Removes ```code fences``` and any `{...}` JSON object from [raw], leaving
+  /// only human-readable prose. Used as the last-resort fallback so a stray
+  /// JSON blob is never shown verbatim.
+  static String _stripJsonAndFences(String raw) {
+    var text = raw.replaceAll(RegExp(r'```[a-zA-Z]*'), '').replaceAll('```', '');
+    final start = text.indexOf('{');
+    final end = text.lastIndexOf('}');
+    if (start != -1 && end > start) {
+      text = text.substring(0, start) + text.substring(end + 1);
+    } else if (start != -1) {
+      // Unclosed object (truncated) — drop everything from the opening brace.
+      text = text.substring(0, start);
+    }
+    return text;
   }
 
   static CoachMode _parseMode(String? raw) {

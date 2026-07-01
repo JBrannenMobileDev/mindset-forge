@@ -115,8 +115,10 @@ Future<void> _completeFocusInBackground() async {
     final profile = await fs.getUserProfile(uid);
     if (profile == null) return;
 
-    // Mirror TodayHeroCard._completeFocus: flip the profile flag and the
-    // matching daily-completion flag (recording the completion timestamp).
+    // Mirror TodayHeroCard._completeFocus: add the #1 focus to the
+    // authoritative completed list (the single source of truth read by
+    // UserProfile.isDailyFocusComplete) and flip the matching daily-completion
+    // flag (recording the completion timestamp).
     final today = AppDateUtils.todayStringWithGracePeriod();
     final completions = [...profile.dailyCompletions];
     final idx = completions.indexWhere((c) => c.date == today);
@@ -136,14 +138,18 @@ Future<void> _completeFocusInBackground() async {
       completions.add(updated);
     }
 
+    final focus = profile.dailyFocusAction;
+    final completedActions = {...profile.completedPriorityActions};
+    if (focus.isNotEmpty) completedActions.add(focus);
+
     await fs.updateUserField(uid, {
-      'dailyFocusActionCompleted': true,
+      'completedPriorityActions': completedActions.toList(),
       'dailyCompletions': completions.map((c) => c.toJson()).toList(),
     });
 
     // Rebuild the payload from the now-updated profile and refresh the widget.
     final mergedProfile = profile.copyWith(
-      dailyFocusActionCompleted: true,
+      completedPriorityActions: completedActions.toList(),
       dailyCompletions: completions,
     );
     final payload = WidgetPayload.fromProfile(

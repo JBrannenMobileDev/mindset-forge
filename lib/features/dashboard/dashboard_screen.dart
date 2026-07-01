@@ -185,7 +185,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             final showOpenFocusCard =
                 AppDateUtils.sessionPeriod() == 'evening' &&
                     hasFocusToday &&
-                    !profile.dailyFocusActionCompleted;
+                    !profile.isDailyFocusComplete;
 
             return LayoutBuilder(
               builder: (context, constraints) {

@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/utils/app_date_utils.dart';
+import '../../core/widgets/app_button.dart';
 import '../../providers/journal_provider.dart';
 
 class JournalEntryDetailScreen extends ConsumerWidget {
@@ -250,6 +252,16 @@ class JournalEntryDetailScreen extends ConsumerWidget {
                         .toList(),
                   ),
                 ],
+
+                const SizedBox(height: AppSpacing.xl),
+                AppPrimaryButton(
+                  label: AppStrings.discussWithCoach,
+                  icon: Icons.chat_bubble_outline_rounded,
+                  onPressed: () => context.go('/chat', extra: {
+                    'journalContext': entry.content,
+                    'journalPrompt': entry.prompt,
+                  }),
+                ),
 
                 const SizedBox(height: 100),
               ],

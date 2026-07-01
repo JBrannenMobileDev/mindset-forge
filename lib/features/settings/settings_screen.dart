@@ -475,6 +475,7 @@ class _ProfileCard extends StatelessWidget {
   String _statusLabel(String s) => switch (s) {
         'active' => '✓ PREMIUM',
         'trialing' => '✓ TRIAL',
+        'lifetime' => '✓ LIFETIME',
         'canceled' => 'CANCELED',
         'past_due' => 'PAST DUE',
         _ => 'FREE',
@@ -482,6 +483,7 @@ class _ProfileCard extends StatelessWidget {
 
   Color _statusColor(String s) => switch (s) {
         'active' || 'trialing' => AppColors.primary,
+        'lifetime' => AppColors.success,
         'canceled' || 'past_due' || 'expired' => AppColors.error,
         _ => AppColors.textMuted,
       };

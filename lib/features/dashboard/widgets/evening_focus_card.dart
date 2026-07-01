@@ -7,8 +7,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../models/user_profile.dart';
-import '../../../providers/auth_provider.dart';
-import '../../../providers/daily_completion_provider.dart';
+import '../../../providers/priority_actions_provider.dart';
 
 /// Evening "last call" reminder for an incomplete #1 Focus.
 ///
@@ -32,23 +31,13 @@ class EveningFocusCard extends ConsumerStatefulWidget {
 class _EveningFocusCardState extends ConsumerState<EveningFocusCard> {
   bool _completing = false;
 
-  /// Marks Today's Focus complete: persists the profile flag and the matching
-  /// daily-completion flag (mirrors [TodayHeroCard]). The dashboard drops this
-  /// card once the profile stream reflects completion.
+  /// Marks Today's Focus complete by adding it to the authoritative completed
+  /// list (mirrors [TodayHeroCard]). The dashboard drops this card once the
+  /// profile stream reflects completion.
   Future<void> _completeFocus() async {
     setState(() => _completing = true);
     try {
-      final uid = ref.read(authStateProvider).valueOrNull?.uid;
-      if (uid != null) {
-        await ref.read(firestoreServiceProvider).updateUserField(uid, {
-          'dailyFocusActionCompleted': true,
-        });
-      }
-      final dc = ref.read(dailyCompletionProvider.notifier);
-      // The #1 focus is the streak-counting win; completing it also satisfies
-      // the scoring-only "any priority action done" signal.
-      await dc.toggle('focusCompleted', true);
-      await dc.toggle('priorityActionsCompleted', true);
+      await ref.read(priorityActionsProvider.notifier).completeFocus();
       if (!mounted) return;
       setState(() => _completing = false);
     } catch (e) {

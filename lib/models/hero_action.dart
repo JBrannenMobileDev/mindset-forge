@@ -179,7 +179,7 @@ HeroAction resolveHeroAction(
 
   final hasFocusToday = profile.dailyFocusAction.isNotEmpty &&
       profile.dailyFocusActionDate == todayStr;
-  final focusComplete = profile.dailyFocusActionCompleted;
+  final focusComplete = profile.isDailyFocusComplete;
 
   // ── Journal placement based on user preference ──────────────────────────
   final journalPref = profile.journalPreference;

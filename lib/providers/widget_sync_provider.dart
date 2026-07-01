@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/services/widget_sync_service.dart';
 import 'auth_provider.dart';
 import 'daily_completion_provider.dart';
+import 'priority_actions_provider.dart';
 
 /// Activating this provider wires up widget/watch data export:
 ///   - rebuilds + pushes the payload whenever the profile or today's
@@ -35,18 +36,11 @@ final widgetSyncInitProvider = Provider<void>((ref) {
   ref.listen(dailyCompletionProvider, (_, __) => service.sync());
 });
 
-/// Mirrors `TodayHeroCard._completeFocus` but driven from the watch.
+/// Mirrors `TodayHeroCard._completeFocus` but driven from the watch: completes
+/// the #1 focus via the authoritative completed list.
 Future<void> _completeFocusFromWatch(Ref ref) async {
   try {
-    final uid = ref.read(authStateProvider).valueOrNull?.uid;
-    if (uid != null) {
-      await ref.read(firestoreServiceProvider).updateUserField(uid, {
-        'dailyFocusActionCompleted': true,
-      });
-    }
-    final dc = ref.read(dailyCompletionProvider.notifier);
-    await dc.toggle('focusCompleted', true);
-    await dc.toggle('priorityActionsCompleted', true);
+    await ref.read(priorityActionsProvider.notifier).completeFocus();
     // The profile/completion listeners above will re-sync the watch + widget.
   } catch (e) {
     debugPrint('widgetSync: completeFocus from watch failed: $e');

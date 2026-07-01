@@ -13,14 +13,22 @@ import '../../models/user_profile.dart';
 class AnalyticsService {
   static Mixpanel? _mp;
 
+  /// Mixpanel project token. Single source of truth so both startup and the
+  /// web cookie-consent flow can initialize with the same token.
+  static const mixpanelToken = '2ab6ef7382cf88d859f8378f916974f0';
+
+  /// Whether Mixpanel has already been initialized this session.
+  static bool get isInitialized => _mp != null;
+
   // ─── Initialisation ─────────────────────────────────────────────────────────
 
-  static Future<void> init(String token) async {
-    if (kIsWeb) return;
+  static Future<void> init() async {
+    if (_mp != null) return; // idempotent — safe to call again after consent
     try {
-      _mp = await Mixpanel.init(token, trackAutomaticEvents: false);
+      _mp = await Mixpanel.init(mixpanelToken, trackAutomaticEvents: false);
       if (kDebugMode) _mp?.setLoggingEnabled(true);
-      final platform = Platform.isIOS ? 'ios' : 'android';
+      // Platform is from dart:io (unavailable on web), so resolve web first.
+      final platform = kIsWeb ? 'web' : (Platform.isIOS ? 'ios' : 'android');
       _mp?.registerSuperProperties({'platform': platform});
     } catch (e) {
       debugPrint('AnalyticsService.init failed: $e');

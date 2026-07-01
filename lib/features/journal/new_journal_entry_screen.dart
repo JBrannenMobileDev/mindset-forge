@@ -259,7 +259,7 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
                   context.go('/dashboard');
                 }
               },
-              onDiscuss: (content, prompt) => context.push('/chat',
+              onDiscuss: (content, prompt) => context.go('/chat',
                   extra: {'journalContext': content, 'journalPrompt': prompt}),
             ),
         },
@@ -984,7 +984,7 @@ class _SavedView extends StatelessWidget {
           ),
           const Spacer(),
           AppPrimaryButton(
-            label: 'Discuss with Coach',
+            label: AppStrings.discussWithCoach,
             onPressed: onDiscuss,
             icon: Icons.chat_bubble_outline_rounded,
           ),

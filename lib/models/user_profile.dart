@@ -53,7 +53,6 @@ class UserProfile {
   final String priorityActionsDate;
   final String dailyFocusAction;
   final String dailyFocusActionDate;
-  final bool dailyFocusActionCompleted;
   final List<String> completedPriorityActions;
   final String journalPreference; // 'morning' | 'evening' | 'both'
   final List<JournalSummary> recentJournalSummaries;
@@ -128,7 +127,6 @@ class UserProfile {
     this.priorityActionsDate = '',
     this.dailyFocusAction = '',
     this.dailyFocusActionDate = '',
-    this.dailyFocusActionCompleted = false,
     this.completedPriorityActions = const [],
     this.journalPreference = 'both',
     this.recentJournalSummaries = const [],
@@ -152,18 +150,32 @@ class UserProfile {
   /// Whether the user has acknowledged the one-time coach disclaimer.
   bool get hasAcceptedCoachDisclaimer => coachDisclaimerAcceptedAt != null;
 
+  /// The #1 focus is complete iff it appears in the authoritative completed
+  /// list. Single source of truth so the dashboard and Priorities tab can
+  /// never disagree. Callers gate on "today" via [dailyFocusActionDate].
+  bool get isDailyFocusComplete =>
+      dailyFocusAction.isNotEmpty &&
+      completedPriorityActions.contains(dailyFocusAction);
+
   /// A free "partner" account: limited app access, joined via an accountability
   /// partner invite, funneled toward starting their own subscription.
   bool get isPartnerAccount => userType == 'partner';
 
+  /// A comped account: free, permanent full access granted manually (family,
+  /// friends, partner coaches). Set `subscriptionStatus: 'lifetime'` on the
+  /// user doc in Firestore to grant it.
+  bool get isComped => subscriptionStatus == 'lifetime';
+
   /// True when the user has full, paid access (paying subscriber or in trial).
   // 'canceled' means auto-renew was turned off, not that access has ended —
   // the user keeps access until the period expires (status flips to 'expired'
-  // via the webhook at that point).
+  // via the webhook at that point). 'lifetime' is a manual comp grant that
+  // never expires.
   bool get hasActiveSubscription =>
       subscriptionStatus == 'active' ||
       subscriptionStatus == 'trialing' ||
-      subscriptionStatus == 'canceled';
+      subscriptionStatus == 'canceled' ||
+      subscriptionStatus == 'lifetime';
 
   /// For a partner account, the name of the primary user they are supporting
   /// (used for social proof in upgrade prompts). Null if not applicable.
@@ -235,6 +247,38 @@ class UserProfile {
   int get perfectDayCount =>
       dailyCompletions.where((c) => c.isPerfectDay).length;
 
+  /// Consecutive run of perfect (9/9) days ending today, using the same
+  /// midnight–4 AM grace rule as [currentStreak]: an in-progress today does not
+  /// break the run — it anchors at yesterday until the day ends.
+  int get perfectStreak {
+    if (dailyCompletions.isEmpty) return 0;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final perfect = <DateTime>{};
+    for (final c in dailyCompletions) {
+      if (!c.isPerfectDay) continue;
+      final parts = c.date.split('-');
+      if (parts.length != 3) continue;
+      perfect.add(
+        DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2])),
+      );
+    }
+    if (perfect.isEmpty) return 0;
+
+    DateTime cursor = perfect.contains(today)
+        ? today
+        : today.subtract(const Duration(days: 1));
+
+    int streak = 0;
+    while (perfect.contains(cursor)) {
+      streak++;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+    return streak;
+  }
+
   UserProfile copyWith({
     String? uid,
     String? email,
@@ -270,7 +314,6 @@ class UserProfile {
     String? priorityActionsDate,
     String? dailyFocusAction,
     String? dailyFocusActionDate,
-    bool? dailyFocusActionCompleted,
     List<String>? completedPriorityActions,
     String? journalPreference,
     List<JournalSummary>? recentJournalSummaries,
@@ -329,7 +372,6 @@ class UserProfile {
       priorityActionsDate: priorityActionsDate ?? this.priorityActionsDate,
       dailyFocusAction: dailyFocusAction ?? this.dailyFocusAction,
       dailyFocusActionDate: dailyFocusActionDate ?? this.dailyFocusActionDate,
-      dailyFocusActionCompleted: dailyFocusActionCompleted ?? this.dailyFocusActionCompleted,
       completedPriorityActions: completedPriorityActions ?? this.completedPriorityActions,
       journalPreference: journalPreference ?? this.journalPreference,
       recentJournalSummaries: recentJournalSummaries ?? this.recentJournalSummaries,
@@ -459,7 +501,6 @@ class UserProfile {
       priorityActionsDate: json['priorityActionsDate'] as String? ?? '',
       dailyFocusAction: json['dailyFocusAction'] as String? ?? '',
       dailyFocusActionDate: json['dailyFocusActionDate'] as String? ?? '',
-      dailyFocusActionCompleted: json['dailyFocusActionCompleted'] as bool? ?? false,
       completedPriorityActions: List<String>.from(
           json['completedPriorityActions'] as List<dynamic>? ?? []),
       journalPreference: json['journalPreference'] as String? ?? 'both',
@@ -547,7 +588,6 @@ class UserProfile {
         'priorityActionsDate': priorityActionsDate,
         'dailyFocusAction': dailyFocusAction,
         'dailyFocusActionDate': dailyFocusActionDate,
-        'dailyFocusActionCompleted': dailyFocusActionCompleted,
         'completedPriorityActions': completedPriorityActions,
         'journalPreference': journalPreference,
         'recentJournalSummaries':

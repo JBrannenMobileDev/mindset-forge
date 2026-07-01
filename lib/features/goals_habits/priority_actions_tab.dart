@@ -5,6 +5,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/utils/app_date_utils.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/empty_state.dart';
@@ -87,28 +88,71 @@ class _PriorityActionsContentState
       );
     }
 
-    // Planned state: scrollable list with the add-composer docked to the
-    // bottom (industry-standard quick-add pattern).
-    return Column(
+    // Planned state: full-height list with a FAB (bottom-right, above the nav)
+    // that opens a quick-add sheet. The list reserves enough bottom padding for
+    // the last item to clear the FAB.
+    //
+    // The nav shell uses `extendBody: true`, which inflates the in-body
+    // `MediaQuery.padding.bottom` and reduces its `viewPadding.bottom`, so
+    // neither is reliable here. Read the true device inset straight from the
+    // view and mirror the shell's own bottom rule to sit just above the pill.
+    final safeBottom = MediaQueryData.fromView(View.of(context)).padding.bottom;
+    final bottomPad =
+        safeBottom > 0 ? safeBottom : AppSpacing.bottomNavMargin;
+    final pillTop = bottomPad + AppSpacing.bottomNavHeight;
+    final fabBottom = pillTop + AppSpacing.sm;
+    const fabSize = 56.0;
+    return Stack(
       children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.screenPaddingH,
-              AppSpacing.lg,
-              AppSpacing.screenPaddingH,
-              AppSpacing.md,
-            ),
-            children: _plannedChildren(state),
+        ListView(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.screenPaddingH,
+            AppSpacing.lg,
+            AppSpacing.screenPaddingH,
+            fabBottom + fabSize + AppSpacing.md,
           ),
+          children: _plannedChildren(state),
         ),
-        _DockedComposer(controller: _addCtrl, onAdd: _add),
+        Positioned(
+          right: AppSpacing.screenPaddingH,
+          bottom: fabBottom,
+          child: _AddFab(onTap: _showAddSheet),
+        ),
       ],
+    );
+  }
+
+  Future<void> _showAddSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppSpacing.radiusXl),
+        ),
+      ),
+      builder: (_) => _AddPrioritySheet(
+        onSubmit: (text) =>
+            ref.read(priorityActionsProvider.notifier).addAction(text),
+      ),
+    );
+  }
+
+  /// Always-visible label so it's clear the list is scoped to today.
+  Widget _todayLabel() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: Text(
+        'Today · ${AppDateUtils.formatWeekdayLong(DateTime.now())}',
+        style: AppTextStyles.overline.copyWith(color: AppColors.textMuted),
+      ),
     );
   }
 
   List<Widget> _emptyChildren(PriorityActionsState state) {
     return [
+      _todayLabel(),
       Container(
         width: 64,
         height: 64,
@@ -174,6 +218,7 @@ class _PriorityActionsContentState
     }
 
     return [
+      _todayLabel(),
       Text(
         AppStrings.priorityActionsHeader,
         style: AppTextStyles.overline.copyWith(color: AppColors.textMuted),
@@ -212,32 +257,137 @@ class _PriorityActionsContentState
   }
 }
 
-/// Docks [_AddPriorityRow] to the bottom of the planned list: a surface bar
-/// with a top divider that floats above the translucent bottom nav.
-class _DockedComposer extends StatelessWidget {
-  final TextEditingController controller;
-  final VoidCallback onAdd;
+/// Circular add button that floats above the bottom nav and opens the
+/// quick-add sheet.
+class _AddFab extends StatelessWidget {
+  final VoidCallback onTap;
 
-  const _DockedComposer({required this.controller, required this.onAdd});
+  const _AddFab({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final safeBottom = MediaQuery.of(context).padding.bottom;
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border)),
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 56,
+        height: 56,
+        decoration: const BoxDecoration(
+          color: AppColors.primary,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primaryGlow,
+              blurRadius: 16,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
       ),
-      padding: EdgeInsets.fromLTRB(
-        AppSpacing.screenPaddingH,
-        AppSpacing.md,
-        AppSpacing.screenPaddingH,
-        AppSpacing.md +
-            safeBottom +
-            AppSpacing.bottomNavHeight +
-            AppSpacing.bottomNavMargin,
+    );
+  }
+}
+
+/// Quick-add bottom sheet: a drag handle, an autofocused field, and an Add
+/// button. Adds and stays open so the user can add several in a row.
+class _AddPrioritySheet extends StatefulWidget {
+  final void Function(String text) onSubmit;
+
+  const _AddPrioritySheet({required this.onSubmit});
+
+  @override
+  State<_AddPrioritySheet> createState() => _AddPrioritySheetState();
+}
+
+class _AddPrioritySheetState extends State<_AddPrioritySheet> {
+  final _ctrl = TextEditingController();
+  final _focus = FocusNode();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final text = _ctrl.text.trim();
+    if (text.isEmpty) return;
+    widget.onSubmit(text);
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.screenPaddingH,
+            AppSpacing.md,
+            AppSpacing.screenPaddingH,
+            AppSpacing.lg,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text(AppStrings.priorityActionsEmptyTitle,
+                  style: AppTextStyles.headlineSmall),
+              const SizedBox(height: AppSpacing.md),
+              TextField(
+                controller: _ctrl,
+                focusNode: _focus,
+                autofocus: true,
+                style: AppTextStyles.bodyMedium,
+                textCapitalization: TextCapitalization.sentences,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _submit(),
+                decoration: InputDecoration(
+                  hintText: AppStrings.priorityActionAddHint,
+                  hintStyle: AppTextStyles.bodyMedium
+                      .copyWith(color: AppColors.textMuted),
+                  filled: true,
+                  fillColor: AppColors.surfaceElevated,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.sm + 2,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                    borderSide:
+                        const BorderSide(color: AppColors.primary, width: 1.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              AppPrimaryButton(label: AppStrings.add, onPressed: _submit),
+            ],
+          ),
+        ),
       ),
-      child: _AddPriorityRow(controller: controller, onAdd: onAdd),
     );
   }
 }
@@ -250,56 +400,59 @@ class _AddPriorityRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: controller,
-            style: AppTextStyles.bodyMedium,
-            textCapitalization: TextCapitalization.sentences,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => onAdd(),
-            decoration: InputDecoration(
-              hintText: AppStrings.priorityActionAddHint,
-              hintStyle: AppTextStyles.bodyMedium
-                  .copyWith(color: AppColors.textMuted),
-              filled: true,
-              fillColor: AppColors.surfaceElevated,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.sm + 2,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                borderSide: const BorderSide(color: AppColors.border),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                borderSide: const BorderSide(color: AppColors.border),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                borderSide:
-                    const BorderSide(color: AppColors.primary, width: 1.5),
+    return Container(
+      padding: const EdgeInsets.only(left: AppSpacing.md, right: AppSpacing.xs),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x400A0A0F),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              style: AppTextStyles.bodyMedium,
+              textCapitalization: TextCapitalization.sentences,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => onAdd(),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: AppStrings.priorityActionAddHint,
+                hintStyle: AppTextStyles.bodyMedium
+                    .copyWith(color: AppColors.textMuted),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: AppSpacing.sm + 2),
               ),
             ),
           ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        GestureDetector(
-          onTap: onAdd,
-          behavior: HitTestBehavior.opaque,
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          const SizedBox(width: AppSpacing.xs),
+          GestureDetector(
+            onTap: onAdd,
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: const BoxDecoration(
+                color: AppColors.primary,
+                shape: BoxShape.circle,
+              ),
+              child:
+                  const Icon(Icons.add_rounded, color: Colors.white, size: 22),
             ),
-            child: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

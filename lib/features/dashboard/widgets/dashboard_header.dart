@@ -1,3 +1,4 @@
+import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +7,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/services/streak_celebration_store.dart';
 import '../../../core/utils/app_date_utils.dart';
 import '../../../core/widgets/shimmer_widget.dart';
 import '../../../core/widgets/week_streak_chain.dart';
@@ -96,6 +98,7 @@ class DashboardHeader extends ConsumerWidget {
         const SizedBox(height: AppSpacing.md),
         _StreakStrip(
           currentStreak: profile.currentStreak,
+          perfectStreak: profile.perfectStreak,
           bestStreak: bestStreak(profile.dailyCompletions),
           completion: completion,
           dailyCompletions: profile.dailyCompletions,
@@ -136,8 +139,9 @@ class _TimeOfDayBadge extends StatelessWidget {
 /// wins (Duolingo-style) with today highlighted as the next link to complete,
 /// a prominent streak count, a motivating subtitle, and the best/today stats.
 /// Tapping anywhere opens the daily-wins explainer.
-class _StreakStrip extends StatelessWidget {
+class _StreakStrip extends StatefulWidget {
   final int currentStreak;
+  final int perfectStreak;
   final int bestStreak;
   final DailyCompletion completion;
   final List<DailyCompletion> dailyCompletions;
@@ -145,11 +149,55 @@ class _StreakStrip extends StatelessWidget {
 
   const _StreakStrip({
     required this.currentStreak,
+    required this.perfectStreak,
     required this.bestStreak,
     required this.completion,
     required this.dailyCompletions,
     required this.onTap,
   });
+
+  @override
+  State<_StreakStrip> createState() => _StreakStripState();
+}
+
+class _StreakStripState extends State<_StreakStrip> {
+  // A full week (7 consecutive days) fills the chart and unlocks the glow.
+  static const int _weekThreshold = 7;
+
+  late final ConfettiController _perfectConfetti;
+  late final ConfettiController _flawlessConfetti;
+
+  // Loaded from persistence so the one-time burst fires exactly once per
+  // milestone — not again the next day and not again on relaunch. Null until
+  // loaded; celebration checks wait for a non-null value.
+  bool? _perfectCelebrated;
+  bool? _flawlessCelebrated;
+
+  @override
+  void initState() {
+    super.initState();
+    _perfectConfetti = ConfettiController(duration: const Duration(seconds: 3));
+    _flawlessConfetti =
+        ConfettiController(duration: const Duration(seconds: 4));
+    _loadCelebrationFlags();
+  }
+
+  Future<void> _loadCelebrationFlags() async {
+    final perfect = await StreakCelebrationStore.perfectCelebrated();
+    final flawless = await StreakCelebrationStore.flawlessCelebrated();
+    if (!mounted) return;
+    setState(() {
+      _perfectCelebrated = perfect;
+      _flawlessCelebrated = flawless;
+    });
+  }
+
+  @override
+  void dispose() {
+    _perfectConfetti.dispose();
+    _flawlessConfetti.dispose();
+    super.dispose();
+  }
 
   /// The last 7 days ending on the grace-aware "today" so the final cell lines
   /// up with the stored daily-completion record even in the midnight–4 AM window.
@@ -164,17 +212,52 @@ class _StreakStrip extends StatelessWidget {
   String _key(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+  /// Fires the one-time celebration for a newly-reached tier and re-arms the
+  /// flag when a tier lapses. Flawless takes precedence (it implies perfect) so
+  /// only one burst plays when both cross at once.
+  void _handleCelebrations(bool perfectActive, bool flawlessActive) {
+    if (_perfectCelebrated == null || _flawlessCelebrated == null) return;
+
+    if (flawlessActive && !_flawlessCelebrated!) {
+      _flawlessCelebrated = true;
+      // Reaching flawless also satisfies the perfect tier — mark it so it does
+      // not fire a second, redundant burst.
+      _perfectCelebrated = true;
+      StreakCelebrationStore.setFlawlessCelebrated(true);
+      StreakCelebrationStore.setPerfectCelebrated(true);
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _flawlessConfetti.play());
+    } else if (perfectActive && !_perfectCelebrated!) {
+      _perfectCelebrated = true;
+      StreakCelebrationStore.setPerfectCelebrated(true);
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _perfectConfetti.play());
+    }
+
+    // Re-arm each flag once its streak lapses so a fresh week celebrates again.
+    if (!perfectActive && _perfectCelebrated!) {
+      _perfectCelebrated = false;
+      StreakCelebrationStore.setPerfectCelebrated(false);
+    }
+    if (!flawlessActive && _flawlessCelebrated!) {
+      _flawlessCelebrated = false;
+      StreakCelebrationStore.setFlawlessCelebrated(false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final days = _last7Days();
     final todayKey = _key(days.last);
+    final completion = widget.completion;
+    final currentStreak = widget.currentStreak;
 
     // Per-day records: live today's record for the last cell, history lookups
     // for the prior six. Kept as full records so a tap can recap the day.
     final dayCompletions = days.map((d) {
       final key = _key(d);
       if (key == todayKey) return completion;
-      return dailyCompletions.firstWhere(
+      return widget.dailyCompletions.firstWhere(
         (x) => x.date == key,
         orElse: () => DailyCompletion(date: key),
       );
@@ -182,109 +265,213 @@ class _StreakStrip extends StatelessWidget {
     final qualifying = dayCompletions.map((c) => c.countsForStreak).toList();
 
     final todayDone = completion.countsForStreak;
-    final perfectWeek = qualifying.every((q) => q);
+
+    // Milestone tiers are streak-driven (not the visible cells) so the glow
+    // persists through an in-progress day and only clears when the streak
+    // actually breaks.
+    final perfectActive = currentStreak >= _weekThreshold;
+    final flawlessActive = widget.perfectStreak >= _weekThreshold;
+    final weekGlow = flawlessActive
+        ? WeekGlow.flawless
+        : perfectActive
+            ? WeekGlow.perfect
+            : WeekGlow.none;
+
+    _handleCelebrations(perfectActive, flawlessActive);
 
     final (String subtitle, Color subtitleColor) = switch ((
       currentStreak,
       todayDone,
-      perfectWeek,
+      flawlessActive,
+      perfectActive,
     )) {
-      (0, false, _) => (AppStrings.streakStartToday, AppColors.textSecondary),
-      (_, true, true) => (AppStrings.streakPerfectWeek, AppColors.success),
-      (_, true, false) => (AppStrings.streakLockedIn, AppColors.success),
+      (_, _, true, _) => (AppStrings.streakFlawlessWeek, AppColors.success),
+      (_, _, _, true) => (AppStrings.streakPerfectWeek, AppColors.success),
+      (0, false, _, _) => (
+          AppStrings.streakStartToday,
+          AppColors.textSecondary
+        ),
+      (_, true, _, _) => (AppStrings.streakLockedIn, AppColors.success),
       _ => (AppStrings.streakKeepGoing, AppColors.warning),
     };
 
     return GestureDetector(
-      onTap: onTap,
+      onTap: widget.onTap,
       behavior: HitTestBehavior.opaque,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
+        alignment: Alignment.topCenter,
         children: [
-          // Headline: prominent streak count + tappable hint.
-          Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.local_fire_department_rounded,
-                  size: 22, color: AppColors.warning),
-              const SizedBox(width: AppSpacing.xs),
+              // Headline: prominent streak count + tappable hint.
+              Row(
+                children: [
+                  const Icon(Icons.local_fire_department_rounded,
+                      size: 22, color: AppColors.warning),
+                  const SizedBox(width: AppSpacing.xs),
+                  Text(
+                    '$currentStreak',
+                    style: AppTextStyles.headlineLarge,
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Text(
+                      currentStreak == 1
+                          ? AppStrings.streakDayStreak
+                          : AppStrings.streakDaysStreak,
+                      style: AppTextStyles.labelLarge
+                          .copyWith(color: AppColors.textMuted),
+                    ),
+                  ),
+                  if (weekGlow != WeekGlow.none) ...[
+                    const SizedBox(width: AppSpacing.sm),
+                    _WeekBadge(flawless: weekGlow == WeekGlow.flawless),
+                  ],
+                  const Spacer(),
+                  const Icon(Icons.info_outline_rounded,
+                      size: 16, color: AppColors.textMuted),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.xs),
               Text(
-                '$currentStreak',
-                style: AppTextStyles.headlineLarge,
+                subtitle,
+                style: AppTextStyles.bodySmall.copyWith(color: subtitleColor),
               ),
-              const SizedBox(width: AppSpacing.xs),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 3),
-                child: Text(
-                  currentStreak == 1
-                      ? AppStrings.streakDayStreak
-                      : AppStrings.streakDaysStreak,
-                  style: AppTextStyles.labelLarge
-                      .copyWith(color: AppColors.textMuted),
-                ),
+              const SizedBox(height: AppSpacing.md),
+              // 7-day chain.
+              WeekStreakChain(
+                weekGlow: weekGlow,
+                days: List.generate(days.length, (i) {
+                  final isToday = i == days.length - 1;
+                  final c = dayCompletions[i];
+                  final StreakDayState state;
+                  if (c.isPerfectDay) {
+                    state = StreakDayState.perfect;
+                  } else if (qualifying[i]) {
+                    state = StreakDayState.qualifying;
+                  } else if (isToday) {
+                    state = StreakDayState.pending;
+                  } else {
+                    state = StreakDayState.missed;
+                  }
+                  return StreakDayData(
+                    letter: AppDateUtils.weekdayShort(days[i]).substring(0, 1),
+                    state: state,
+                    isToday: isToday,
+                    onTap: () => showDayRecapSheet(context, days[i], c),
+                  );
+                }),
               ),
-              const Spacer(),
-              const Icon(Icons.info_outline_rounded,
-                  size: 16, color: AppColors.textMuted),
+              const SizedBox(height: AppSpacing.md),
+              // Best + today's progress preserved as a compact secondary row.
+              Row(
+                children: [
+                  _MomentumItem(
+                    icon: Icons.emoji_events_rounded,
+                    color: AppColors.secondary,
+                    value: '${widget.bestStreak}',
+                    label: AppStrings.streakBest,
+                  ),
+                  const _MomentumDivider(),
+                  _MomentumItem(
+                    icon: completion.isPerfectDay
+                        ? Icons.workspace_premium_rounded
+                        : Icons.check_circle_outline_rounded,
+                    color: completion.isPerfectDay
+                        ? AppColors.primary
+                        : AppColors.textSecondary,
+                    value: completion.isPerfectDay
+                        ? 'Perfect'
+                        : '${completion.completedCount}/${DailyCompletion.totalCount}',
+                    label: AppStrings.streakToday,
+                  ),
+                ],
+              ),
             ],
           ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            subtitle,
-            style: AppTextStyles.bodySmall.copyWith(color: subtitleColor),
+          // One-time celebration bursts (top-center) — sized per tier.
+          ConfettiWidget(
+            confettiController: _perfectConfetti,
+            blastDirectionality: BlastDirectionality.explosive,
+            numberOfParticles: 40,
+            gravity: 0.15,
+            colors: const [
+              AppColors.primary,
+              AppColors.secondary,
+              AppColors.warning,
+              Colors.white,
+            ],
           ),
-          const SizedBox(height: AppSpacing.md),
-          // 7-day chain.
-          WeekStreakChain(
-            pulseToday: true,
-            days: List.generate(days.length, (i) {
-              final isToday = i == days.length - 1;
-              final c = dayCompletions[i];
-              final StreakDayState state;
-              if (c.isPerfectDay) {
-                state = StreakDayState.perfect;
-              } else if (qualifying[i]) {
-                state = StreakDayState.qualifying;
-              } else if (isToday) {
-                state = StreakDayState.pending;
-              } else {
-                state = StreakDayState.missed;
-              }
-              return StreakDayData(
-                letter: AppDateUtils.weekdayShort(days[i]).substring(0, 1),
-                state: state,
-                isToday: isToday,
-                onTap: () => showDayRecapSheet(context, days[i], c),
-              );
-            }),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          // Best + today's progress preserved as a compact secondary row.
-          Row(
-            children: [
-              _MomentumItem(
-                icon: Icons.emoji_events_rounded,
-                color: AppColors.secondary,
-                value: '$bestStreak',
-                label: AppStrings.streakBest,
-              ),
-              const _MomentumDivider(),
-              _MomentumItem(
-                icon: completion.isPerfectDay
-                    ? Icons.workspace_premium_rounded
-                    : Icons.check_circle_outline_rounded,
-                color: completion.isPerfectDay
-                    ? AppColors.primary
-                    : AppColors.textSecondary,
-                value: completion.isPerfectDay
-                    ? 'Perfect'
-                    : '${completion.completedCount}/${DailyCompletion.totalCount}',
-                label: AppStrings.streakToday,
-              ),
+          ConfettiWidget(
+            confettiController: _flawlessConfetti,
+            blastDirectionality: BlastDirectionality.explosive,
+            numberOfParticles: 90,
+            gravity: 0.2,
+            colors: const [
+              AppColors.primary,
+              AppColors.secondary,
+              AppColors.warning,
+              Colors.white,
             ],
           ),
         ],
       ),
     );
+  }
+}
+
+/// A small scale-in pill shown beside the streak count while a full-week
+/// milestone glow is active. Flawless (all 9/9) reads warmer than perfect.
+class _WeekBadge extends StatelessWidget {
+  final bool flawless;
+
+  const _WeekBadge({required this.flawless});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = flawless ? AppColors.warning : AppColors.primary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            flawless
+                ? Icons.workspace_premium_rounded
+                : Icons.local_fire_department_rounded,
+            size: 12,
+            color: color,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            flawless
+                ? AppStrings.streakFlawlessWeekBadge
+                : AppStrings.streakPerfectWeekBadge,
+            style: AppTextStyles.labelSmall.copyWith(
+              color: color,
+              fontSize: 9,
+              letterSpacing: 0.8,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    )
+        .animate()
+        .scale(
+          begin: const Offset(0.6, 0.6),
+          end: const Offset(1.0, 1.0),
+          duration: 500.ms,
+          curve: Curves.elasticOut,
+        )
+        .fadeIn(duration: 250.ms);
   }
 }
 
@@ -311,7 +498,8 @@ class _MomentumItem extends StatelessWidget {
         const SizedBox(width: 5),
         Text(
           value,
-          style: AppTextStyles.labelLarge.copyWith(color: AppColors.textPrimary),
+          style:
+              AppTextStyles.labelLarge.copyWith(color: AppColors.textPrimary),
         ),
         const SizedBox(width: 4),
         Text(

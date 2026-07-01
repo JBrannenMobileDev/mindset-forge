@@ -80,6 +80,21 @@ class _PlanDaySheetState extends ConsumerState<_PlanDaySheet> {
       return;
     }
 
+    // Stale list from a previous day — carry unfinished actions forward instead
+    // of regenerating, matching the Priorities tab's rollover behavior.
+    if (p.priorityActions.isNotEmpty) {
+      final completed = p.completedPriorityActions.toSet();
+      final carried =
+          p.priorityActions.where((a) => !completed.contains(a)).toList();
+      if (carried.isNotEmpty) {
+        setState(() {
+          _actions = carried;
+          _isLoading = false;
+        });
+        return;
+      }
+    }
+
     setState(() => _isLoading = true);
     try {
       final actions = await ref
@@ -130,7 +145,6 @@ class _PlanDaySheetState extends ConsumerState<_PlanDaySheet> {
         await ref.read(firestoreServiceProvider).updateUserField(uid, {
           'dailyFocusAction': focusAction,
           'dailyFocusActionDate': _todayStr,
-          'dailyFocusActionCompleted': false,
           'priorityActions': _actions,
           'priorityActionsDate': _todayStr,
         });

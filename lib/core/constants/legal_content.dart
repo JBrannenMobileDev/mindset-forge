@@ -197,13 +197,28 @@ abstract final class LegalContent {
       heading: '6. Third-Party Services',
       body:
           'We rely on trusted third parties to operate the Service, including '
-          'Google Firebase (authentication, database, and cloud functions), '
-          'Anthropic (AI model processing), and RevenueCat (subscription '
-          'management). Their handling of data is governed by their own privacy '
-          'policies.',
+          'Google Firebase (authentication, database, cloud functions, and App '
+          'Check / Google reCAPTCHA for abuse prevention on the web), Anthropic '
+          '(AI model processing), RevenueCat (subscription management), and '
+          'Mixpanel (product analytics). Their handling of data is governed by '
+          'their own privacy policies.',
     ),
     LegalSection(
-      heading: '7. Data Retention and Deletion',
+      heading: '7. Cookies, Analytics, and Similar Technologies',
+      body:
+          'We use cookies and similar technologies (such as local storage) to '
+          'operate the Service. Essential technologies keep you signed in and '
+          'secure your session, and Google reCAPTCHA helps protect the web app '
+          'from abuse; these are necessary for the Service to function. With '
+          'your consent, we also use Mixpanel analytics cookies to understand '
+          'how the app is used so we can improve it. On the web you can accept '
+          'or decline non-essential analytics cookies in the consent banner, '
+          'and declining does not affect access to the Service. Your use of '
+          'reCAPTCHA is also subject to Google\'s Privacy Policy and Terms of '
+          'Service.',
+    ),
+    LegalSection(
+      heading: '8. Data Retention and Deletion',
       body:
           'We retain your information for as long as your account is active. You '
           'can delete your account at any time from the in-app settings, which '
@@ -212,21 +227,21 @@ abstract final class LegalContent {
           'retention is required by law.',
     ),
     LegalSection(
-      heading: '8. Security',
+      heading: '9. Security',
       body:
           'We use reasonable technical and organizational measures to protect your '
           'information. However, no method of transmission or storage is '
           'completely secure, and we cannot guarantee absolute security.',
     ),
     LegalSection(
-      heading: '9. Children',
+      heading: '10. Children',
       body:
           'The Service is not directed to children under 18, and we do not '
           'knowingly collect personal information from them. If you believe a '
           'child has provided us information, contact us so we can remove it.',
     ),
     LegalSection(
-      heading: '10. Your Rights',
+      heading: '11. Your Rights',
       body:
           'Depending on where you live, you may have rights to access, correct, '
           'delete, or export your personal information, and to object to or '
@@ -234,7 +249,7 @@ abstract final class LegalContent {
           '$contactEmail.',
     ),
     LegalSection(
-      heading: '11. Changes to This Policy',
+      heading: '12. Changes to This Policy',
       body:
           'We may update this Privacy Policy from time to time. If we make '
           'material changes, we will provide notice within the Service or by other '
@@ -242,7 +257,7 @@ abstract final class LegalContent {
           'revision.',
     ),
     LegalSection(
-      heading: '12. Contact Us',
+      heading: '13. Contact Us',
       body:
           'Questions about your privacy or this policy? Contact us at '
           '$contactEmail.',

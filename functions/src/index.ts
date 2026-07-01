@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { setGlobalOptions } from 'firebase-functions/v2';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onRequest } from 'firebase-functions/v2/https';
@@ -8,11 +9,23 @@ import { timingSafeEqual } from 'crypto';
 
 admin.initializeApp();
 
+// Bound autoscaling so a traffic spike can't exhaust the regional Cloud Run CPU
+// quota. The project's us-central1 CpuAllocPerProjectRegion quota is 20 vCPU, and
+// each instance defaults to 1 vCPU, so maxInstances must stay <= 20 per function
+// to deploy. Region is pinned to the existing default so function URLs and
+// callable references are unchanged.
+setGlobalOptions({ region: 'us-central1', maxInstances: 20 });
+
 const anthropicKey = defineSecret('ANTHROPIC_API_KEY');
 // Shared secret used to authenticate inbound RevenueCat webhook requests.
 // Set the same value as the Authorization header in the RevenueCat dashboard.
 const revenueCatWebhookSecret = defineSecret('REVENUECAT_WEBHOOK_SECRET');
 const db = admin.firestore();
+
+// Per-user daily ceiling on AI calls. Bounds cost/abuse from any single account
+// (or a leaked token) without affecting normal usage. Enforced in callClaude /
+// callClaudeConversation via enforceDailyAiLimit.
+const DAILY_AI_CALL_LIMIT = 50;
 
 /**
  * Constant-time string comparison to avoid leaking secrets via timing.
@@ -207,6 +220,7 @@ This is how a trusted friend who happens to be a brilliant coach talks. Use it o
 - Normal coaching (a real question, a decision, light stuck-ness): 40 to 110 words.
 - Reserve 110 to 160 words only for genuine depth: an emotional moment, a meaningful reframe, or a complex situation that needs unpacking.
 - Read the user's energy and message length as the signal: a short message usually wants a short reply.
+- HARD LIMIT: the "response" text must never exceed 200 words under any circumstances. If you feel the urge to write more, cut it, brevity is part of good coaching.
 - When you are coaching, end with EITHER one real question OR one specific next step, never both. For a quick acknowledgement or simple answer, you do not need either; just respond naturally.
 
 # SOUND HUMAN (anti-AI rules)
@@ -263,12 +277,52 @@ Example: "Let's lock this in. [[ACTION:Goal:Run a half marathon by spring]]"
   }
 }
 
-Keep memory_updates minimal and only include what genuinely happened this turn. Empty arrays and empty strings are expected most of the time.
+Keep memory_updates minimal and only include what genuinely happened this turn. Empty arrays and empty strings are expected most of the time. Be terse: session_summary and long_term_summary are ONE short sentence each; every array holds at most 1 to 2 short items; include at most one belief_reframe per turn, with the belief and reframe each kept to one sentence. Never restate the full coaching message here.
+
+OUTPUT RULES (critical):
+- Output the JSON object ONLY. Your entire reply must be valid JSON that starts with "{" and ends with "}".
+- Do NOT wrap it in markdown code fences (no \`\`\`json).
+- Do NOT write any text before or after the JSON. Never repeat the coaching message outside the "response" field, doing so wastes tokens and breaks the app.
 
 STYLE RULES (non-negotiable):
 - Never use "--" or "—" (em dash). Use a comma, period, or new sentence instead.
 - Never use "..." (ellipsis) to trail off. End every thought completely.
 - Write like a trusted human coach who knows this person well, not like an AI assistant.`;
+
+/**
+ * True for transient Anthropic failures worth retrying: rate limits (429),
+ * overloaded (529), and 5xx. Other 4xx (e.g. 400 invalid request, 401 auth)
+ * are permanent and fail fast. Errors with no HTTP status are treated as
+ * transient network blips and retried once more.
+ */
+function isRetryableAnthropicError(err: unknown): boolean {
+  const status = (err as { status?: number } | undefined)?.status;
+  if (typeof status !== 'number') return true;
+  return status === 429 || status === 529 || (status >= 500 && status < 600);
+}
+
+/**
+ * Runs an Anthropic request with exponential backoff (500ms, 1s, 2s) so short
+ * rate-limit/overload spikes don't surface to users. Only retries transient
+ * errors; rethrows the last error once attempts are exhausted.
+ */
+async function withAnthropicRetry<T>(
+  fn: () => Promise<T>,
+  attempts = 3,
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt === attempts - 1 || !isRetryableAnthropicError(err)) throw err;
+      const delayMs = 500 * 2 ** attempt;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastErr;
+}
 
 async function callAnthropicInternal(
   systemPrompt: string,
@@ -278,12 +332,12 @@ async function callAnthropicInternal(
 ): Promise<string> {
   const client = new Anthropic({ apiKey });
   try {
-    const message = await client.messages.create({
+    const message = await withAnthropicRetry(() => client.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: maxTokens,
       system: systemPrompt + STYLE_RULES,
       messages: [{ role: 'user', content: userPrompt }],
-    });
+    }));
     const block = message.content[0];
     if (block.type !== 'text') throw new Error('Unexpected response type from Claude');
     // Safety net: strip any em-dash or double-hyphen patterns that slip through.
@@ -320,7 +374,7 @@ async function callAnthropicConversation(
 ): Promise<string> {
   const client = new Anthropic({ apiKey });
   try {
-    const message = await client.messages.create({
+    const message = await withAnthropicRetry(() => client.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: maxTokens,
       system: [
@@ -335,16 +389,62 @@ async function callAnthropicConversation(
           cache_control: { type: 'ephemeral' },
         },
       ],
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-    });
+      messages: [
+        ...messages.map((m) => ({ role: m.role, content: m.content })),
+        // Prefill the assistant turn with the opening brace so the model must
+        // continue a single JSON object immediately. This makes it structurally
+        // impossible to emit a prose preamble (which would duplicate the
+        // message once as text and again in the JSON "response" field).
+        { role: 'assistant' as const, content: '{' },
+      ],
+    }));
     const block = message.content[0];
     if (block.type !== 'text') throw new Error('Unexpected response type from Claude');
-    let text = block.text;
+    // Telemetry: a max_tokens stop means the JSON (and possibly the response
+    // itself) was cut off. Surface it in logs so recurrence is observable.
+    if (message.stop_reason === 'max_tokens') {
+      console.warn(
+        `coach reply hit max_tokens (maxTokens=${maxTokens}); output may be truncated`,
+      );
+    }
+    // Anthropic returns only the continuation after the prefill, so prepend the
+    // brace back to hand downstream a complete JSON object.
+    let text = '{' + block.text;
     text = text.replace(/\s*—\s*/g, ', ').replace(/\s*--\s*/g, ', ');
     return text;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`Anthropic request failed: ${sanitizeForLog(msg)}`);
+  }
+}
+
+/**
+ * Enforces DAILY_AI_CALL_LIMIT per user. Atomically reads + increments a daily
+ * counter on the user doc (`aiUsage: { date, count }`), resetting at UTC
+ * midnight. Throws resource-exhausted (without incrementing) once the cap is
+ * hit, so a single account can never run the AI budget away.
+ */
+async function enforceDailyAiLimit(uid: string): Promise<void> {
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+  const userRef = db.collection('users').doc(uid);
+  const allowed = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(userRef);
+    const usage = (snap.data()?.aiUsage ?? {}) as {
+      date?: string;
+      count?: number;
+    };
+    const count = usage.date === today ? usage.count ?? 0 : 0;
+    if (count >= DAILY_AI_CALL_LIMIT) return false;
+    tx.set(userRef, { aiUsage: { date: today, count: count + 1 } }, {
+      merge: true,
+    });
+    return true;
+  });
+  if (!allowed) {
+    throw new HttpsError(
+      'resource-exhausted',
+      'Daily AI usage limit reached. Please try again tomorrow.',
+    );
   }
 }
 
@@ -357,7 +457,9 @@ async function callAnthropicConversation(
  * Output: { content: string }
  */
 export const callClaude = onCall(
-  { secrets: [anthropicKey], enforceAppCheck: false, invoker: 'public' },
+  // enforceAppCheck stays false until the App Check-enabled app build has fully
+  // rolled out; flipping it early would reject every older build's AI calls.
+  { secrets: [anthropicKey], enforceAppCheck: false, invoker: 'public', maxInstances: 20 },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Must be authenticated to call Claude.');
@@ -372,6 +474,8 @@ export const callClaude = onCall(
     if (!userPrompt || typeof userPrompt !== 'string') {
       throw new HttpsError('invalid-argument', 'userPrompt is required.');
     }
+
+    await enforceDailyAiLimit(request.auth.uid);
 
     try {
       const content = await callAnthropicInternal(
@@ -395,7 +499,9 @@ export const callClaude = onCall(
  * Output: { content: string }
  */
 export const callClaudeConversation = onCall(
-  { secrets: [anthropicKey], enforceAppCheck: false, invoker: 'public' },
+  // enforceAppCheck stays false until the App Check-enabled app build has fully
+  // rolled out; flipping it early would reject every older build's AI calls.
+  { secrets: [anthropicKey], enforceAppCheck: false, invoker: 'public', maxInstances: 20 },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Must be authenticated to call Claude.');
@@ -429,6 +535,8 @@ export const callClaudeConversation = onCall(
         'messages must start with a user turn and contain content.',
       );
     }
+
+    await enforceDailyAiLimit(request.auth.uid);
 
     try {
       const content = await callAnthropicConversation(
@@ -509,6 +617,21 @@ export const revenueCatWebhook = onRequest(
 
   try {
     const userRef = db.collection('users').doc(uid);
+
+    // Comped accounts (manual 'lifetime' grant) and admins must never be
+    // downgraded by a stray RevenueCat event. Read first and bail out if so.
+    const existingSnap = await userRef.get();
+    const existing = existingSnap.data() as
+      | { subscriptionStatus?: string; userType?: string }
+      | undefined;
+    if (
+      existing?.subscriptionStatus === 'lifetime' ||
+      existing?.userType === 'admin'
+    ) {
+      res.status(200).send('OK (comped account, skipped)');
+      return;
+    }
+
     const update: Record<string, unknown> = {
       subscriptionStatus: newStatus,
       ...(expirationDate ? { subscriptionExpiresAt: expirationDate } : {}),
@@ -517,9 +640,7 @@ export const revenueCatWebhook = onRequest(
     // If a free partner account starts paying, promote them to a full user and
     // record the viral conversion for funnel analytics.
     if (newStatus === 'active') {
-      const snap = await userRef.get();
-      const data = snap.data() as { userType?: string } | undefined;
-      if (data?.userType === 'partner') {
+      if (existing?.userType === 'partner') {
         update.userType = 'user';
         try {
           await db.collection('viral_metrics').add({
@@ -1244,21 +1365,45 @@ export const getPartnerInviteInfo = onCall({ invoker: 'public' }, async (request
 // ─── Scheduled functions ───────────────────────────────────────────────────
 
 /**
+ * Iterates every document of an ordered query in stable batches, invoking
+ * `handler` once per doc. Replaces a single `.limit(N)` so scheduled jobs cover
+ * the entire user base instead of silently stopping at the first N users.
+ * The query MUST carry an `orderBy`; the cursor is derived from the last
+ * document snapshot of each page via `startAfter`.
+ */
+async function forEachDocPaged(
+  orderedQuery: admin.firestore.Query,
+  batchSize: number,
+  handler: (doc: admin.firestore.QueryDocumentSnapshot) => Promise<void>,
+): Promise<void> {
+  let cursor: admin.firestore.QueryDocumentSnapshot | undefined;
+  for (;;) {
+    let page = orderedQuery.limit(batchSize);
+    if (cursor) page = page.startAfter(cursor);
+    const snap = await page.get();
+    if (snap.empty) break;
+    for (const doc of snap.docs) {
+      await handler(doc);
+    }
+    if (snap.size < batchSize) break;
+    cursor = snap.docs[snap.docs.length - 1];
+  }
+}
+
+/**
  * weeklyMindsetAnalysis — runs every Sunday at 9am UTC.
  * Analyzes each active user's week and updates mindset scores.
  */
 export const weeklyMindsetAnalysis = onSchedule(
-  { schedule: '0 9 * * 0', secrets: [anthropicKey] },
+  { schedule: '0 9 * * 0', secrets: [anthropicKey], timeoutSeconds: 540 },
   async () => {
-    const usersSnap = await db
+    const apiKey = anthropicKey.value().trim();
+    const usersQuery = db
       .collection('users')
       .where('onboardingStep', '>=', 5)
-      .limit(100)
-      .get();
+      .orderBy('onboardingStep');
 
-    const apiKey = anthropicKey.value().trim();
-
-    for (const userDoc of usersSnap.docs) {
+    await forEachDocPaged(usersQuery, 200, async (userDoc) => {
       const profile = userDoc.data() as {
         displayName?: string;
         identityStatement?: string;
@@ -1297,7 +1442,7 @@ Write a 2-paragraph personalized weekly insight. Highlight their biggest win and
       } catch (err) {
         console.error(`Failed weekly analysis for user ${userDoc.id}:`, err);
       }
-    }
+    });
   },
 );
 
@@ -1447,17 +1592,15 @@ function computeManifestationAlignment(
  * Generates a manifestation alignment report for each user.
  */
 export const weeklyManifestationReport = onSchedule(
-  { schedule: '0 10 * * 0', secrets: [anthropicKey] },
+  { schedule: '0 10 * * 0', secrets: [anthropicKey], timeoutSeconds: 540 },
   async () => {
-    const usersSnap = await db
+    const apiKey = anthropicKey.value().trim();
+    const usersQuery = db
       .collection('users')
       .where('onboardingStep', '>=', 5)
-      .limit(100)
-      .get();
+      .orderBy('onboardingStep');
 
-    const apiKey = anthropicKey.value().trim();
-
-    for (const userDoc of usersSnap.docs) {
+    await forEachDocPaged(usersQuery, 200, async (userDoc) => {
       const profile = userDoc.data() as {
         displayName?: string;
         createdAt?: string;
@@ -1499,7 +1642,7 @@ Write a 2-paragraph report on their manifestation alignment. Identify the weakes
       } catch (err) {
         console.error(`Failed manifestation report for user ${userDoc.id}:`, err);
       }
-    }
+    });
   },
 );
 
@@ -1522,21 +1665,20 @@ function lifecycleTierForDays(days: number): number {
  * per tier (day 3/7/14/30), never daily spam.
  */
 export const lowActivityAlert = onSchedule(
-  { schedule: '0 10 * * *', secrets: [anthropicKey] },
+  { schedule: '0 10 * * *', secrets: [anthropicKey], timeoutSeconds: 540 },
   async () => {
     const now = Date.now();
     const threeDaysAgo = new Date(now - 3 * 86400000).toISOString();
+    const apiKey = anthropicKey.value().trim();
 
-    const usersSnap = await db
+    const usersQuery = db
       .collection('users')
       .where('onboardingStep', '>=', 5)
       .where('lastActiveAt', '<', threeDaysAgo)
-      .limit(100)
-      .get();
+      .orderBy('onboardingStep')
+      .orderBy('lastActiveAt');
 
-    const apiKey = anthropicKey.value().trim();
-
-    for (const userDoc of usersSnap.docs) {
+    await forEachDocPaged(usersQuery, 200, async (userDoc) => {
       const profile = userDoc.data() as {
         displayName?: string;
         identityStatement?: string;
@@ -1549,21 +1691,21 @@ export const lowActivityAlert = onSchedule(
 
       const prefs = profile.notificationPrefs;
       if (prefs?.masterEnabled === false || prefs?.lifecycleEnabled === false) {
-        continue;
+        return;
       }
 
       const last = profile.lastActiveAt
         ? Date.parse(profile.lastActiveAt)
         : NaN;
-      if (isNaN(last)) continue;
+      if (isNaN(last)) return;
 
       const days = Math.floor((now - last) / 86400000);
       const tier = lifecycleTierForDays(days);
-      if (tier === 0) continue;
+      if (tier === 0) return;
 
       // Already nudged at this depth (or deeper) — don't repeat.
       const sentTier = profile.lifecycleTier ?? 0;
-      if (tier <= sentTier) continue;
+      if (tier <= sentTier) return;
 
       try {
         const prompt = `Write a short, warm re-engagement message (2-3 sentences) for ${profile.displayName ?? 'a user'} who hasn't checked in for ${days} days. 
@@ -1596,7 +1738,7 @@ Make it personal, not generic. No guilt-tripping. Just a warm reminder of who th
       } catch (err) {
         console.error(`Failed low activity alert for user ${userDoc.id}:`, err);
       }
-    }
+    });
   },
 );
 
@@ -1615,19 +1757,18 @@ Make it personal, not generic. No guilt-tripping. Just a warm reminder of who th
 const STREAK_MILESTONES = [7, 14, 30, 50, 100, 200, 365];
 
 export const partnerAccountabilityDaily = onSchedule(
-  { schedule: '0 1 * * *' },
+  { schedule: '0 1 * * *', timeoutSeconds: 540 },
   async () => {
     const now = new Date();
     const nowMs = now.getTime();
     const weekKey = localDateKey(new Date(nowMs - (now.getUTCDay() * 86400000)));
 
-    const usersSnap = await db
+    const usersQuery = db
       .collection('users')
       .where('onboardingStep', '>=', 5)
-      .limit(500)
-      .get();
+      .orderBy('onboardingStep');
 
-    for (const primaryDoc of usersSnap.docs) {
+    await forEachDocPaged(usersQuery, 300, async (primaryDoc) => {
       const primary = primaryDoc.data() as {
         displayName?: string;
         timezone?: string;
@@ -1644,11 +1785,11 @@ export const partnerAccountabilityDaily = onSchedule(
       };
 
       const partnerUids = primary.partnerUids ?? [];
-      if (partnerUids.length === 0) continue;
+      if (partnerUids.length === 0) return;
 
       // Skip brand-new accounts so day-one users aren't flagged as slipping.
       const created = primary.createdAt ? Date.parse(primary.createdAt) : nowMs;
-      if (nowMs - created < 2 * 86400000) continue;
+      if (nowMs - created < 2 * 86400000) return;
 
       const completions = primary.dailyCompletions ?? [];
       const yKey = localDateKeyInTz(new Date(nowMs - 86400000), primary.timezone);
@@ -1696,7 +1837,7 @@ export const partnerAccountabilityDaily = onSchedule(
           });
         }
       }
-    }
+    });
   },
 );
 
@@ -1743,17 +1884,16 @@ async function notifyPartners(
  * loop without daily pings.
  */
 export const weeklyPartnerDigest = onSchedule(
-  { schedule: '0 16 * * 0' },
+  { schedule: '0 16 * * 0', timeoutSeconds: 540 },
   async () => {
     const nowMs = Date.now();
 
-    const usersSnap = await db
+    const usersQuery = db
       .collection('users')
       .where('onboardingStep', '>=', 5)
-      .limit(500)
-      .get();
+      .orderBy('onboardingStep');
 
-    for (const primaryDoc of usersSnap.docs) {
+    await forEachDocPaged(usersQuery, 300, async (primaryDoc) => {
       const primary = primaryDoc.data() as {
         displayName?: string;
         timezone?: string;
@@ -1762,7 +1902,7 @@ export const weeklyPartnerDigest = onSchedule(
       };
 
       const partnerUids = primary.partnerUids ?? [];
-      if (partnerUids.length === 0) continue;
+      if (partnerUids.length === 0) return;
 
       const completions = primary.dailyCompletions ?? [];
       const byDate = new Map<string, CompletionDoc>();
@@ -1788,6 +1928,6 @@ export const weeklyPartnerDigest = onSchedule(
         body: `${activeDays}/7 active days and a ${streak}-day streak. Send some encouragement.`,
         type: 'partner_digest',
       });
-    }
+    });
   },
 );
