@@ -414,6 +414,8 @@ class _AffirmationsCard extends ConsumerWidget {
                       ref: ref,
                       affirmations: active,
                       sessionType: 'morning',
+                      completedSessionCount:
+                          affirmationSessionsCompletedCount(profile),
                     ),
                   ),
                 ),
@@ -429,6 +431,8 @@ class _AffirmationsCard extends ConsumerWidget {
                       ref: ref,
                       affirmations: active,
                       sessionType: 'evening',
+                      completedSessionCount:
+                          affirmationSessionsCompletedCount(profile),
                     ),
                   ),
                 ),

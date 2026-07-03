@@ -17,19 +17,28 @@ Future<void> showWidgetEducationSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: AppColors.surface,
+    barrierColor: AppColors.scrim,
     isScrollControlled: true,
+    useRootNavigator: true,
     shape: const RoundedRectangleBorder(
       borderRadius:
           BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXl)),
     ),
-    builder: (_) => const _WidgetEducationSheet(),
+    builder: (sheetContext) =>
+        _WidgetEducationSheet(sheetContext: sheetContext),
   );
 }
 
 class _WidgetEducationSheet extends ConsumerWidget {
-  const _WidgetEducationSheet();
+  final BuildContext sheetContext;
+
+  const _WidgetEducationSheet({required this.sheetContext});
 
   Future<void> _markSeen(WidgetRef ref) async {
+    if (ref.read(currentUserProfileProvider).valueOrNull?.widgetPromptSeen ==
+        true) {
+      return;
+    }
     final uid = ref.read(authStateProvider).valueOrNull?.uid;
     if (uid == null) return;
     try {
@@ -87,9 +96,9 @@ class _WidgetEducationSheet extends ConsumerWidget {
               AppPrimaryButton(
                 label: AppStrings.widgetSheetCta,
                 icon: Icons.check_rounded,
-                onPressed: () async {
-                  await _markSeen(ref);
-                  if (context.mounted) Navigator.of(context).pop();
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  _markSeen(ref);
                 },
               ),
               const SizedBox(height: AppSpacing.xs),
@@ -97,7 +106,7 @@ class _WidgetEducationSheet extends ConsumerWidget {
                 child: AppTextButton(
                   label: AppStrings.widgetSheetLater,
                   color: AppColors.textMuted,
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () => Navigator.of(sheetContext).pop(),
                 ),
               ),
             ],

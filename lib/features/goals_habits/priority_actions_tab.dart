@@ -102,16 +102,52 @@ class _PriorityActionsContentState
     final pillTop = bottomPad + AppSpacing.bottomNavHeight;
     final fabBottom = pillTop + AppSpacing.sm;
     const fabSize = 56.0;
+
+    final focus = state.focusAction;
+    final hasFocus = focus.isNotEmpty && state.actions.contains(focus);
+    final movable =
+        state.actions.where((a) => !hasFocus || a != focus).toList();
+
     return Stack(
       children: [
-        ListView(
+        ReorderableListView.builder(
+          buildDefaultDragHandles: false,
           padding: EdgeInsets.fromLTRB(
             AppSpacing.screenPaddingH,
             AppSpacing.lg,
             AppSpacing.screenPaddingH,
             fabBottom + fabSize + AppSpacing.md,
           ),
-          children: _plannedChildren(state),
+          header: _PlannedHeader(state: state),
+          itemCount: movable.length,
+          onReorder: (oldIndex, newIndex) {
+            if (newIndex > oldIndex) newIndex--;
+            ref
+                .read(priorityActionsProvider.notifier)
+                .reorderActions(oldIndex, newIndex);
+          },
+          itemBuilder: (context, index) {
+            final action = movable[index];
+            return Padding(
+              key: ValueKey(action),
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: _PriorityActionCard(
+                action: action,
+                isCompleted: state.completed.contains(action),
+                isFocus: false,
+                dragIndex: index,
+                onToggleComplete: () => ref
+                    .read(priorityActionsProvider.notifier)
+                    .toggleComplete(action),
+                onSetFocus: () => ref
+                    .read(priorityActionsProvider.notifier)
+                    .setFocus(action),
+                onRemove: () => ref
+                    .read(priorityActionsProvider.notifier)
+                    .removeAction(action),
+              ),
+            );
+          },
         ),
         Positioned(
           right: AppSpacing.screenPaddingH,
@@ -204,10 +240,20 @@ class _PriorityActionsContentState
     ];
   }
 
-  List<Widget> _plannedChildren(PriorityActionsState state) {
-    final hasFocus = state.focusAction.isNotEmpty;
-    final focusComplete =
-        hasFocus && state.completed.contains(state.focusAction);
+}
+
+/// Non-reorderable top section for the planned list: the today label, the
+/// header + focus hint, and the pinned #1 focus card (when one is set).
+class _PlannedHeader extends ConsumerWidget {
+  final PriorityActionsState state;
+
+  const _PlannedHeader({required this.state});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final focus = state.focusAction;
+    final hasFocus = focus.isNotEmpty && state.actions.contains(focus);
+    final focusComplete = hasFocus && state.completed.contains(focus);
     final String hint;
     if (focusComplete) {
       hint = AppStrings.priorityActionsAllDone;
@@ -217,43 +263,46 @@ class _PriorityActionsContentState
       hint = AppStrings.priorityActionsFocusHint;
     }
 
-    return [
-      _todayLabel(),
-      Text(
-        AppStrings.priorityActionsHeader,
-        style: AppTextStyles.overline.copyWith(color: AppColors.textMuted),
-      ),
-      const SizedBox(height: AppSpacing.xs),
-      Text(
-        hint,
-        style: AppTextStyles.bodySmall.copyWith(
-          color:
-              focusComplete ? AppColors.success : AppColors.textSecondary,
-        ),
-      ),
-      const SizedBox(height: AppSpacing.md),
-      ...state.actions.asMap().entries.map(
-            (e) => Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: _PriorityActionCard(
-                action: e.value,
-                isCompleted: state.completed.contains(e.value),
-                isFocus: e.value == state.focusAction,
-                onToggleComplete: () => ref
-                    .read(priorityActionsProvider.notifier)
-                    .toggleComplete(e.value),
-                onSetFocus: () =>
-                    ref.read(priorityActionsProvider.notifier).setFocus(e.value),
-                onRemove: () => ref
-                    .read(priorityActionsProvider.notifier)
-                    .removeAction(e.value),
-              ).animate().fadeIn(
-                    delay: Duration(milliseconds: e.key * 80),
-                    duration: 400.ms,
-                  ),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+          child: Text(
+            'Today · ${AppDateUtils.formatWeekdayLong(DateTime.now())}',
+            style: AppTextStyles.overline.copyWith(color: AppColors.textMuted),
           ),
-    ];
+        ),
+        Text(
+          AppStrings.priorityActionsHeader,
+          style: AppTextStyles.overline.copyWith(color: AppColors.textMuted),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          hint,
+          style: AppTextStyles.bodySmall.copyWith(
+            color: focusComplete ? AppColors.success : AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        if (hasFocus)
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+            child: _PriorityActionCard(
+              action: focus,
+              isCompleted: focusComplete,
+              isFocus: true,
+              dragIndex: null,
+              onToggleComplete: () =>
+                  ref.read(priorityActionsProvider.notifier).toggleComplete(focus),
+              onSetFocus: () =>
+                  ref.read(priorityActionsProvider.notifier).setFocus(focus),
+              onRemove: () =>
+                  ref.read(priorityActionsProvider.notifier).removeAction(focus),
+            ).animate().fadeIn(duration: 400.ms),
+          ),
+      ],
+    );
   }
 }
 
@@ -461,6 +510,10 @@ class _PriorityActionCard extends StatelessWidget {
   final String action;
   final bool isCompleted;
   final bool isFocus;
+
+  /// Position within the reorderable list. When null (e.g. the pinned focus
+  /// card), no drag handle is shown and the card can't be reordered.
+  final int? dragIndex;
   final VoidCallback onToggleComplete;
   final VoidCallback onSetFocus;
   final VoidCallback onRemove;
@@ -469,6 +522,7 @@ class _PriorityActionCard extends StatelessWidget {
     required this.action,
     required this.isCompleted,
     required this.isFocus,
+    this.dragIndex,
     required this.onToggleComplete,
     required this.onSetFocus,
     required this.onRemove,
@@ -571,6 +625,15 @@ class _PriorityActionCard extends StatelessWidget {
               ),
             ],
           ),
+          if (dragIndex != null)
+            ReorderableDragStartListener(
+              index: dragIndex!,
+              child: const Padding(
+                padding: EdgeInsets.only(left: AppSpacing.xs),
+                child: Icon(Icons.drag_indicator_rounded,
+                    color: AppColors.textMuted, size: 20),
+              ),
+            ),
         ],
       ),
     );

@@ -8,7 +8,10 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/services/perfect_day_celebration_store.dart';
+import '../../../core/utils/app_date_utils.dart';
 import '../../../core/widgets/app_button.dart';
+import '../../../models/daily_completion.dart';
 import '../../../models/user_profile.dart';
 import '../../../models/hero_action.dart';
 import '../../../providers/daily_completion_provider.dart';
@@ -32,13 +35,36 @@ class TodayHeroCard extends ConsumerStatefulWidget {
 
 class _TodayHeroCardState extends ConsumerState<TodayHeroCard> {
   late final ConfettiController _confettiCtrl;
-  bool _wasPerfect = false;
+
+  /// Suppresses the perfect-day confetti until the durable per-day guard has
+  /// resolved. Starts `true` so a genuine transition can't fire before we've
+  /// confirmed today hasn't already been celebrated (on this device / launch).
+  bool _celebratedToday = true;
   bool _focusCompleting = false;
 
   @override
   void initState() {
     super.initState();
     _confettiCtrl = ConfettiController(duration: const Duration(seconds: 4));
+    _loadCelebrationFlag();
+  }
+
+  Future<void> _loadCelebrationFlag() async {
+    final today = AppDateUtils.todayStringWithGracePeriod();
+    final already = await PerfectDayCelebrationStore.hasCelebrated(today);
+    if (!mounted) return;
+    _celebratedToday = already;
+  }
+
+  /// Fires the perfect-day celebration exactly once per calendar day, on a
+  /// genuine in-session false→true transition. The durable store guard prevents
+  /// re-firing on rebuilds, widget/State recreations, and app relaunches.
+  void _onCompletionChanged(DailyCompletion? prev, DailyCompletion next) {
+    if (prev == null || prev.isPerfectDay || !next.isPerfectDay) return;
+    if (_celebratedToday) return;
+    _celebratedToday = true;
+    _confettiCtrl.play();
+    PerfectDayCelebrationStore.markCelebrated(next.date);
   }
 
   @override
@@ -55,7 +81,12 @@ class _TodayHeroCardState extends ConsumerState<TodayHeroCard> {
       await ref.read(priorityActionsProvider.notifier).completeFocus();
       if (!mounted) return;
       setState(() => _focusCompleting = false);
-      _confettiCtrl.play();
+      // If completing the focus made the day perfect, let the single perfect-day
+      // celebration (the transition listener) own that moment instead of firing
+      // a second, overlapping burst here.
+      if (!ref.read(dailyCompletionProvider).isPerfectDay) {
+        _confettiCtrl.play();
+      }
     } catch (e) {
       debugPrint('TodayHeroCard._completeFocus failed: $e');
       if (!mounted) return;
@@ -66,14 +97,10 @@ class _TodayHeroCardState extends ConsumerState<TodayHeroCard> {
   @override
   Widget build(BuildContext context) {
     final completion = ref.watch(dailyCompletionProvider);
-    final isPerfect = completion.isPerfectDay;
 
-    if (isPerfect && !_wasPerfect) {
-      _wasPerfect = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _confettiCtrl.play());
-    } else if (!isPerfect) {
-      _wasPerfect = false;
-    }
+    // Celebrate a newly-perfect day via a transition listener (never inside the
+    // render path) so rebuilds and State recreations can't re-fire it.
+    ref.listen<DailyCompletion>(dailyCompletionProvider, _onCompletionChanged);
 
     // Resolve the single "right now" action via the shared resolver (the same
     // one the home-screen widget uses) so the hero and widget never drift.
@@ -287,7 +314,8 @@ class _HeroCardState extends State<_HeroCard>
                         const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+                      borderRadius:
+                          BorderRadius.circular(AppSpacing.radiusFull),
                     ),
                     child: Text(
                       data.sessionLabel,
@@ -313,38 +341,43 @@ class _HeroCardState extends State<_HeroCard>
         ),
         if (data.traitLine != null) ...[
           const SizedBox(height: AppSpacing.md),
-          GestureDetector(
-            onTap: data.onTraitTap,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.sm,
-              ),
-              decoration: BoxDecoration(
-                color: AppColors.futureSelfAccent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                border: Border.all(
-                  color: AppColors.futureSelfAccent.withValues(alpha: 0.3),
+          MouseRegion(
+            cursor: data.onTraitTap != null
+                ? SystemMouseCursors.click
+                : MouseCursor.defer,
+            child: GestureDetector(
+              onTap: data.onTraitTap,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md,
+                  vertical: AppSpacing.sm,
                 ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.auto_awesome_rounded,
-                      size: 16, color: AppColors.futureSelfAccent),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      data.traitLine!,
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        color: AppColors.futureSelfAccent,
-                        fontWeight: FontWeight.w600,
+                decoration: BoxDecoration(
+                  color: AppColors.futureSelfAccent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                  border: Border.all(
+                    color: AppColors.futureSelfAccent.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.auto_awesome_rounded,
+                        size: 16, color: AppColors.futureSelfAccent),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        data.traitLine!,
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: AppColors.futureSelfAccent,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
-                  if (data.onTraitTap != null)
-                    const Icon(Icons.arrow_forward_ios_rounded,
-                        size: 12, color: AppColors.futureSelfAccent),
-                ],
+                    if (data.onTraitTap != null)
+                      const Icon(Icons.arrow_forward_ios_rounded,
+                          size: 12, color: AppColors.futureSelfAccent),
+                  ],
+                ),
               ),
             ),
           ),

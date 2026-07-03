@@ -1,56 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/widgets/app_button.dart';
-import '../../../models/goal.dart';
-import '../../../models/mindset_blueprint.dart';
-import '../../../providers/claude_provider.dart';
+import '../../../core/widgets/hoverable.dart';
 
-/// 3-part identity wizard:
+/// 2-part identity input wizard:
 ///   Part 1 — Current situation (single-select)
-///   Part 2 — Future self qualities (multi-select, ≥3)
-///   Part 3 — Generate / review / edit identity statement
-class StepIdentity extends ConsumerStatefulWidget {
-  final String initial;
-  final MindsetBlueprint blueprint;
-  final List<Goal> goals;
-  /// Returns the final identity statement plus the raw inputs used to craft it
-  /// (resolved situation text and selected future-self qualities) so they can be
-  /// persisted and reused to enrich AI personalization.
-  final void Function(String statement, String situation, List<String> qualities)
-      onNext;
+///   Part 2 — Future self qualities (multi-select, >=1)
+///
+/// This step only *collects* the raw identity inputs. The AI identity statement
+/// is generated later as part of the single merged reveal, so there is only one
+/// climactic "aha" instead of two AI reveals back to back.
+class StepIdentity extends StatefulWidget {
+  final String initialSituation;
+  final List<String> initialQualities;
+
+  /// Returns the resolved situation text and the selected future-self qualities.
+  final void Function(String situation, List<String> qualities) onNext;
   final VoidCallback onBack;
 
   const StepIdentity({
     super.key,
-    required this.initial,
-    required this.blueprint,
-    required this.goals,
+    this.initialSituation = '',
+    this.initialQualities = const [],
     required this.onNext,
     required this.onBack,
   });
 
   @override
-  ConsumerState<StepIdentity> createState() => _StepIdentityState();
+  State<StepIdentity> createState() => _StepIdentityState();
 }
 
-class _StepIdentityState extends ConsumerState<StepIdentity> {
-  int _wizardPart = 1; // 1, 2, or 3
+class _StepIdentityState extends State<StepIdentity> {
+  int _wizardPart = 1; // 1 or 2
   String _situation = '';
   final Set<String> _qualities = {};
-  String _identityStatement = '';
-  bool _isGenerating = false;
-  bool _isEditing = false;
-  final _editCtrl = TextEditingController();
   final _customSituationCtrl = TextEditingController();
 
   static const _situations = [
     _Situation('job', 'Working a job I don\'t love', Icons.work_off_rounded),
     _Situation('business', 'Building my own business', Icons.storefront_rounded),
     _Situation('transition', 'In career transition', Icons.sync_alt_rounded),
+    _Situation('health', 'Focused on my health', Icons.favorite_rounded),
+    _Situation(
+        'relationships', 'Working on my relationships', Icons.people_rounded),
     _Situation('stuck', 'Feeling stuck or unmotivated', Icons.pause_circle_rounded),
     _Situation('setback', 'Starting fresh after a setback', Icons.restart_alt_rounded),
     _Situation('other', 'Other', Icons.more_horiz_rounded),
@@ -65,14 +60,24 @@ class _StepIdentityState extends ConsumerState<StepIdentity> {
   @override
   void initState() {
     super.initState();
-    _identityStatement = widget.initial;
-    _editCtrl.text = widget.initial;
-    if (widget.initial.isNotEmpty) _wizardPart = 3;
+    // Hydrate from any previously entered inputs (back-nav / app restore).
+    if (widget.initialSituation.isNotEmpty) {
+      final match = _situations.firstWhere(
+        (s) => s.label == widget.initialSituation,
+        orElse: () => const _Situation('', '', Icons.more_horiz_rounded),
+      );
+      if (match.id.isNotEmpty) {
+        _situation = match.id;
+      } else {
+        _situation = 'other';
+        _customSituationCtrl.text = widget.initialSituation;
+      }
+    }
+    _qualities.addAll(widget.initialQualities);
   }
 
   @override
   void dispose() {
-    _editCtrl.dispose();
     _customSituationCtrl.dispose();
     super.dispose();
   }
@@ -84,51 +89,6 @@ class _StepIdentityState extends ConsumerState<StepIdentity> {
           .firstWhere((s) => s.id == _situation,
               orElse: () => const _Situation('', '', Icons.more_horiz_rounded))
           .label;
-
-  Future<void> _generate() async {
-    setState(() {
-      _isGenerating = true;
-      _isEditing = false;
-    });
-
-    try {
-      final situationText = _situationText;
-
-      final result = await ref.read(claudeServiceProvider).complete(
-        systemPrompt:
-            'You write powerful identity statements for mindset coaching. '
-            'Write in first person, present tense. One sentence, 15–30 words. '
-            'Bold, specific, emotionally resonant. No preamble, no quotes.',
-        userPrompt:
-            'Write an identity statement for someone who is currently: "$situationText". '
-            'They want to become: ${_qualities.join(', ')}. '
-            'Their goals: ${widget.goals.take(3).map((g) => g.title).join(', ')}. '
-            'Mindset scores: Confidence ${widget.blueprint.confidence}, '
-            'Discipline ${widget.blueprint.discipline}, '
-            'Abundance ${widget.blueprint.abundanceThinking}.',
-        maxTokens: 60,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        _identityStatement = result.trim();
-        _editCtrl.text = result.trim();
-        _isGenerating = false;
-        _wizardPart = 3;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      // Fallback: build from qualities
-      final fallback =
-          'I am a ${_qualities.take(3).join(', ').toLowerCase()} person who takes consistent action toward my most important goals.';
-      setState(() {
-        _identityStatement = fallback;
-        _editCtrl.text = fallback;
-        _isGenerating = false;
-        _wizardPart = 3;
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -142,7 +102,7 @@ class _StepIdentityState extends ConsumerState<StepIdentity> {
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(3, (i) {
+            children: List.generate(2, (i) {
               final active = i + 1 == _wizardPart;
               final done = i + 1 < _wizardPart;
               return Container(
@@ -171,7 +131,7 @@ class _StepIdentityState extends ConsumerState<StepIdentity> {
                   onNext: () => setState(() => _wizardPart = 2),
                   onBack: widget.onBack,
                 ),
-              2 => _Part2(
+              _ => _Part2(
                   key: const ValueKey(2),
                   options: _qualityOptions,
                   selected: _qualities,
@@ -182,31 +142,9 @@ class _StepIdentityState extends ConsumerState<StepIdentity> {
                       _qualities.add(q);
                     }
                   }),
-                  onNext: _generate,
+                  onNext: () =>
+                      widget.onNext(_situationText, _qualities.toList()),
                   onBack: () => setState(() => _wizardPart = 1),
-                  isGenerating: _isGenerating,
-                ),
-              _ => _Part3(
-                  key: const ValueKey(3),
-                  statement: _identityStatement,
-                  isEditing: _isEditing,
-                  editCtrl: _editCtrl,
-                  onEdit: () => setState(() => _isEditing = true),
-                  onSaveEdit: () => setState(() {
-                    _identityStatement = _editCtrl.text.trim();
-                    _isEditing = false;
-                  }),
-                  onRegenerate: () {
-                    setState(() => _wizardPart = 2);
-                  },
-                  onNext: _identityStatement.trim().length >= 10
-                      ? () => widget.onNext(
-                            _identityStatement.trim(),
-                            _situationText,
-                            _qualities.toList(),
-                          )
-                      : null,
-                  onBack: () => setState(() => _wizardPart = 2),
                 ),
             },
           ),
@@ -259,16 +197,20 @@ class _Part1 extends StatelessWidget {
                   final isSelected = selected == s.id;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                    child: GestureDetector(
+                    child: Hoverable(
                       onTap: () => onSelect(s.id),
-                      child: AnimatedContainer(
+                      builder: (context, hovered) => AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         padding: const EdgeInsets.all(AppSpacing.md),
                         decoration: BoxDecoration(
                           color: isSelected ? AppColors.primaryContainer : AppColors.surfaceElevated,
                           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                           border: Border.all(
-                            color: isSelected ? AppColors.primary : AppColors.border,
+                            color: isSelected
+                                ? AppColors.primary
+                                : hovered
+                                    ? AppColors.primary.withValues(alpha: 0.5)
+                                    : AppColors.border,
                             width: isSelected ? 1.5 : 1,
                           ),
                         ),
@@ -319,8 +261,8 @@ class _Part1 extends StatelessWidget {
                             ],
                           ],
                         ),
-                      ).animate().fadeIn(delay: Duration(milliseconds: e.key * 60), duration: 300.ms),
-                    ),
+                      ),
+                    ).animate().fadeIn(delay: Duration(milliseconds: e.key * 60), duration: 300.ms),
                   );
                 }),
               ],
@@ -367,7 +309,6 @@ class _Part2 extends StatelessWidget {
   final void Function(String) onToggle;
   final VoidCallback onNext;
   final VoidCallback onBack;
-  final bool isGenerating;
 
   const _Part2({
     super.key,
@@ -376,12 +317,11 @@ class _Part2 extends StatelessWidget {
     required this.onToggle,
     required this.onNext,
     required this.onBack,
-    required this.isGenerating,
   });
 
   @override
   Widget build(BuildContext context) {
-    final canGenerate = selected.length >= 3;
+    final canContinue = selected.isNotEmpty;
     return Column(
       children: [
         Expanded(
@@ -394,7 +334,7 @@ class _Part2 extends StatelessWidget {
                     .animate().fadeIn(duration: 400.ms),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  'Select 3–5 qualities that describe your future self.',
+                  'Pick the qualities that describe your future self. Choose as many as feel true.',
                   style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
                 ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
                 const SizedBox(height: AppSpacing.xl),
@@ -404,9 +344,9 @@ class _Part2 extends StatelessWidget {
                   children: options.asMap().entries.map((e) {
                     final q = e.value;
                     final isSelected = selected.contains(q);
-                    return GestureDetector(
+                    return Hoverable(
                       onTap: () => onToggle(q),
-                      child: AnimatedContainer(
+                      builder: (context, hovered) => AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         padding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.lg,
@@ -416,7 +356,11 @@ class _Part2 extends StatelessWidget {
                           color: isSelected ? AppColors.primaryContainer : AppColors.surfaceElevated,
                           borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
                           border: Border.all(
-                            color: isSelected ? AppColors.primary : AppColors.border,
+                            color: isSelected
+                                ? AppColors.primary
+                                : hovered
+                                    ? AppColors.primary.withValues(alpha: 0.5)
+                                    : AppColors.border,
                             width: isSelected ? 1.5 : 1,
                           ),
                         ),
@@ -436,17 +380,17 @@ class _Part2 extends StatelessWidget {
                             ),
                           ],
                         ),
-                      ).animate().fadeIn(
-                            delay: Duration(milliseconds: e.key * 40),
-                            duration: 300.ms,
-                          ),
-                    );
+                      ),
+                    ).animate().fadeIn(
+                          delay: Duration(milliseconds: e.key * 40),
+                          duration: 300.ms,
+                        );
                   }).toList(),
                 ),
-                if (!canGenerate) ...[
+                if (!canContinue) ...[
                   const SizedBox(height: AppSpacing.md),
                   Text(
-                    'Select at least ${3 - selected.length} more',
+                    'Select at least one to continue',
                     style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted),
                   ),
                 ],
@@ -471,138 +415,8 @@ class _Part2 extends StatelessWidget {
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: AppPrimaryButton(
-                      label: isGenerating ? 'Crafting your identity...' : 'Generate My Identity',
-                      onPressed: canGenerate && !isGenerating ? onNext : null,
-                      isLoading: isGenerating,
-                      icon: Icons.auto_awesome_rounded,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ─── Part 3: Review ───────────────────────────────────────────────────────────
-
-class _Part3 extends StatelessWidget {
-  final String statement;
-  final bool isEditing;
-  final TextEditingController editCtrl;
-  final VoidCallback onEdit;
-  final VoidCallback onSaveEdit;
-  final VoidCallback onRegenerate;
-  final VoidCallback? onNext;
-  final VoidCallback onBack;
-
-  const _Part3({
-    super.key,
-    required this.statement,
-    required this.isEditing,
-    required this.editCtrl,
-    required this.onEdit,
-    required this.onSaveEdit,
-    required this.onRegenerate,
-    required this.onNext,
-    required this.onBack,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.screenPaddingH),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Your Identity Statement', style: AppTextStyles.headlineMedium)
-                    .animate().fadeIn(duration: 400.ms),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  'This is who you are becoming. Read it every day.',
-                  style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
-                ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
-                const SizedBox(height: AppSpacing.xl),
-
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(AppSpacing.xl),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.primary.withValues(alpha: 0.12),
-                        AppColors.secondary.withValues(alpha: 0.08),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-                  ),
-                  child: isEditing
-                      ? TextField(
-                          controller: editCtrl,
-                          autofocus: true,
-                          maxLines: null,
-                          textCapitalization: TextCapitalization.sentences,
-                          style: AppTextStyles.headlineSmall.copyWith(height: 1.6),
-                          cursorColor: AppColors.primary,
-                          decoration: const InputDecoration(
-                            border: InputBorder.none,
-                            filled: false,
-                          ),
-                        )
-                      : Text(
-                          '"$statement"',
-                          style: AppTextStyles.headlineSmall.copyWith(
-                            height: 1.6,
-                            color: AppColors.textPrimary,
-                          ),
-                          textAlign: TextAlign.center,
-                        ).animate().fadeIn(duration: 600.ms),
-                ),
-
-                const SizedBox(height: AppSpacing.lg),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (isEditing)
-                      AppSecondaryButton(label: 'Save', width: 120, onPressed: onSaveEdit)
-                    else ...[
-                      AppTextButton(label: 'Edit', onPressed: onEdit),
-                      const SizedBox(width: AppSpacing.md),
-                      AppTextButton(label: 'Regenerate', onPressed: onRegenerate),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        AnimatedOpacity(
-          opacity: MediaQuery.of(context).viewInsets.bottom > 0 ? 0.0 : 1.0,
-          duration: const Duration(milliseconds: 200),
-          child: IgnorePointer(
-            ignoring: MediaQuery.of(context).viewInsets.bottom > 0,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.screenPaddingH, AppSpacing.md,
-                AppSpacing.screenPaddingH,
-                MediaQuery.of(context).padding.bottom + AppSpacing.md,
-              ),
-              child: Row(
-                children: [
-                  AppSecondaryButton(label: 'Back', width: 100, onPressed: onBack),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: AppPrimaryButton(
                       label: 'Continue',
-                      onPressed: onNext,
+                      onPressed: canContinue ? onNext : null,
                       icon: Icons.arrow_forward_rounded,
                     ),
                   ),

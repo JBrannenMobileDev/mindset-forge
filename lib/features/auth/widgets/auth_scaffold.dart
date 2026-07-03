@@ -5,8 +5,8 @@ import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/utils/breakpoints.dart';
-import 'auth_glass_pane.dart';
-import 'nebula_background.dart';
+import '../../../core/widgets/brand_backdrop.dart';
+import '../../../core/widgets/glass_pane.dart';
 
 /// Shared layout shell for the auth flow (welcome / login / signup / download).
 ///
@@ -40,14 +40,20 @@ class AuthScaffold extends StatelessWidget {
       body: LayoutBuilder(
         builder: (context, constraints) {
           if (Breakpoints.isWideWidth(constraints.maxWidth)) {
-            return Row(
-              children: [
-                const Expanded(flex: 5, child: AuthBrandHero()),
-                Expanded(
-                  flex: 4,
-                  child: _FormPane(maxWidth: formMaxWidth, child: form),
-                ),
-              ],
+            // Wide/web shares the mobile auth backdrop: full-bleed nebula,
+            // softened with a blur + dark scrim and the ambient brand glow, so
+            // the whole logged-out flow (splash → welcome → login) reads as one
+            // brand. The hero and glass form float over it.
+            return BrandBackdrop(
+              child: Row(
+                children: [
+                  const Expanded(flex: 5, child: AuthBrandHero()),
+                  Expanded(
+                    flex: 4,
+                    child: _FormPane(maxWidth: formMaxWidth, child: form),
+                  ),
+                ],
+              ),
             );
           }
 
@@ -68,7 +74,7 @@ class AuthScaffold extends StatelessWidget {
                         mobileHeader!,
                         const SizedBox(height: AppSpacing.xl),
                       ],
-                      AuthGlassPane(child: form)
+                      GlassPane(child: form)
                           .animate()
                           .fadeIn(duration: 400.ms)
                           .slideY(begin: 0.04, end: 0, duration: 400.ms),
@@ -82,14 +88,7 @@ class AuthScaffold extends StatelessWidget {
           // Mobile auth screens share the splash backdrop: full-bleed nebula
           // image, here softened with a subtle blur and a dark scrim so the
           // form reads as the focus, with the ambient brand glow on top.
-          return Stack(
-            children: [
-              const NebulaBackground(blurSigma: 8),
-              const Positioned.fill(child: _NebulaScrim()),
-              const Positioned.fill(child: _AmbientGlow()),
-              mobileColumn,
-            ],
-          );
+          return BrandBackdrop(child: mobileColumn);
         },
       ),
     );
@@ -97,7 +96,8 @@ class AuthScaffold extends StatelessWidget {
 }
 
 /// Right-hand pane on wide screens: a vertically centered, width-capped,
-/// scrollable glass card that floats over the page background.
+/// scrollable frosted-glass card that floats over the shared nebula backdrop —
+/// the same `GlassPane` used on mobile, for a consistent brand.
 class _FormPane extends StatelessWidget {
   final Widget child;
   final double maxWidth;
@@ -115,27 +115,7 @@ class _FormPane extends StatelessWidget {
           ),
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: maxWidth),
-            child: Container(
-              padding: const EdgeInsets.all(AppSpacing.xl),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceElevated,
-                borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
-                border: Border.all(color: AppColors.border),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    blurRadius: 40,
-                    offset: const Offset(0, 16),
-                  ),
-                  BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.06),
-                    blurRadius: 48,
-                    spreadRadius: -8,
-                  ),
-                ],
-              ),
-              child: child,
-            ),
+            child: GlassPane(child: child),
           ),
         ),
       ),
@@ -153,7 +133,10 @@ class AuthBrandHero extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        const Positioned.fill(child: _HeroBackground()),
+        // The nebula + glow come from the shared page backdrop now; the hero
+        // only lays a soft left-side scrim so its value-prop text stays legible
+        // over the busier left region of the nebula.
+        const Positioned.fill(child: _HeroLegibilityScrim()),
         Positioned.fill(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.xxl),
@@ -343,76 +326,30 @@ class _HeroFeature extends StatelessWidget {
   }
 }
 
-/// Layered aurora backdrop for the wide hero: a base gradient, two offset
-/// radial glows (violet + cyan), and a faint dot-grid texture.
-class _HeroBackground extends StatelessWidget {
-  const _HeroBackground();
+/// Soft left-to-right dark scrim behind the wide hero content. The shared page
+/// nebula/glow provide the colour; this only lifts text legibility over the
+/// busier left region, fading to transparent toward the form so the nebula
+/// still shows through the centre.
+class _HeroLegibilityScrim extends StatelessWidget {
+  const _HeroLegibilityScrim();
 
   @override
   Widget build(BuildContext context) {
-    return const Stack(
-      children: [
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [AppColors.background, AppColors.surface],
-              ),
-            ),
-          ),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            AppColors.background.withValues(alpha: 0.55),
+            AppColors.background.withValues(alpha: 0.20),
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.55, 1.0],
         ),
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: Alignment(-0.7, -0.8),
-                radius: 1.1,
-                colors: [AppColors.primaryGlow, Color(0x009B40FF)],
-                stops: [0.0, 1.0],
-              ),
-            ),
-          ),
-        ),
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: Alignment(0.9, 0.95),
-                radius: 0.95,
-                colors: [AppColors.secondaryGlow, Color(0x0000E5FF)],
-                stops: [0.0, 1.0],
-              ),
-            ),
-          ),
-        ),
-        Positioned.fill(
-          child: CustomPaint(painter: _DotGridPainter()),
-        ),
-      ],
+      ),
     );
   }
-}
-
-class _DotGridPainter extends CustomPainter {
-  const _DotGridPainter();
-
-  static const double _spacing = 28.0;
-  static const double _radius = 1.0;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = AppColors.border.withValues(alpha: 0.35);
-    for (double y = _spacing; y < size.height; y += _spacing) {
-      for (double x = _spacing; x < size.width; x += _spacing) {
-        canvas.drawCircle(Offset(x, y), _radius, paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DotGridPainter oldDelegate) => false;
 }
 
 /// The brand lockup itself (breathing logo mark + app name + tagline), without
@@ -482,53 +419,6 @@ class AuthBrandHeaderCompact extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
       ],
-    );
-  }
-}
-
-/// Soft dark scrim layered over the blurred nebula on mobile auth screens.
-/// Slightly darker at the vertical edges (where the nebula is busiest) and
-/// lighter through the centre, lifting form legibility without flattening the
-/// backdrop.
-class _NebulaScrim extends StatelessWidget {
-  const _NebulaScrim();
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            AppColors.background.withValues(alpha: 0.45),
-            AppColors.background.withValues(alpha: 0.20),
-            AppColors.background.withValues(alpha: 0.45),
-          ],
-          stops: const [0.0, 0.5, 1.0],
-        ),
-      ),
-    );
-  }
-}
-
-class _AmbientGlow extends StatelessWidget {
-  const _AmbientGlow();
-
-  @override
-  Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment(0, -0.35),
-          radius: 0.9,
-          colors: [
-            Color(0x269B40FF),
-            Color(0x000A0A0F),
-          ],
-          stops: [0.0, 1.0],
-        ),
-      ),
     );
   }
 }

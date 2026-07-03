@@ -271,6 +271,8 @@ class NotificationService {
         return (uid != null && uid.isNotEmpty)
             ? '/partner-view/$uid'
             : '/dashboard';
+      case 'weekly_insight':
+        return '/progress';
       default:
         return '/dashboard';
     }
@@ -284,6 +286,7 @@ class NotificationService {
       case 'partner_digest':
         return 'partner';
       case 'low_activity_alert':
+      case 'weekly_insight':
         return 'lifecycle';
       default:
         return 'routine';

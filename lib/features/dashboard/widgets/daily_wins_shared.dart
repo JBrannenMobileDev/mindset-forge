@@ -6,6 +6,7 @@ import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/utils/app_date_utils.dart';
+import '../../../core/widgets/adaptive_sheet.dart';
 import '../../../models/user_profile.dart';
 import '../../../models/daily_completion.dart';
 import '../../../providers/affirmations_provider.dart';
@@ -39,21 +40,33 @@ class WinItem {
 }
 
 const morningWins = [
-  WinItem('identityRead', 'Identity', 'Read who you\'re becoming', Icons.person_outline_rounded),
-  WinItem('affirmationsMorning', 'Affirmations', 'Start Day', Icons.wb_sunny_outlined, sessionOnly: true),
-  WinItem('futureSelfCompleted', 'Future Self', 'Practice', Icons.auto_awesome_rounded),
+  WinItem('identityRead', 'Identity', 'Read who you\'re becoming',
+      Icons.person_outline_rounded),
+  WinItem('affirmationsMorning', 'Affirmations', 'Start Day',
+      Icons.wb_sunny_outlined,
+      sessionOnly: true),
+  WinItem('futureSelfCompleted', 'Future Self', 'Practice',
+      Icons.auto_awesome_rounded),
   WinItem('journalCompleted', 'Journal', 'Prime Mind', Icons.edit_note_rounded),
-  WinItem('dayPlanned', 'Plan Day', 'Select Focus', Icons.check_circle_outline_rounded),
-  WinItem('gratitudeLogged', 'Gratitude', 'Something you\'re grateful for', Icons.favorite_border_rounded, isBonus: true),
+  WinItem('dayPlanned', 'Plan Day', 'Select Focus',
+      Icons.check_circle_outline_rounded),
+  WinItem('gratitudeLogged', 'Gratitude', 'Something you\'re grateful for',
+      Icons.favorite_border_rounded,
+      isBonus: true),
 ];
 
 const eveningWins = [
-  WinItem('affirmationsEvening', 'Affirmations', 'End Day', Icons.nightlight_round, sessionOnly: true),
+  WinItem(
+      'affirmationsEvening', 'Affirmations', 'End Day', Icons.nightlight_round,
+      sessionOnly: true),
   // Habits live in their own DailyHabitsCard below the tracker. The
   // `habitsCompleted` flag is auto-derived in HabitsNotifier and still counts
   // toward the streak / perfect day.
-  WinItem('chatCompleted', 'Coach Chat', 'Check In', Icons.chat_bubble_outline_rounded),
-  WinItem('evidenceLogged', 'Evidence Log', 'Act like your future self', Icons.emoji_events_outlined, isBonus: true),
+  WinItem('chatCompleted', 'Coach Chat', 'Check In',
+      Icons.chat_bubble_outline_rounded),
+  WinItem('evidenceLogged', 'Evidence Log', 'Act like your future self',
+      Icons.emoji_events_outlined,
+      isBonus: true),
 ];
 
 /// Canonical list of the required daily wins (field, label) that make up a
@@ -160,6 +173,7 @@ VoidCallback winNavCallback({
             ref: ref,
             affirmations: active,
             sessionType: 'morning',
+            completedSessionCount: affirmationSessionsCompletedCount(profile),
           );
         }
       },
@@ -174,6 +188,7 @@ VoidCallback winNavCallback({
             ref: ref,
             affirmations: active,
             sessionType: 'evening',
+            completedSessionCount: affirmationSessionsCompletedCount(profile),
           );
         }
       },
@@ -182,15 +197,8 @@ VoidCallback winNavCallback({
     'dayPlanned' => () => showPlanDaySheet(context, ref, profile),
     'habitsCompleted' => () => context.go('/actions?tab=habits'),
     'chatCompleted' => () => context.go('/chat'),
-    'gratitudeLogged' => () => showModalBottomSheet(
+    'gratitudeLogged' => () => showAdaptiveSheet<void>(
           context: context,
-          backgroundColor: AppColors.surface,
-          isScrollControlled: true,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(AppSpacing.radiusXl),
-            ),
-          ),
           builder: (_) => GratitudeLogWidget(profile: profile),
         ),
     'evidenceLogged' => () => showEvidenceLogSheet(context, profile),
@@ -202,15 +210,8 @@ VoidCallback winNavCallback({
 /// current completion state and flags the #1 focus as the key action. Opened
 /// from the dashboard momentum strip so "what's required" is never a mystery.
 void showDailyWinsInfoSheet(BuildContext context, DailyCompletion completion) {
-  showModalBottomSheet<void>(
+  showAdaptiveSheet<void>(
     context: context,
-    backgroundColor: AppColors.surface,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(
-        top: Radius.circular(AppSpacing.radiusXl),
-      ),
-    ),
     builder: (_) => SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(
@@ -275,15 +276,8 @@ void showDayRecapSheet(
     if (completion.evidenceLogged) ('Evidence Log', true),
   ];
 
-  showModalBottomSheet<void>(
+  showAdaptiveSheet<void>(
     context: context,
-    backgroundColor: AppColors.surface,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(
-        top: Radius.circular(AppSpacing.radiusXl),
-      ),
-    ),
     builder: (_) => SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(
@@ -438,8 +432,7 @@ class _DailyWinInfoRow extends StatelessWidget {
             ),
           ),
           if (isFocus)
-            const Icon(Icons.star_rounded,
-                size: 16, color: AppColors.primary),
+            const Icon(Icons.star_rounded, size: 16, color: AppColors.primary),
         ],
       ),
     );
@@ -449,15 +442,8 @@ class _DailyWinInfoRow extends StatelessWidget {
 /// Opens the Evidence Log bottom sheet. Shared so the daily-win row and the
 /// on-track hero's embodiment trait open it identically.
 void showEvidenceLogSheet(BuildContext context, UserProfile profile) {
-  showModalBottomSheet<void>(
+  showAdaptiveSheet<void>(
     context: context,
-    backgroundColor: AppColors.surface,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(
-        top: Radius.circular(AppSpacing.radiusXl),
-      ),
-    ),
     builder: (_) => EvidenceLogWidget(profile: profile),
   );
 }

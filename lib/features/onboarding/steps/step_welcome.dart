@@ -57,7 +57,7 @@ class StepWelcome extends StatelessWidget {
           _FeatureRow(
             icon: Icons.psychology_rounded,
             title: 'Personalized Coaching',
-            subtitle: 'Personalized guidance from 6 transformational books',
+            subtitle: 'A coach that adapts to you and remembers your story',
           ).animate().fadeIn(delay: 700.ms, duration: 400.ms),
           const SizedBox(height: AppSpacing.md),
           _FeatureRow(

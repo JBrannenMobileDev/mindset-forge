@@ -4,6 +4,7 @@ abstract final class AppStrings {
   static const String appNamePrefix = 'Mindset';
   static const String appNameAccent = 'Forge';
   static const String appTagline = 'Rewire your mindset. Forge your future.';
+  static const String appDescriptor = 'AI Mindset Coach';
 
   // Web auth brand hero (wide-screen marketing panel)
   static const String authEyebrow = 'YOUR DAILY MINDSET COACH';
@@ -39,6 +40,16 @@ abstract final class AppStrings {
       'Create your account in the MindsetForge app to get started. Subscriptions are managed in-app, so account setup happens on your phone.';
   static const String downloadIosCta = 'Download on the App Store';
   static const String downloadAndroidCta = 'Get it on Google Play';
+
+  // Small-screen web gate (mobile web falls back to the app; see MobileWebGate)
+  static const String mobileGateTitle = 'Continue in the app';
+  static const String mobileGateSubtitle =
+      'MindsetForge is built for your phone. Download the app for the full experience — your dashboard, coach, and daily practice.';
+  static const String mobileGateOpenCta = 'Already have it? Open the app';
+  static const String mobileGateDownloadLabel = 'GET THE APP';
+  static const String mobileGateOpenError =
+      "Couldn't open the app. Install it from your app store.";
+  static const String appOpenDeepLink = 'mindsetforge://dashboard';
 
   // Pricing screen on web (subscriptions are mobile-only)
   static const String manageSubscriptionWebTitle =
@@ -85,14 +96,12 @@ abstract final class AppStrings {
   static const String partnerVisibilitySeeEvidence =
       "Today's evidence note, if you log one";
   static const String partnerVisibilitySeeIdentity = 'Your identity statement';
-  static const String partnerVisibilitySeeSlip =
-      'A nudge on a day you miss';
+  static const String partnerVisibilitySeeSlip = 'A nudge on a day you miss';
 
   static const String partnerVisibilityPrivateTitle = 'Always private';
   static const String partnerVisibilityPrivateJournal = 'Journal entries';
   static const String partnerVisibilityPrivateChat = 'AI chat conversations';
-  static const String partnerVisibilityPrivateBeliefs =
-      'Beliefs and fears';
+  static const String partnerVisibilityPrivateBeliefs = 'Beliefs and fears';
   static const String partnerVisibilityPrivateCoach = 'Coach memory';
 
   // Compact one-liners for the invite prompt sheet
@@ -207,6 +216,25 @@ abstract final class AppStrings {
       'Here\'s what your coach sees about you right now.';
   static const String enterMindsetForge = 'Enter MindsetForge';
   static const String onboardingStartFirstRitual = 'Start My First Ritual';
+
+  // Onboarding — goals: prioritization + why
+  static const String onboardingPrimaryGoalPrompt =
+      'Which matters most right now?';
+  static const String onboardingPrimaryGoalSubtitle =
+      'Star your #1 focus. We\'ll build your first steps around it.';
+  static const String onboardingPrimaryWhyPrompt =
+      'Why does this one matter to you?';
+
+  // Onboarding — blocker (AI-inferred limiting beliefs)
+  static const String onboardingBlockerTitle = "What's holding you back?";
+  static const String onboardingBlockerSubtitle =
+      'Based on what you shared, these are the stories that often keep people stuck. Tap the ones that ring true.';
+  static const String onboardingBlockerLoading = 'Reading your profile...';
+  static const String onboardingBlockerCustomHint = 'Add your own...';
+
+  // Onboarding — wide-screen companion panel recap
+  static const String onboardingRecapGoalsLabel = 'YOUR GOALS';
+  static const String onboardingRecapIdentityLabel = 'WHO YOU\'RE BECOMING';
 
   // Navigation
   static const String navHome = 'Home';
@@ -441,7 +469,8 @@ abstract final class AppStrings {
       'Keep it tiny, anchor it to something you already do, and tie it to who you want to become.';
   // Future-self framing for the habit form, used when a Future Self practice
   // exists so habits are chosen for who the user is becoming.
-  static const String habitGuidanceFutureSelfTitle = 'Borrow your future self\'s habits';
+  static const String habitGuidanceFutureSelfTitle =
+      'Borrow your future self\'s habits';
   static const String habitGuidanceFutureSelfBody =
       'What does your future self already do every day? Pick one of their habits and start it now.';
   static const String habitNameLabel = 'Habit — what will you do?';
@@ -600,9 +629,69 @@ abstract final class AppStrings {
   static const String tapNext = 'Tap to continue';
   static const String sessionComplete = 'Session Complete';
 
+  // Affirmations — session sheet
+  static const String morningAffirmationsTitle = 'Morning Affirmations';
+  static const String eveningAffirmationsTitle = 'Evening Affirmations';
+  static const String sessionPrevious = 'Previous';
+  static const String sessionNext = 'Next';
+  static const String sessionCompleteAction = 'Complete';
+  static const String sessionCompleteBanner = 'Session Complete!';
+  static const String affirmationSessionCoaching =
+      'Read it slowly. Say it aloud if you can. Feel it as already true.';
+
+  // Affirmations — education (intro card + how-to sheet)
+  static const String affirmationsIntroTitle = 'New to affirmations?';
+  static const String affirmationsIntroBody =
+      'Affirmations are short, present-tense statements about the person you are becoming. Said with intention every day, they train your subconscious to believe them, and your actions follow. We added a few to get you started, tap any to edit or remove.';
+  static const String affirmationsIntroLearnMore = 'Learn how to use them';
+
+  static const String affirmationsHowToTitle = 'How affirmations work';
+  static const String affirmationsHowToIntro =
+      'An affirmation is a short, present-tense "I am" statement about who you are becoming. Repeated daily with real feeling, it reshapes what your subconscious believes is true, and your actions start to follow.';
+  static const List<(String, String)> affirmationsHowToSteps = [
+    (
+      'Read it slowly',
+      'Take each statement one at a time. There is no rush, let the words actually land.'
+    ),
+    (
+      'Say it aloud',
+      'Speak it out loud if you can. Hearing your own voice makes it far more real than reading it silently.'
+    ),
+    (
+      'Feel it as already true',
+      'Do not just recite the words, feel what it would feel like if it were already true. The emotion is what makes it stick.'
+    ),
+    (
+      'Show up twice a day',
+      'A morning session sets your intention, an evening session seals it in right before sleep.'
+    ),
+  ];
+  static const String affirmationsHowToReassurance =
+      'You do not need to believe it fully yet. Consistency is what turns a statement into a belief.';
+  static const String affirmationsHowToSystemLink =
+      'See how this fits the bigger system';
+  static const String affirmationsHowToCta = 'Got it';
+
   // Mindset
   static const String mindset = 'Mindset';
   static const String blueprint = 'Blueprint';
+  static const String blueprintNewSnapshot = 'New Snapshot';
+  static const String blueprintSaveSnapshot = 'Save Snapshot';
+  static const String blueprintSnapshotSaved = 'Blueprint snapshot saved.';
+  static const String blueprintSnapshotTitle = 'Rate yourself today';
+  static const String blueprintSnapshotSubtitle =
+      'Your original baseline stays unchanged. This snapshot tracks your growth over time.';
+  static const String blueprintSnapshotCta = 'New Snapshot';
+  static const String blueprintSnapshotPrompt =
+      'Take your first snapshot to track growth against your baseline.';
+  static const String blueprintChartCurrent = 'Current';
+  static const String blueprintChartBaseline = 'Baseline';
+  static String blueprintLastSnapshot(String when) => 'Last snapshot: $when';
+  static const String blueprintPastSnapshots = 'Past Snapshots';
+  static const String blueprintGrowthTitle = 'Blueprint Growth';
+  static String blueprintGrowthSinceBaseline(String trait, String delta) =>
+      '$delta $trait since baseline';
+  static const String blueprintTakeSnapshot = 'Take New Snapshot';
   static const String alignment = 'Alignment';
   static const String progress = 'Progress';
   static const String limitingBeliefs = 'Limiting Beliefs';
@@ -671,6 +760,22 @@ abstract final class AppStrings {
   // Progress
   static const String perfectDays = 'Perfect Days';
   static const String weeklyInsight = 'Weekly Insight';
+  static const String weeklyInsightPattern = 'Your Pattern';
+  static const String weeklyInsightBreakthrough = 'Breakthrough';
+  static const String weeklyInsightFocus = 'Next Week Focus';
+  static const String weeklyInsightReadyTitle = 'Your weekly review is ready';
+  static const String weeklyInsightReadySubtitle =
+      'Tap to see your pattern, breakthrough, and focus for the week ahead.';
+  static const String weeklyInsightGenerate = 'Generate weekly insight';
+  static const String weeklyInsightUnlockHint =
+      'Complete 3 active days this week to unlock your review.';
+  static const String weeklyInsightPastReviews = 'Past Reviews';
+  static const String weeklyInsightWeekEnding = 'Week ending';
+  static const String weeklyInsightRefreshLimit =
+      'You can refresh your insight once per day.';
+  static const String weeklyInsightNotificationTitle = 'Weekly review';
+  static const String weeklyInsightNotificationSubtitle =
+      'Get a push when your Sunday review is ready';
   static const String milestones = 'Milestones';
 
   // Alignment dimensions
@@ -715,9 +820,9 @@ abstract final class AppStrings {
       'Start a conversation with your coach.';
   static const String futureSelfNoSessionsSubtitle =
       'Start a conversation with your future self.';
-  static const String noAffirmations = 'Build your affirmations';
+  static const String noAffirmations = 'Start your affirmations practice';
   static const String noAffirmationsSubtitle =
-      'Browse the library, generate with AI, or write your own to begin your daily reprogramming.';
+      'Affirmations are short, present-tense statements about who you are becoming. Browse the library, generate with AI, or write your own to begin.';
 
   // Errors
   static const String errorGeneric = 'Something went wrong. Please try again.';

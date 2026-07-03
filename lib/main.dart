@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
@@ -50,6 +51,22 @@ void main() async {
     () async {
       final binding = WidgetsFlutterBinding.ensureInitialized();
       bootLog('binding ready');
+
+      // Set up the background audio service so the Future Self practice's
+      // binaural beats keep playing when the screen locks or the app is
+      // backgrounded (foreground media service on Android, audio session on
+      // iOS). Guarded so a failure here can never trap the boot on the splash.
+      try {
+        await JustAudioBackground.init(
+          androidNotificationChannelId: 'com.mindsetforge.audio',
+          androidNotificationChannelName: 'Future Self Practice',
+          androidNotificationOngoing: true,
+          androidStopForegroundOnPause: true,
+        );
+        bootLog('JustAudioBackground.init done');
+      } catch (e) {
+        bootLog('JustAudioBackground.init FAILED: $e');
+      }
       // Hold the native splash on screen until the first Flutter frame paints so
       // there is no gap between the OS launch screen and our SplashView.
       FlutterNativeSplash.preserve(widgetsBinding: binding);
@@ -387,20 +404,24 @@ class _MindsetForgeAppState extends ConsumerState<MindsetForgeApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _deepLinkService?.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _deepLinkService?.onLifecycleStateChanged(state);
     if (state == AppLifecycleState.resumed) {
       _onResume();
     }
   }
 
-  /// On every foreground resume: refresh activity tracking and re-evaluate local
-  /// reminders against today's live completion state (suppressing finished items).
+  /// On every foreground resume: re-check widget deep links, refresh activity
+  /// tracking, and re-evaluate local reminders against today's live completion
+  /// state (suppressing finished items).
   Future<void> _onResume() async {
     if (kIsWeb) return;
+    await _deepLinkService?.handleLinksOnResume();
     final uid = ref.read(authStateProvider).valueOrNull?.uid;
     final profile = ref.read(currentUserProfileProvider).valueOrNull;
     if (uid == null) return;

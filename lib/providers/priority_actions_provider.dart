@@ -58,6 +58,14 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
 
   PriorityActionsNotifier(this._ref) : super(const PriorityActionsState());
 
+  /// Returns [actions] with [focus] moved to the front (order otherwise
+  /// preserved). Returns the list unchanged when there's no focus or it isn't
+  /// present.
+  List<String> _focusFirst(List<String> actions, String focus) {
+    if (focus.isEmpty || !actions.contains(focus)) return actions;
+    return [focus, ...actions.where((a) => a != focus)];
+  }
+
   void _initFromProfile() {
     final profile = _ref.read(currentUserProfileProvider).valueOrNull;
     if (profile == null) return;
@@ -72,8 +80,11 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
       // done — including the #1 focus, which the dashboard/watch complete by
       // adding it to this list.
       final completed = profile.completedPriorityActions.toSet();
+      // Defensive: keep the #1 focus pinned to the top even if an older
+      // document persisted it elsewhere in the list.
+      final actions = _focusFirst(profile.priorityActions, focus);
       state = state.copyWith(
-        actions: profile.priorityActions,
+        actions: actions,
         focusAction: focus,
         completed: completed,
       );
@@ -248,17 +259,21 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
     }
   }
 
-  /// Set the committed #1 focus action for today.
+  /// Set the committed #1 focus action for today. Pins the focus to the top of
+  /// the list so it stays visible above the reorderable items.
   Future<void> setFocus(String text) async {
     final uid = _ref.read(authStateProvider).valueOrNull?.uid;
     if (uid == null) return;
     if (!state.actions.contains(text)) return;
 
-    state = state.copyWith(focusAction: text);
+    final reordered = _focusFirst(state.actions, text);
+    state = state.copyWith(actions: reordered, focusAction: text);
 
     final today = AppDateUtils.todayStringWithGracePeriod();
     try {
       await _ref.read(firestoreServiceProvider).updateUserField(uid, {
+        'priorityActions': reordered,
+        'priorityActionsDate': today,
         'dailyFocusAction': text,
         'dailyFocusActionDate': today,
       });
@@ -270,6 +285,45 @@ class PriorityActionsNotifier extends StateNotifier<PriorityActionsState> {
           );
     } catch (e) {
       debugPrint('PriorityActionsNotifier.setFocus failed: $e');
+    }
+  }
+
+  /// Reorder the non-focus actions. [oldIndex] and [newIndex] are positions
+  /// within the reorderable sublist (i.e. the actions excluding the pinned #1
+  /// focus), matching the UI's `ReorderableListView` children. The focus stays
+  /// pinned at index 0 of the persisted list.
+  Future<void> reorderActions(int oldIndex, int newIndex) async {
+    final uid = _ref.read(authStateProvider).valueOrNull?.uid;
+    if (uid == null) return;
+
+    final focus = state.focusAction;
+    final hasFocus = focus.isNotEmpty && state.actions.contains(focus);
+    final movable = hasFocus
+        ? state.actions.where((a) => a != focus).toList()
+        : List<String>.from(state.actions);
+
+    if (oldIndex < 0 ||
+        oldIndex >= movable.length ||
+        newIndex < 0 ||
+        newIndex > movable.length) {
+      return;
+    }
+
+    final item = movable.removeAt(oldIndex);
+    movable.insert(newIndex.clamp(0, movable.length), item);
+
+    final reordered = hasFocus ? [focus, ...movable] : movable;
+    // Optimistic update.
+    state = state.copyWith(actions: reordered);
+
+    final today = AppDateUtils.todayStringWithGracePeriod();
+    try {
+      await _ref.read(firestoreServiceProvider).updateUserField(uid, {
+        'priorityActions': reordered,
+        'priorityActionsDate': today,
+      });
+    } catch (e) {
+      debugPrint('PriorityActionsNotifier.reorderActions failed: $e');
     }
   }
 

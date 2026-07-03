@@ -6,6 +6,7 @@ import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/utils/app_date_utils.dart';
+import '../../../core/widgets/adaptive_sheet.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../models/user_profile.dart';
 import '../../../providers/auth_provider.dart';
@@ -19,16 +20,8 @@ Future<void> showPlanDaySheet(
   WidgetRef ref,
   UserProfile profile,
 ) {
-  return showModalBottomSheet<void>(
+  return showAdaptiveSheet<void>(
     context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    backgroundColor: AppColors.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(
-        top: Radius.circular(AppSpacing.radiusXl),
-      ),
-    ),
     builder: (_) => ProviderScope(
       parent: ProviderScope.containerOf(context),
       child: _PlanDaySheet(profile: profile),
@@ -238,8 +231,8 @@ class _PlanDaySheetState extends ConsumerState<_PlanDaySheet> {
                               onSubmitted: (_) => _addCustomAction(),
                               decoration: InputDecoration(
                                 hintText: 'Add your own action…',
-                                hintStyle: AppTextStyles.bodyMedium.copyWith(
-                                    color: AppColors.textMuted),
+                                hintStyle: AppTextStyles.bodyMedium
+                                    .copyWith(color: AppColors.textMuted),
                                 filled: true,
                                 fillColor: AppColors.surfaceElevated,
                                 contentPadding: const EdgeInsets.symmetric(
@@ -336,8 +329,7 @@ class _PlanDaySheetState extends ConsumerState<_PlanDaySheet> {
                             action: _actions[i],
                             index: i,
                             isSelected: isSelected,
-                            onSelect: () =>
-                                setState(() => _selectedIndex = i),
+                            onSelect: () => setState(() => _selectedIndex = i),
                             onRemove: () => _removeAction(i),
                           ).animate().fadeIn(
                                 delay: Duration(milliseconds: i * 60),
@@ -464,8 +456,9 @@ class _ActionRow extends StatelessWidget {
                   Text(
                     action,
                     style: AppTextStyles.bodyMedium.copyWith(
-                      color:
-                          isSelected ? AppColors.primary : AppColors.textPrimary,
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.textPrimary,
                       height: 1.5,
                     ),
                   ),

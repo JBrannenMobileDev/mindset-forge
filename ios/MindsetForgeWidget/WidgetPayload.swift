@@ -29,6 +29,8 @@ struct WidgetPayload: Codable {
 
     /// Last 7 days of streak qualification (oldest → newest, index 6 = today).
     var weekStreak: [Bool]
+    /// Per-day 9/9 perfect flag aligned to `weekStreak` (index 6 = today).
+    var weekPerfect: [Bool]
     /// Single-char weekday letters aligned to `weekStreak` (M T W T F S S).
     var weekLabels: [String]
     /// Nudge line shown beneath the 7-day chain in the focus-complete state.
@@ -59,6 +61,7 @@ struct WidgetPayload: Codable {
         completedCount: 0,
         totalCount: 8,
         weekStreak: [],
+        weekPerfect: [],
         weekLabels: [],
         weekCaption: "",
         displayName: "",
@@ -106,7 +109,7 @@ extension WidgetPayload {
         case sessionPeriod, actionField, sessionLabel, headline, subline
         case accentKind, canCompleteInWidget, deepLink
         case streak, completedCount, totalCount
-        case weekStreak, weekLabels, weekCaption
+        case weekStreak, weekPerfect, weekLabels, weekCaption
         case displayName, firstName, updatedAt
     }
 
@@ -132,6 +135,7 @@ extension WidgetPayload {
         completedCount = try c.decodeIfPresent(Int.self, forKey: .completedCount) ?? 0
         totalCount = try c.decodeIfPresent(Int.self, forKey: .totalCount) ?? 8
         weekStreak = try c.decodeIfPresent([Bool].self, forKey: .weekStreak) ?? []
+        weekPerfect = try c.decodeIfPresent([Bool].self, forKey: .weekPerfect) ?? []
         weekLabels = try c.decodeIfPresent([String].self, forKey: .weekLabels) ?? []
         weekCaption = try c.decodeIfPresent(String.self, forKey: .weekCaption) ?? ""
         displayName = try c.decodeIfPresent(String.self, forKey: .displayName) ?? ""

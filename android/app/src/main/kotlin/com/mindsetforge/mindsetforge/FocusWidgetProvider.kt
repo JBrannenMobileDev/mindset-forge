@@ -25,7 +25,7 @@ class FocusWidgetProvider : HomeWidgetProvider() {
 
     companion object {
         private const val PAYLOAD_KEY = "widget_payload"
-        private const val OPEN_URI = "mindsetforge://focus"
+        private const val DEFAULT_OPEN_URI = "mindsetforge://focus"
         private const val COMPLETE_URI = "mindsetforge://completeFocus"
     }
 
@@ -45,11 +45,12 @@ class FocusWidgetProvider : HomeWidgetProvider() {
     }
 
     private fun bind(context: Context, views: RemoteViews, payload: Payload) {
-        // Whole card opens the app on the dashboard.
+        // Whole card opens the app using the payload deep link (mirrors iOS
+        // `.widgetURL(payload.deepLink)` — focus, action/<field>, or dashboard).
         val openPendingIntent: PendingIntent = HomeWidgetLaunchIntent.getActivity(
             context,
             MainActivity::class.java,
-            Uri.parse(OPEN_URI),
+            Uri.parse(payload.deepLink),
         )
         views.setOnClickPendingIntent(R.id.focus_widget_root, openPendingIntent)
 
@@ -124,6 +125,7 @@ class FocusWidgetProvider : HomeWidgetProvider() {
         for (i in 0 until 7) {
             val isToday = i == 6
             val qualifying = payload.weekStreak[i]
+            val perfect = payload.weekPerfect.getOrElse(i) { false }
 
             // Weekday letter.
             val label = payload.weekLabels.getOrElse(i) { "" }
@@ -132,6 +134,14 @@ class FocusWidgetProvider : HomeWidgetProvider() {
 
             // Status dot.
             when {
+                perfect -> {
+                    // Perfect day (9/9) — gradient oval marks it apart from a
+                    // plain amber qualifying day (RemoteViews can't overlay the
+                    // in-app star badge, so the gradient is the indicator).
+                    views.setInt(dayIds[i], "setBackgroundResource", R.drawable.focus_widget_day_perfect)
+                    views.setTextViewText(dayIds[i], flame)
+                    views.setTextColor(dayIds[i], white)
+                }
                 qualifying -> {
                     views.setInt(dayIds[i], "setBackgroundResource", R.drawable.focus_widget_day_filled)
                     views.setTextViewText(dayIds[i], flame)
@@ -191,8 +201,10 @@ class FocusWidgetProvider : HomeWidgetProvider() {
                 completedCount = json.optInt("completedCount", 0),
                 totalCount = json.optInt("totalCount", 9),
                 weekStreak = json.optJSONArray("weekStreak").toBoolList(),
+                weekPerfect = json.optJSONArray("weekPerfect").toBoolList(),
                 weekLabels = json.optJSONArray("weekLabels").toStringList(),
                 weekCaption = json.optString("weekCaption", ""),
+                deepLink = json.optString("deepLink", DEFAULT_OPEN_URI),
             )
         } catch (e: Exception) {
             Payload()
@@ -217,7 +229,9 @@ class FocusWidgetProvider : HomeWidgetProvider() {
         val completedCount: Int = 0,
         val totalCount: Int = 9,
         val weekStreak: List<Boolean> = emptyList(),
+        val weekPerfect: List<Boolean> = emptyList(),
         val weekLabels: List<String> = emptyList(),
         val weekCaption: String = "",
+        val deepLink: String = DEFAULT_OPEN_URI,
     )
 }

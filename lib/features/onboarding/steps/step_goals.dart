@@ -6,8 +6,8 @@ import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/constants/goal_meta.dart';
-import '../../../core/utils/app_date_utils.dart';
 import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/hoverable.dart';
 import '../../../models/goal.dart';
 
 Color _categoryColor(String category) =>
@@ -22,12 +22,14 @@ Color _categoryColor(String category) =>
 
 class StepGoals extends StatefulWidget {
   final List<Goal> initial;
-  final void Function(List<Goal>) onNext;
+  final String initialPrimaryGoalId;
+  final void Function(List<Goal> goals, String primaryGoalId) onNext;
   final VoidCallback onBack;
 
   const StepGoals({
     super.key,
     required this.initial,
+    this.initialPrimaryGoalId = '',
     required this.onNext,
     required this.onBack,
   });
@@ -38,17 +40,18 @@ class StepGoals extends StatefulWidget {
 
 class _StepGoalsState extends State<StepGoals> {
   late List<Goal> _goals;
+  late String _primaryGoalId;
   bool _showCustomForm = false;
   final Set<String> _selectedTemplateIds = {};
 
   // Custom form state
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
+  final _whyCtrl = TextEditingController();
   String _customCategory = 'personal_growth';
   String _customGoalType = kGoalTypeLongTerm;
   DateTime _customTargetDate =
       DateTime.now().add(const Duration(days: 365 * 3));
-  bool _customTargetDateTouched = false;
 
   static const _templates = [
     _GoalTemplate(
@@ -139,13 +142,61 @@ class _StepGoalsState extends State<StepGoals> {
   void initState() {
     super.initState();
     _goals = List.from(widget.initial);
+    _primaryGoalId = _goals.any((g) => g.id == widget.initialPrimaryGoalId)
+        ? widget.initialPrimaryGoalId
+        : (_goals.isNotEmpty ? _goals.first.id : '');
+    _syncWhyToPrimary();
+    // Rebuild so the custom "Add Goal" button enables live as the user types
+    // (TextField edits don't otherwise trigger a rebuild).
+    _titleCtrl.addListener(_onTitleChanged);
   }
 
   @override
   void dispose() {
+    _titleCtrl.removeListener(_onTitleChanged);
     _titleCtrl.dispose();
     _descCtrl.dispose();
+    _whyCtrl.dispose();
     super.dispose();
+  }
+
+  void _onTitleChanged() => setState(() {});
+
+  Goal? get _primaryGoal {
+    for (final g in _goals) {
+      if (g.id == _primaryGoalId) return g;
+    }
+    return null;
+  }
+
+  void _syncWhyToPrimary() {
+    _whyCtrl.text = _primaryGoal?.description ?? '';
+  }
+
+  void _setPrimary(String id) {
+    setState(() {
+      _primaryGoalId = id;
+      _syncWhyToPrimary();
+    });
+  }
+
+  void _onWhyChanged(String value) {
+    final id = _primaryGoalId;
+    setState(() {
+      _goals = _goals
+          .map((g) => g.id == id ? g.copyWith(description: value) : g)
+          .toList();
+    });
+  }
+
+  /// Keeps [_primaryGoalId] valid after goals are added or removed.
+  void _ensurePrimary() {
+    if (_goals.isEmpty) {
+      _primaryGoalId = '';
+    } else if (!_goals.any((g) => g.id == _primaryGoalId)) {
+      _primaryGoalId = _goals.first.id;
+    }
+    _syncWhyToPrimary();
   }
 
   void _addTemplateGoals() {
@@ -167,39 +218,17 @@ class _StepGoalsState extends State<StepGoals> {
       _goals = [..._goals, ...newGoals];
       _selectedTemplateIds.clear();
       _showCustomForm = false;
+      _ensurePrimary();
     });
   }
 
   void _selectCustomTimeframe(String value) {
     setState(() {
       _customGoalType = value;
-      if (!_customTargetDateTouched) {
-        final days =
-            kGoalTypeOptions.firstWhere((o) => o.value == value).defaultDays;
-        _customTargetDate = DateTime.now().add(Duration(days: days));
-      }
+      final days =
+          kGoalTypeOptions.firstWhere((o) => o.value == value).defaultDays;
+      _customTargetDate = DateTime.now().add(Duration(days: days));
     });
-  }
-
-  Future<void> _pickCustomDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _customTargetDate,
-      firstDate: DateTime.now().add(const Duration(days: 1)),
-      lastDate: DateTime.now().add(const Duration(days: 365 * 25)),
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.dark(primary: AppColors.primary),
-        ),
-        child: child!,
-      ),
-    );
-    if (picked != null) {
-      setState(() {
-        _customTargetDate = picked;
-        _customTargetDateTouched = true;
-      });
-    }
   }
 
   void _addCustomGoal() {
@@ -220,12 +249,22 @@ class _StepGoalsState extends State<StepGoals> {
       _customCategory = 'personal_growth';
       _customGoalType = kGoalTypeLongTerm;
       _customTargetDate = DateTime.now().add(const Duration(days: 365 * 3));
-      _customTargetDateTouched = false;
       _showCustomForm = false;
+      _ensurePrimary();
     });
   }
 
-  void _removeGoal(int index) => setState(() => _goals.removeAt(index));
+  void _removeGoal(int index) => setState(() {
+        _goals = List.of(_goals)..removeAt(index);
+        _ensurePrimary();
+      });
+
+  /// Short human-readable horizon label for a template's month count.
+  String _horizonLabel(int months) {
+    if (months < 12) return '~$months mo';
+    if (months == 12) return '~1 yr';
+    return '~${(months / 12).round()} yr';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -261,8 +300,19 @@ class _StepGoalsState extends State<StepGoals> {
 
                 const SizedBox(height: AppSpacing.xl),
 
-                // Added goals chips
+                // Added goals + #1 focus selection
                 if (_goals.isNotEmpty) ...[
+                  if (_goals.length > 1) ...[
+                    Text(AppStrings.onboardingPrimaryGoalPrompt,
+                        style: AppTextStyles.labelLarge),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      AppStrings.onboardingPrimaryGoalSubtitle,
+                      style: AppTextStyles.bodySmall
+                          .copyWith(color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                  ],
                   Wrap(
                     spacing: AppSpacing.sm,
                     runSpacing: AppSpacing.sm,
@@ -271,9 +321,45 @@ class _StepGoalsState extends State<StepGoals> {
                         .entries
                         .map((e) => _GoalChip(
                               label: e.value.title,
+                              isPrimary: e.value.id == _primaryGoalId,
+                              showStar: _goals.length > 1,
+                              onTapPrimary: () => _setPrimary(e.value.id),
                               onRemove: () => _removeGoal(e.key),
                             ))
                         .toList(),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  // "Why" for the #1 focus — the highest-value motivation signal.
+                  TextField(
+                    controller: _whyCtrl,
+                    style: AppTextStyles.bodyMedium,
+                    cursorColor: AppColors.primary,
+                    textCapitalization: TextCapitalization.sentences,
+                    maxLines: 2,
+                    minLines: 1,
+                    onChanged: _onWhyChanged,
+                    decoration: InputDecoration(
+                      labelText: AppStrings.onboardingPrimaryWhyPrompt,
+                      labelStyle: AppTextStyles.bodySmall
+                          .copyWith(color: AppColors.textSecondary),
+                      hintText: AppStrings.goalWhyMattersHint,
+                      hintStyle: AppTextStyles.bodyMedium
+                          .copyWith(color: AppColors.textMuted),
+                      filled: true,
+                      fillColor: AppColors.surfaceElevated,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                        borderSide: const BorderSide(color: AppColors.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                        borderSide: const BorderSide(color: AppColors.primary),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                        borderSide: const BorderSide(color: AppColors.border),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   const Divider(color: AppColors.border),
@@ -296,7 +382,10 @@ class _StepGoalsState extends State<StepGoals> {
                         final alreadyAdded =
                             _goals.any((g) => g.title == t.title);
                         final color = _categoryColor(t.category);
-                        return GestureDetector(
+                        return Hoverable(
+                          cursor: alreadyAdded
+                              ? SystemMouseCursors.basic
+                              : SystemMouseCursors.click,
                           onTap: alreadyAdded
                               ? null
                               : () => setState(() {
@@ -306,7 +395,7 @@ class _StepGoalsState extends State<StepGoals> {
                                       _selectedTemplateIds.add(t.id);
                                     }
                                   }),
-                          child: AnimatedContainer(
+                          builder: (context, hovered) => AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
                             padding: const EdgeInsets.all(AppSpacing.md),
                             decoration: BoxDecoration(
@@ -315,7 +404,9 @@ class _StepGoalsState extends State<StepGoals> {
                                       .withValues(alpha: 0.4)
                                   : selected
                                       ? color.withValues(alpha: 0.12)
-                                      : AppColors.surfaceElevated,
+                                      : hovered
+                                          ? color.withValues(alpha: 0.06)
+                                          : AppColors.surfaceElevated,
                               borderRadius:
                                   BorderRadius.circular(AppSpacing.radiusMd),
                               border: Border.all(
@@ -323,7 +414,9 @@ class _StepGoalsState extends State<StepGoals> {
                                     ? AppColors.border.withValues(alpha: 0.5)
                                     : selected
                                         ? color.withValues(alpha: 0.7)
-                                        : AppColors.border,
+                                        : hovered
+                                            ? color.withValues(alpha: 0.5)
+                                            : AppColors.border,
                                 width: selected ? 1.5 : 1,
                               ),
                             ),
@@ -370,10 +463,17 @@ class _StepGoalsState extends State<StepGoals> {
                                           color: Colors.white,
                                           size: 13,
                                         ),
-                                      ),
-                                    if (alreadyAdded)
+                                      )
+                                    else if (alreadyAdded)
                                       const Icon(Icons.check_rounded,
-                                          color: AppColors.textMuted, size: 16),
+                                          color: AppColors.textMuted, size: 16)
+                                    else
+                                      Text(
+                                        _horizonLabel(t.months),
+                                        style: AppTextStyles.labelSmall.copyWith(
+                                          color: AppColors.textMuted,
+                                        ),
+                                      ),
                                   ],
                                 ),
                                 const SizedBox(height: AppSpacing.sm),
@@ -403,24 +503,29 @@ class _StepGoalsState extends State<StepGoals> {
                                 ),
                               ],
                             ),
-                          ).animate().fadeIn(
-                                delay: Duration(milliseconds: e.key * 40),
-                                duration: 300.ms,
-                              ),
-                        );
+                          ),
+                        ).animate().fadeIn(
+                              delay: Duration(milliseconds: e.key * 40),
+                              duration: 300.ms,
+                            );
                       }),
                       // "Something else" tile — always last, opens the custom form
-                      GestureDetector(
+                      Hoverable(
                         onTap: () => setState(() => _showCustomForm = true),
-                        child: AnimatedContainer(
+                        builder: (context, hovered) => AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           padding: const EdgeInsets.all(AppSpacing.md),
                           decoration: BoxDecoration(
                             color: AppColors.surfaceElevated,
                             borderRadius:
                                 BorderRadius.circular(AppSpacing.radiusMd),
-                            border: const Border.fromBorderSide(
-                              BorderSide(color: AppColors.border),
+                            border: Border.fromBorderSide(
+                              BorderSide(
+                                color: hovered
+                                    ? AppColors.textSecondary
+                                        .withValues(alpha: 0.5)
+                                    : AppColors.border,
+                              ),
                             ),
                           ),
                           child: Column(
@@ -463,12 +568,12 @@ class _StepGoalsState extends State<StepGoals> {
                               ),
                             ],
                           ),
-                        ).animate().fadeIn(
-                              delay: Duration(
-                                  milliseconds: _templates.length * 40),
-                              duration: 300.ms,
-                            ),
-                      ),
+                        ),
+                      ).animate().fadeIn(
+                            delay: Duration(
+                                milliseconds: _templates.length * 40),
+                            duration: 300.ms,
+                          ),
                     ],
                   ),
 
@@ -613,35 +718,6 @@ class _StepGoalsState extends State<StepGoals> {
                     }).toList(),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Text(AppStrings.goalTargetDate,
-                      style: AppTextStyles.labelMedium),
-                  const SizedBox(height: AppSpacing.sm),
-                  GestureDetector(
-                    onTap: _pickCustomDate,
-                    child: Container(
-                      height: AppSpacing.inputHeight,
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceElevated,
-                        border: Border.all(color: AppColors.border),
-                        borderRadius:
-                            BorderRadius.circular(AppSpacing.radiusMd),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.calendar_today_rounded,
-                              color: AppColors.textMuted, size: 18),
-                          const SizedBox(width: AppSpacing.sm),
-                          Text(
-                            AppDateUtils.formatDate(_customTargetDate),
-                            style: AppTextStyles.bodyLarge,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
                   Row(
                     children: [
                       AppSecondaryButton(
@@ -718,7 +794,7 @@ class _StepGoalsState extends State<StepGoals> {
                   child: AppPrimaryButton(
                     label: 'Continue',
                     onPressed: _goals.isNotEmpty
-                        ? () => widget.onNext(_goals)
+                        ? () => widget.onNext(_goals, _primaryGoalId)
                         : null,
                     icon: Icons.arrow_forward_rounded,
                   ),
@@ -746,36 +822,65 @@ class _StepGoalsState extends State<StepGoals> {
 
 class _GoalChip extends StatelessWidget {
   final String label;
+  final bool isPrimary;
+  final bool showStar;
+  final VoidCallback onTapPrimary;
   final VoidCallback onRemove;
 
-  const _GoalChip({required this.label, required this.onRemove});
+  const _GoalChip({
+    required this.label,
+    required this.isPrimary,
+    required this.showStar,
+    required this.onTapPrimary,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.xs,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.primaryContainer,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.primary),
+    final active = isPrimary && showStar;
+    return Hoverable(
+      cursor: showStar ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onTap: showStar ? onTapPrimary : null,
+      builder: (context, hovered) => AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.xs,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.primaryContainer,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+          border: Border.all(
+            color: active
+                ? AppColors.primary
+                : AppColors.primary
+                    .withValues(alpha: hovered && showStar ? 0.55 : 0.3),
+            width: active ? 1.5 : 1,
           ),
-          const SizedBox(width: AppSpacing.xs),
-          GestureDetector(
-            onTap: onRemove,
-            child: const Icon(Icons.close_rounded,
-                size: 14, color: AppColors.primary),
-          ),
-        ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (showStar) ...[
+              Icon(
+                active ? Icons.star_rounded : Icons.star_outline_rounded,
+                size: 14,
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              label,
+              style: AppTextStyles.bodySmall.copyWith(color: AppColors.primary),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Hoverable(
+              onTap: onRemove,
+              builder: (context, _) => const Icon(Icons.close_rounded,
+                  size: 14, color: AppColors.primary),
+            ),
+          ],
+        ),
       ),
     );
   }

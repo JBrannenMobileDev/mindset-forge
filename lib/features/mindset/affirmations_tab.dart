@@ -13,6 +13,7 @@ import '../../models/affirmation.dart';
 import '../../models/user_profile.dart';
 import '../../providers/affirmations_provider.dart';
 import '../../providers/claude_provider.dart';
+import 'widgets/affirmations_how_to.dart';
 
 // ─── Affirmation categories ───────────────────────────────────────────────────
 
@@ -27,6 +28,17 @@ const _categories = [
   'relationships',
 ];
 
+// ─── Public helper: total affirmation sessions completed ──────────────────────
+
+/// Total morning + evening sessions the user has ever completed. Used to fade
+/// the in-session coaching copy from prominent to subtle once they get going.
+int affirmationSessionsCompletedCount(UserProfile profile) =>
+    profile.affirmationCompletions.fold(
+      0,
+      (sum, c) =>
+          sum + (c.morningCompleted ? 1 : 0) + (c.eveningCompleted ? 1 : 0),
+    );
+
 // ─── Public helper: launch session from anywhere ──────────────────────────────
 
 void launchAffirmationSession({
@@ -34,6 +46,7 @@ void launchAffirmationSession({
   required WidgetRef ref,
   required List<Affirmation> affirmations,
   required String sessionType,
+  int completedSessionCount = 0,
 }) {
   showDialog<void>(
     context: context,
@@ -44,6 +57,7 @@ void launchAffirmationSession({
       child: AffirmationSessionSheet(
         affirmations: affirmations,
         sessionType: sessionType,
+        completedSessionCount: completedSessionCount,
         onComplete: () => ref
             .read(affirmationsProvider.notifier)
             .recordSessionCompletion(sessionType),
@@ -92,16 +106,41 @@ class AffirmationsTab extends ConsumerStatefulWidget {
 }
 
 class _AffirmationsTabState extends ConsumerState<AffirmationsTab> {
+  /// Optimistically hides the intro card the moment the user dismisses it,
+  /// before the persisted profile flag round-trips through Firestore.
+  bool _introDismissed = false;
+
+  void _dismissIntro() {
+    setState(() => _introDismissed = true);
+    ref.read(affirmationsProvider.notifier).markIntroSeen();
+  }
+
   @override
   Widget build(BuildContext context) {
     final affirmations = ref.watch(affirmationsProvider);
     final active = affirmations.where((a) => a.isActive).toList();
     final isEmpty = affirmations.isEmpty;
+    final showIntro =
+        !_introDismissed && !widget.profile.affirmationsIntroDismissed;
+    final sessionCount = affirmationSessionsCompletedCount(widget.profile);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Column(
         children: [
+          if (showIntro)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.screenPaddingH,
+                AppSpacing.lg,
+                AppSpacing.screenPaddingH,
+                0,
+              ),
+              child: AffirmationsIntroCard(
+                onLearnMore: () => showAffirmationsHowToSheet(context),
+                onDismiss: _dismissIntro,
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.screenPaddingH,
@@ -123,6 +162,7 @@ class _AffirmationsTabState extends ConsumerState<AffirmationsTab> {
                               ref: ref,
                               affirmations: active,
                               sessionType: 'morning',
+                              completedSessionCount: sessionCount,
                             ),
                   ),
                 ),
@@ -139,6 +179,7 @@ class _AffirmationsTabState extends ConsumerState<AffirmationsTab> {
                               ref: ref,
                               affirmations: active,
                               sessionType: 'evening',
+                              completedSessionCount: sessionCount,
                             ),
                   ),
                 ),
@@ -691,11 +732,17 @@ class AffirmationSessionSheet extends StatefulWidget {
   final String sessionType;
   final Future<void> Function() onComplete;
 
+  /// Total sessions the user has completed before this one. Below
+  /// [_coachingProminentThreshold] the how-to coaching shows as a prominent
+  /// block; after that it fades to a subtle one-line subtitle.
+  final int completedSessionCount;
+
   const AffirmationSessionSheet({
     super.key,
     required this.affirmations,
     required this.sessionType,
     required this.onComplete,
+    this.completedSessionCount = 0,
   });
 
   @override
@@ -710,7 +757,11 @@ class _AffirmationSessionSheetState extends State<AffirmationSessionSheet>
   late final AnimationController _successCtrl;
   late final Animation<double> _successScale;
 
+  static const int _coachingProminentThreshold = 4;
+
   bool get _isMorning => widget.sessionType == 'morning';
+  bool get _showProminentCoaching =>
+      widget.completedSessionCount < _coachingProminentThreshold;
   bool get _isLast => _currentIndex == widget.affirmations.length - 1;
   Color get _accent => _isMorning ? AppColors.warning : AppColors.secondary;
   Color get _accentGlow =>
@@ -800,8 +851,8 @@ class _AffirmationSessionSheetState extends State<AffirmationSessionSheet>
                     Expanded(
                       child: Text(
                         _isMorning
-                            ? 'Morning Affirmations'
-                            : 'Evening Affirmations',
+                            ? AppStrings.morningAffirmationsTitle
+                            : AppStrings.eveningAffirmationsTitle,
                         style: AppTextStyles.headlineSmall,
                       ),
                     ),
@@ -822,6 +873,46 @@ class _AffirmationSessionSheetState extends State<AffirmationSessionSheet>
                     ),
                   ],
                 ),
+
+                // ── How-to coaching ──────────────────────────────────────
+                if (!_completing) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  _showProminentCoaching
+                      ? Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          decoration: BoxDecoration(
+                            color: _accentGlow,
+                            borderRadius:
+                                BorderRadius.circular(AppSpacing.radiusMd),
+                            border: Border.all(
+                                color: _accent.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.self_improvement_rounded,
+                                  color: _accent, size: 18),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Text(
+                                  AppStrings.affirmationSessionCoaching,
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: AppColors.textSecondary,
+                                    height: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : Text(
+                          AppStrings.affirmationSessionCoaching,
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.bodySmall
+                              .copyWith(color: AppColors.textMuted),
+                        ),
+                ],
 
                 const SizedBox(height: AppSpacing.lg),
 
@@ -871,7 +962,7 @@ class _AffirmationSessionSheetState extends State<AffirmationSessionSheet>
                                   color: _accent, size: 52),
                               const SizedBox(height: AppSpacing.md),
                               Text(
-                                'Session Complete!',
+                                AppStrings.sessionCompleteBanner,
                                 style: AppTextStyles.headlineSmall
                                     .copyWith(color: _accent),
                               ),
@@ -958,7 +1049,7 @@ class _AffirmationSessionSheetState extends State<AffirmationSessionSheet>
                           icon: const Icon(
                               Icons.arrow_back_ios_rounded,
                               size: 14),
-                          label: const Text('Previous'),
+                          label: const Text(AppStrings.sessionPrevious),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.textSecondary,
                             side: const BorderSide(
@@ -984,8 +1075,9 @@ class _AffirmationSessionSheetState extends State<AffirmationSessionSheet>
                                 : Icons.arrow_forward_ios_rounded,
                             size: 14,
                           ),
-                          label:
-                              Text(_isLast ? 'Complete' : 'Next'),
+                          label: Text(_isLast
+                              ? AppStrings.sessionCompleteAction
+                              : AppStrings.sessionNext),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: _accent,
                             foregroundColor: Colors.white,

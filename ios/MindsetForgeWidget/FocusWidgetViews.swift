@@ -172,6 +172,7 @@ private struct ProgressDots: View {
 /// for today (focus done ≠ streak earned), and empty dots for missed days.
 private struct WeekStreakRow: View {
     let weekStreak: [Bool]
+    let weekPerfect: [Bool]
     let weekLabels: [String]
     var dot: CGFloat = 26
 
@@ -179,11 +180,12 @@ private struct WeekStreakRow: View {
         HStack(spacing: 0) {
             ForEach(0 ..< weekStreak.count, id: \.self) { i in
                 let isToday = i == weekStreak.count - 1
+                let perfect = weekPerfect.indices.contains(i) && weekPerfect[i]
                 VStack(spacing: 5) {
                     Text(weekLabels.indices.contains(i) ? weekLabels[i] : "")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundColor(isToday ? MFColors.successBright : MFColors.textMuted)
-                    cell(qualifying: weekStreak[i], isToday: isToday)
+                    cell(qualifying: weekStreak[i], perfect: perfect, isToday: isToday)
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -191,8 +193,45 @@ private struct WeekStreakRow: View {
     }
 
     @ViewBuilder
-    private func cell(qualifying: Bool, isToday: Bool) -> some View {
-        if qualifying {
+    private func cell(qualifying: Bool, perfect: Bool, isToday: Bool) -> some View {
+        if perfect {
+            // Perfect day (9/9) — gradient flame + star badge, mirroring the
+            // in-app WeekStreakChain so a perfect day stands out from a plain
+            // qualifying day.
+            ZStack {
+                Circle().fill(
+                    LinearGradient(
+                        colors: [MFColors.warning, MFColors.primary],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                Image(systemName: "flame.fill")
+                    .font(.system(size: dot * 0.42, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            .frame(width: dot, height: dot)
+            .overlay(
+                Group {
+                    if isToday {
+                        Circle().strokeBorder(MFColors.primaryBright, lineWidth: 2)
+                    }
+                }
+            )
+            .overlay(
+                Circle()
+                    .fill(MFColors.secondary)
+                    .frame(width: dot * 0.5, height: dot * 0.5)
+                    .overlay(
+                        Image(systemName: "star.fill")
+                            .font(.system(size: dot * 0.26, weight: .bold))
+                            .foregroundColor(.white)
+                    )
+                    .overlay(Circle().strokeBorder(MFColors.background, lineWidth: 1.5))
+                    .offset(x: dot * 0.12, y: -dot * 0.12),
+                alignment: .topTrailing
+            )
+        } else if qualifying {
             ZStack {
                 Circle().fill(MFColors.warning)
                 Image(systemName: "flame.fill")
@@ -355,6 +394,7 @@ struct MediumFocusView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     WeekStreakRow(
                         weekStreak: payload.weekStreak,
+                        weekPerfect: payload.weekPerfect,
                         weekLabels: payload.weekLabels,
                         dot: 20
                     )
@@ -426,6 +466,7 @@ struct LargeFocusView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     WeekStreakRow(
                         weekStreak: payload.weekStreak,
+                        weekPerfect: payload.weekPerfect,
                         weekLabels: payload.weekLabels,
                         dot: 30
                     )

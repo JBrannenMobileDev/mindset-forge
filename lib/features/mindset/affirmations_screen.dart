@@ -9,6 +9,7 @@ import '../../core/widgets/responsive_layout.dart';
 import '../../core/widgets/shimmer_widget.dart';
 import '../../providers/auth_provider.dart';
 import 'affirmations_tab.dart';
+import 'widgets/affirmations_how_to.dart';
 
 /// Pushed detail screen for Affirmations (morning/evening sessions, list,
 /// add/generate). Reached from the Mindset hub.
@@ -30,6 +31,13 @@ class AffirmationsScreen extends ConsumerWidget {
         ),
         title:
             Text(AppStrings.affirmations, style: AppTextStyles.headlineMedium),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline_rounded),
+            tooltip: AppStrings.affirmationsHowToTitle,
+            onPressed: () => showAffirmationsHowToSheet(context),
+          ),
+        ],
       ),
       body: SafeArea(
         bottom: false,

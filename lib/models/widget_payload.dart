@@ -59,6 +59,11 @@ class WidgetPayload {
   /// `weekStreak[6]` reflects today's live qualification (5+ of 9 wins).
   final List<bool> weekStreak;
 
+  /// Per-day 9/9 perfect flag aligned to [weekStreak] (index 6 = today).
+  /// `perfect` always implies the day also qualifies; the native side renders
+  /// these cells with the perfect-day treatment (gradient + star).
+  final List<bool> weekPerfect;
+
   /// Single-char weekday letters aligned to [weekStreak] (e.g. M T W T F S S).
   final List<String> weekLabels;
 
@@ -87,6 +92,7 @@ class WidgetPayload {
     required this.completedCount,
     required this.totalCount,
     required this.weekStreak,
+    required this.weekPerfect,
     required this.weekLabels,
     required this.weekCaption,
     required this.displayName,
@@ -115,6 +121,7 @@ class WidgetPayload {
       completedCount: 0,
       totalCount: DailyCompletion.totalCount,
       weekStreak: List<bool>.filled(7, false),
+      weekPerfect: List<bool>.filled(7, false),
       weekLabels: _weekLabels(at),
       weekCaption: '',
       displayName: '',
@@ -147,6 +154,7 @@ class WidgetPayload {
     final subline = isFocusKind ? '' : action.subtitle;
 
     final weekStreak = _weekStreak(profile, dc, at);
+    final weekPerfect = _weekPerfect(profile, dc, at);
     final weekCaption = dc.countsForStreak
         ? AppStrings.widgetStreakSafe
         : '${dc.completedCount}/${DailyCompletion.totalCount} today — '
@@ -170,6 +178,7 @@ class WidgetPayload {
       completedCount: dc.completedCount,
       totalCount: DailyCompletion.totalCount,
       weekStreak: weekStreak,
+      weekPerfect: weekPerfect,
       weekLabels: _weekLabels(at),
       weekCaption: weekCaption,
       displayName: profile.displayName,
@@ -221,6 +230,27 @@ class WidgetPayload {
     }).toList();
   }
 
+  /// Per-day 9/9 perfect status for the last 7 days. Today (index 6) uses the
+  /// live completion record; prior days look up history. Mirrors the dashboard
+  /// `_StreakStrip` perfect-day branch so the widget and app never disagree.
+  static List<bool> _weekPerfect(
+    UserProfile profile,
+    DailyCompletion today,
+    DateTime at,
+  ) {
+    final days = _last7Days(at);
+    final todayKey = _dateString(days.last);
+    return days.map((d) {
+      final key = _dateString(d);
+      if (key == todayKey) return today.isPerfectDay;
+      final c = profile.dailyCompletions.firstWhere(
+        (x) => x.date == key,
+        orElse: () => DailyCompletion(date: key),
+      );
+      return c.isPerfectDay;
+    }).toList();
+  }
+
   /// Single-char weekday letters aligned to [_last7Days]. Locale-independent
   /// (DateTime.weekday: 1 = Mon … 7 = Sun) so it stays in sync with native.
   static List<String> _weekLabels(DateTime at) {
@@ -265,6 +295,7 @@ class WidgetPayload {
         'completedCount': completedCount,
         'totalCount': totalCount,
         'weekStreak': weekStreak,
+        'weekPerfect': weekPerfect,
         'weekLabels': weekLabels,
         'weekCaption': weekCaption,
         'displayName': displayName,
@@ -291,6 +322,10 @@ class WidgetPayload {
         totalCount:
             (json['totalCount'] as num?)?.toInt() ?? DailyCompletion.totalCount,
         weekStreak: (json['weekStreak'] as List?)
+                ?.map((e) => e as bool? ?? false)
+                .toList() ??
+            const [],
+        weekPerfect: (json['weekPerfect'] as List?)
                 ?.map((e) => e as bool? ?? false)
                 .toList() ??
             const [],

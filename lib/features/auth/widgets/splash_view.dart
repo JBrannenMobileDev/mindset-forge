@@ -3,7 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
-import 'nebula_background.dart';
+import '../../../core/widgets/nebula_background.dart';
 
 /// Pure-presentation branded splash visuals: dark background, glowing logo,
 /// app name + tagline, and a subtle loading indicator.

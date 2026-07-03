@@ -12,7 +12,6 @@ import '../../core/widgets/app_card.dart';
 import '../../core/widgets/widget_education_sheet.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/auth_notifier.dart';
-import '../../providers/claude_provider.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -22,7 +21,6 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  bool _isRefreshingBlueprint = false;
   bool _isDeletingAccount = false;
   bool _isSavingPreference = false;
 
@@ -88,36 +86,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
     } finally {
       if (mounted) setState(() => _isSavingPreference = false);
-    }
-  }
-
-  Future<void> _refreshBlueprint() async {
-    final profile = ref.read(currentUserProfileProvider).valueOrNull;
-    if (profile == null) return;
-    setState(() => _isRefreshingBlueprint = true);
-    try {
-      final insight =
-          await ref.read(claudeServiceProvider).generateMindsetSummary(profile);
-      final uid = ref.read(authStateProvider).valueOrNull?.uid;
-      if (uid != null) {
-        await ref.read(firestoreServiceProvider).updateUserField(uid, {
-          'mindsetBlueprintSummary': insight,
-          'mindsetBlueprintRefreshedAt': DateTime.now().toIso8601String(),
-        });
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Mindset blueprint refreshed!')),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to refresh. Please try again.')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isRefreshingBlueprint = false);
     }
   }
 
@@ -334,29 +302,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 title: 'Partner Messages',
                 subtitle: 'Encouragement your partners have sent',
                 onTap: () => context.push('/notifications'),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-
-          // ── Coaching ─────────────────────────────────────────────
-          const _GroupLabel('Coaching'),
-          _SettingsCard(
-            children: [
-              _CardRow(
-                icon: Icons.auto_awesome_rounded,
-                iconColor: AppColors.primary,
-                title: 'Refresh Mindset Blueprint',
-                subtitle: 'Re-analyze your mindset with fresh AI insights',
-                trailing: _isRefreshingBlueprint
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: AppColors.primary),
-                      )
-                    : null,
-                onTap: _isRefreshingBlueprint ? null : _refreshBlueprint,
               ),
             ],
           ),

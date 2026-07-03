@@ -185,6 +185,11 @@ class AnalyticsService {
 
   void trackBlueprintCompleted() => _track('blueprint_completed');
 
+  void trackBlueprintSnapshotCreated({required double deltaMagnitude}) =>
+      _track('blueprint_snapshot_created', {
+        'delta_magnitude': deltaMagnitude,
+      });
+
   void trackDeepDiveModuleCompleted(String module) =>
       _track('deep_dive_module_completed', {'module': module});
 

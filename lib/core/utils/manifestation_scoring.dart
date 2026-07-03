@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import '../../models/user_profile.dart';
 import '../../models/manifestation_alignment.dart';
+import '../../models/goal.dart';
 
 /// Computes manifestation alignment scores from real activity, replacing the
 /// old manual self-rating. Pure and synchronous: depends only on the profile.
@@ -15,13 +18,38 @@ abstract final class ManifestationScoring {
   /// habits is completed; below the bar the day earns its exact fraction.
   static const double habitDayThreshold = 0.7;
 
+  // How long a completed goal keeps full Results credit, scaled by goal length
+  // so a big long-horizon win is honored far longer than a quick one. Beyond
+  // the window the completion ages out of the average, so old wins can't mask a
+  // neglected current list. Life goals never expire.
+  static const int shortTermCreditDays = 30;
+  static const int mediumTermCreditDays = 90;
+  static const int longTermCreditDays = 180;
+
+  /// Days a completed goal keeps full Results credit; null = never expires.
+  static int? _completedGoalCreditDays(String goalType) => switch (goalType) {
+        kGoalTypeShortTerm => shortTermCreditDays,
+        kGoalTypeMediumTerm => mediumTermCreditDays,
+        kGoalTypeLongTerm => longTermCreditDays,
+        kGoalTypeLifeGoal => null,
+        _ => longTermCreditDays,
+      };
+
   /// Days since the account was created (0 on the signup day).
   static int daysSinceSignup(UserProfile p) {
     final created = DateTime(p.createdAt.year, p.createdAt.month, p.createdAt.day);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+    final today = _graceAnchor();
     final diff = today.difference(created).inDays;
     return diff < 0 ? 0 : diff;
+  }
+
+  /// The current "active day" at midnight precision. Midnight–4 AM counts as
+  /// the previous day so scoring keys match where daily wins are saved
+  /// (`AppDateUtils.todayStringWithGracePeriod()`).
+  static DateTime _graceAnchor() {
+    final now = DateTime.now();
+    final adjusted = now.hour < 4 ? now.subtract(const Duration(days: 1)) : now;
+    return DateTime(adjusted.year, adjusted.month, adjusted.day);
   }
 
   /// True while the user is still inside the initial ramp-up window, during
@@ -44,6 +72,7 @@ abstract final class ManifestationScoring {
   }) {
     final window = effectiveWindow(p, windowDays: windowDays);
     final dates = _recentDateStrings(window);
+    final todayKey = dates.isEmpty ? null : dates.first;
 
     // Index daily completions by date for O(1) lookup.
     final byDate = {for (final c in p.dailyCompletions) c.date: c};
@@ -54,14 +83,38 @@ abstract final class ManifestationScoring {
     int chatDays = 0;
     int priorityDays = 0;
 
+    // Today's contribution, tracked separately so an in-progress day can only
+    // lift a dimension's score, never drag it down (see [_graced] below).
+    int todayAffirm = 0;
+    int todayVis = 0;
+    int todayJournal = 0;
+    int todayChat = 0;
+    int todayPriority = 0;
+
     for (final date in dates) {
       final c = byDate[date];
       if (c == null) continue;
-      if (c.affirmationsMorning && c.affirmationsEvening) affirmationDays++;
-      if (c.futureSelfCompleted) visualizationDays++;
-      if (c.journalCompleted) journalDays++;
-      if (c.chatCompleted) chatDays++;
-      if (c.priorityActionsCompleted) priorityDays++;
+      final isToday = date == todayKey;
+      if (c.affirmationsMorning && c.affirmationsEvening) {
+        affirmationDays++;
+        if (isToday) todayAffirm++;
+      }
+      if (c.futureSelfCompleted) {
+        visualizationDays++;
+        if (isToday) todayVis++;
+      }
+      if (c.journalCompleted) {
+        journalDays++;
+        if (isToday) todayJournal++;
+      }
+      if (c.chatCompleted) {
+        chatDays++;
+        if (isToday) todayChat++;
+      }
+      if (c.priorityActionsCompleted) {
+        priorityDays++;
+        if (isToday) todayPriority++;
+      }
     }
 
     // Habits: capped-proportional credit per day. A day earns the exact
@@ -70,6 +123,7 @@ abstract final class ManifestationScoring {
     // (e.g. 2/3 = 0.67) without giving full credit away below the bar.
     final activeHabits = p.habits.where((h) => h.state == 'active').toList();
     double habitCredit = 0;
+    double todayHabitCredit = 0;
     if (activeHabits.isNotEmpty) {
       for (final date in dates) {
         final parts = date.split('-');
@@ -82,26 +136,61 @@ abstract final class ManifestationScoring {
           );
         }).length;
         final fraction = completed / activeHabits.length;
-        habitCredit += fraction >= habitDayThreshold ? 1.0 : fraction;
+        final dayCredit = fraction >= habitDayThreshold ? 1.0 : fraction;
+        habitCredit += dayCredit;
+        if (date == todayKey) todayHabitCredit += dayCredit;
       }
     }
 
-    final twoW = window * 2;
     double pct(num count, int denom) =>
         denom <= 0 ? 0 : (count / denom * 100).clamp(0, 100).toDouble();
 
-    final subconscious = pct(affirmationDays + visualizationDays, twoW);
-    final thought = pct(journalDays + chatDays, twoW);
-    final action = pct(habitCredit + priorityDays, twoW);
+    // Grace: score each window dimension both including and excluding today,
+    // then take the max. While today is still in progress it can only raise
+    // the score, never lower it, so scores don't sag every morning before the
+    // user has had a chance to finish.
+    final fullDenom = window * 2; // includes today
+    final pastDenom = (window - 1) * 2; // excludes today
+    double graced(num full, num todayPart) {
+      final including = pct(full, fullDenom);
+      if (pastDenom <= 0) return including; // first day: no baseline yet
+      final excluding = pct(full - todayPart, pastDenom);
+      return math.max(excluding, including);
+    }
 
-    final activeGoals =
-        p.goals.where((g) => g.status == 'active').toList();
-    final results = activeGoals.isEmpty
+    final subconscious =
+        graced(affirmationDays + visualizationDays, todayAffirm + todayVis);
+    final thought = graced(journalDays + chatDays, todayJournal + todayChat);
+    final action = graced(habitCredit + priorityDays, todayHabitCredit + todayPriority);
+
+    // Results: active goals contribute their current progress; completed goals
+    // contribute a full 100 while within their goal-length credit window. This
+    // means finishing a goal never lowers the score (it swaps partial progress
+    // for a held 100), yet stale wins age out so the score reflects what the
+    // user is actually producing now.
+    final anchor = _graceAnchor();
+    final contributions = <double>[];
+    for (final g in p.goals) {
+      if (g.status == 'active') {
+        contributions.add(g.progressPercent);
+      } else if (g.status == 'completed') {
+        final creditDays = _completedGoalCreditDays(g.goalType);
+        final completedAt = g.completedAt;
+        // Permanent (life goal), or legacy completions with no date, always
+        // count; otherwise credit lasts for the goal-length window.
+        final withinWindow = creditDays == null ||
+            completedAt == null ||
+            anchor
+                    .difference(DateTime(
+                        completedAt.year, completedAt.month, completedAt.day))
+                    .inDays <=
+                creditDays;
+        if (withinWindow) contributions.add(100.0);
+      }
+    }
+    final results = contributions.isEmpty
         ? 0.0
-        : (activeGoals
-                    .map((g) => g.progressPercent)
-                    .reduce((a, b) => a + b) /
-                activeGoals.length)
+        : (contributions.reduce((a, b) => a + b) / contributions.length)
             .clamp(0, 100)
             .toDouble();
 
@@ -114,11 +203,12 @@ abstract final class ManifestationScoring {
     );
   }
 
-  /// The most recent [count] date strings (yyyy-MM-dd), today first.
+  /// The most recent [count] date strings (yyyy-MM-dd), today first. Anchored
+  /// to the 4 AM grace period so keys match saved daily-win records.
   static List<String> _recentDateStrings(int count) {
-    final now = DateTime.now();
+    final base = _graceAnchor();
     return List.generate(count, (i) {
-      final d = now.subtract(Duration(days: i));
+      final d = base.subtract(Duration(days: i));
       return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     });
   }

@@ -193,20 +193,13 @@ class _ScoreRingPainter extends CustomPainter {
     final radius = (size.width - 12) / 2;
 
     final bgPaint = Paint()
-      ..color = AppColors.border
+      ..color = AppColors.borderSubtle
       ..style = PaintingStyle.stroke
       ..strokeWidth = 8
       ..strokeCap = StrokeCap.round;
 
-    final gradient = SweepGradient(
-      colors: const [AppColors.primary, AppColors.secondary],
-      startAngle: -math.pi / 2,
-      endAngle: -math.pi / 2 + math.pi * 2 * (score / 100),
-    );
-
     final fgPaint = Paint()
-      ..shader =
-          gradient.createShader(Rect.fromCircle(center: center, radius: radius))
+      ..color = AppColors.secondary
       ..style = PaintingStyle.stroke
       ..strokeWidth = 8
       ..strokeCap = StrokeCap.round;

@@ -19,6 +19,9 @@ class NotificationPrefs {
   final bool partnerEnabled;
   final bool lifecycleEnabled;
 
+  /// Sunday weekly review ready push notifications.
+  final bool weeklyInsightEnabled;
+
   /// Reminder times (minutes since local midnight).
   final int morningReminderMinutes;
   final int eveningReminderMinutes;
@@ -40,6 +43,7 @@ class NotificationPrefs {
     this.streakEnabled = true,
     this.partnerEnabled = true,
     this.lifecycleEnabled = true,
+    this.weeklyInsightEnabled = true,
     this.morningReminderMinutes = defaultMorningMinutes,
     this.eveningReminderMinutes = defaultEveningMinutes,
     this.streakReminderMinutes = defaultStreakMinutes,
@@ -70,6 +74,7 @@ class NotificationPrefs {
     bool? streakEnabled,
     bool? partnerEnabled,
     bool? lifecycleEnabled,
+    bool? weeklyInsightEnabled,
     int? morningReminderMinutes,
     int? eveningReminderMinutes,
     int? streakReminderMinutes,
@@ -83,6 +88,7 @@ class NotificationPrefs {
       streakEnabled: streakEnabled ?? this.streakEnabled,
       partnerEnabled: partnerEnabled ?? this.partnerEnabled,
       lifecycleEnabled: lifecycleEnabled ?? this.lifecycleEnabled,
+      weeklyInsightEnabled: weeklyInsightEnabled ?? this.weeklyInsightEnabled,
       morningReminderMinutes:
           morningReminderMinutes ?? this.morningReminderMinutes,
       eveningReminderMinutes:
@@ -102,6 +108,7 @@ class NotificationPrefs {
       streakEnabled: json['streakEnabled'] as bool? ?? true,
       partnerEnabled: json['partnerEnabled'] as bool? ?? true,
       lifecycleEnabled: json['lifecycleEnabled'] as bool? ?? true,
+      weeklyInsightEnabled: json['weeklyInsightEnabled'] as bool? ?? true,
       morningReminderMinutes:
           (json['morningReminderMinutes'] as num?)?.toInt() ??
               defaultMorningMinutes,
@@ -125,6 +132,7 @@ class NotificationPrefs {
         'streakEnabled': streakEnabled,
         'partnerEnabled': partnerEnabled,
         'lifecycleEnabled': lifecycleEnabled,
+        'weeklyInsightEnabled': weeklyInsightEnabled,
         'morningReminderMinutes': morningReminderMinutes,
         'eveningReminderMinutes': eveningReminderMinutes,
         'streakReminderMinutes': streakReminderMinutes,

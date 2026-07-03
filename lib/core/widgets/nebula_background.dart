@@ -3,8 +3,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 /// Full-bleed nebula backdrop shared across the auth flow (splash, login,
-/// signup). Renders the purple-top / cyan-bottom nebula image with an optional
-/// blur.
+/// signup) and onboarding. Renders the purple-top / cyan-bottom nebula image
+/// with an optional blur.
 ///
 /// On the splash this stays sharp ([blurSigma] == 0) — it's only on screen
 /// briefly during cold launch and its content sits on the calm centre band.

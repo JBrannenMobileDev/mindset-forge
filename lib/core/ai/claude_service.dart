@@ -389,6 +389,109 @@ RULES — NEVER BREAK THESE:
     }
   }
 
+  /// Infers 5 limiting beliefs the user *likely* holds, based on the light
+  /// signal collected in onboarding (situation, future-self qualities, goals).
+  /// Presented back for recognition ("tap the ones that ring true") so the user
+  /// never has to self-diagnose from a cold start. Falls back to a curated list.
+  Future<List<String>> inferLimitingBeliefs({
+    required String situation,
+    required List<String> qualities,
+    required List<Goal> goals,
+    String identityStatement = '',
+  }) async {
+    const fallback = [
+      "I'm not good enough",
+      "Money is hard to make",
+      "I always fail",
+      "Success isn't for people like me",
+      "I don't deserve success",
+    ];
+    try {
+      final goalTitles = goals.take(3).map((g) => g.title).join(', ');
+      final identityLine = identityStatement.trim().isNotEmpty
+          ? '\nWho they want to become: "$identityStatement"'
+          : '';
+      final response = await complete(
+        systemPrompt:
+            'You are a mindset coach identifying the limiting beliefs a person '
+            'most likely holds. Based on their situation and goals, infer 5 '
+            'beliefs they probably carry, each phrased in FIRST PERSON exactly '
+            'as they would say it to themselves (e.g. "I\'m not good enough"). '
+            'Keep each under 8 words. Return ONLY a JSON array of 5 strings. '
+            'No other text.',
+        userPrompt:
+            'Current situation: "$situation"\n'
+            'Qualities they want to embody: ${qualities.join(', ')}\n'
+            'Their goals: $goalTitles'
+            '$identityLine\n\n'
+            'Infer the 5 limiting beliefs most likely holding this person back.',
+        maxTokens: 150,
+      );
+      final jsonStr = response.contains('[')
+          ? response.substring(
+              response.indexOf('['), response.lastIndexOf(']') + 1)
+          : response;
+      final list = jsonDecode(jsonStr) as List<dynamic>;
+      final beliefs = list.map((e) => e.toString()).toList();
+      return beliefs.isEmpty ? fallback : beliefs;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  /// Generates the onboarding "aha" in a single call: a polished identity
+  /// statement AND a personalized coach analysis, delivered together as one
+  /// climactic reveal. Returns keys `identityStatement` and `analysis`.
+  Future<Map<String, String>> generateOnboardingReveal(
+      UserProfile profile) async {
+    const fallbackStatement =
+        'I am a focused, resilient person who takes consistent action toward my most important goals.';
+    const fallbackAnalysis =
+        'Your profile reveals a person committed to growth. Continue building on your strengths while staying curious about the beliefs that may be holding you back.';
+    try {
+      final qualities = profile.identityQualities.isNotEmpty
+          ? profile.identityQualities.join(', ')
+          : '(not specified)';
+      final response = await complete(
+        systemPrompt:
+            'You are a mindset coach delivering a new user\'s first reveal. '
+            'Return ONLY valid JSON with two keys and no other text:\n'
+            '"identityStatement": a first-person, present-tense identity '
+            'statement (one sentence, 15-30 words, bold and emotionally '
+            'resonant, no quotes).\n'
+            '"analysis": a warm, insightful 2-3 paragraph read on this person — '
+            'name their biggest strength, their main growth edge, and one '
+            'powerful belief shift they\'re ready for. Reference their goals and '
+            'who they want to become. Honest and encouraging, never generic.',
+        userPrompt:
+            '${UserContextBuilder.coreBlock(profile)}\n\n'
+            '${UserContextBuilder.goalsBlock(profile)}\n\n'
+            'Current situation: "${profile.identitySituation}"\n'
+            'Qualities they want to embody: $qualities\n'
+            '${UserContextBuilder.beliefHistoryBlock(profile)}',
+        maxTokens: 900,
+      );
+      final jsonStr = response.contains('{')
+          ? response.substring(
+              response.indexOf('{'), response.lastIndexOf('}') + 1)
+          : response;
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      final statement = (data['identityStatement'] as String?)?.trim();
+      final analysis = (data['analysis'] as String?)?.trim();
+      return {
+        'identityStatement':
+            statement == null || statement.isEmpty ? fallbackStatement : statement,
+        'analysis':
+            analysis == null || analysis.isEmpty ? fallbackAnalysis : analysis,
+      };
+    } catch (_) {
+      return {
+        'identityStatement': fallbackStatement,
+        'analysis': fallbackAnalysis,
+      };
+    }
+  }
+
   /// Rewrites a draft affirmation into a polished "I am" present-tense statement.
   /// Returns [draft] unchanged on failure rather than surfacing an error.
   Future<String> enhanceAffirmation(String draft, UserProfile profile) async {
@@ -540,26 +643,6 @@ ${setup.amplifiers.isNotEmpty ? 'Character Traits (weave in naturally, do not st
           'Messages are checked once. A few updates come through. Work moves forward.\n\n'
           'There is space in the day. The pace holds.\n\n'
           'The scene continues. This version carries forward.';
-    }
-  }
-
-  Future<String> generateWeeklyInsight(UserProfile profile) async {
-    try {
-      return await complete(
-        systemPrompt:
-            'You write a weekly insight card for a mindset coaching app. Analyze the user\'s '
-            'progress patterns and deliver one powerful insight + one specific action for the '
-            'coming week. 2 paragraphs max.',
-        userPrompt:
-            '${UserContextBuilder.coreBlock(profile)}\n\n'
-            '${UserContextBuilder.goalsBlock(profile)}\n\n'
-            '${UserContextBuilder.habitsBlock(profile)}\n\n'
-            '${UserContextBuilder.recentActivityBlock(profile)}\n\n'
-            '${UserContextBuilder.journalMoodBlock(profile)}',
-        maxTokens: 250,
-      );
-    } catch (_) {
-      return 'This week, focus on consistency over intensity. Small daily actions compound into extraordinary results.';
     }
   }
 

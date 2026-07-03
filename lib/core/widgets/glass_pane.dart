@@ -1,20 +1,26 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_spacing.dart';
+import '../constants/app_colors.dart';
+import '../constants/app_spacing.dart';
 
-/// Frosted-glass card that contains the auth form/CTAs on mobile, floating over
-/// the blurred nebula backdrop.
+/// Frosted-glass card that floats over the blurred nebula backdrop. Used by the
+/// auth flow (form/CTAs) and the onboarding step pane on wide screens.
 ///
-/// Mirrors the wide-screen `_FormPane` decoration (border, radius, layered
-/// shadows) but is translucent and runs a localized [BackdropFilter] so the
-/// violet/cyan nebula frosts through the edges — the premium "glass" feel.
-/// The blur is card-sized, so the cost stays low.
-class AuthGlassPane extends StatelessWidget {
+/// Translucent with a localized [BackdropFilter] so the violet/cyan nebula
+/// frosts through the edges — the premium "glass" feel. The blur is card-sized,
+/// so the cost stays low.
+class GlassPane extends StatelessWidget {
   final Widget child;
 
-  const AuthGlassPane({super.key, required this.child});
+  /// Inner padding around [child]. Defaults to [AppSpacing.xl].
+  final EdgeInsetsGeometry padding;
+
+  const GlassPane({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(AppSpacing.xl),
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +29,7 @@ class AuthGlassPane extends StatelessWidget {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
-          padding: const EdgeInsets.all(AppSpacing.xl),
+          padding: padding,
           decoration: BoxDecoration(
             color: AppColors.surfaceElevated.withValues(alpha: 0.72),
             borderRadius: BorderRadius.circular(AppSpacing.radiusXl),

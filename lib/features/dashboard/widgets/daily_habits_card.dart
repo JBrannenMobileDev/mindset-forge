@@ -118,29 +118,34 @@ class _HabitRow extends StatelessWidget {
           ),
           child: Row(
             children: [
-              GestureDetector(
-                onTap: habit.isCompletedToday ? null : onComplete,
-                behavior: HitTestBehavior.opaque,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: habit.isCompletedToday
-                        ? AppColors.primary
-                        : Colors.transparent,
-                    shape: BoxShape.circle,
-                    border: Border.all(
+              MouseRegion(
+                cursor: habit.isCompletedToday
+                    ? MouseCursor.defer
+                    : SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: habit.isCompletedToday ? null : onComplete,
+                  behavior: HitTestBehavior.opaque,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
                       color: habit.isCompletedToday
                           ? AppColors.primary
-                          : AppColors.border,
-                      width: 2,
+                          : Colors.transparent,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: habit.isCompletedToday
+                            ? AppColors.primary
+                            : AppColors.border,
+                        width: 2,
+                      ),
                     ),
+                    child: habit.isCompletedToday
+                        ? const Icon(Icons.check_rounded,
+                            size: 16, color: Colors.white)
+                        : null,
                   ),
-                  child: habit.isCompletedToday
-                      ? const Icon(Icons.check_rounded,
-                          size: 16, color: Colors.white)
-                      : null,
                 ),
               ),
               const SizedBox(width: AppSpacing.md),
@@ -178,8 +183,8 @@ class _HabitRow extends StatelessWidget {
                   const SizedBox(width: 2),
                   Text(
                     '${habit.currentStreak}',
-                    style:
-                        AppTextStyles.labelSmall.copyWith(color: AppColors.warning),
+                    style: AppTextStyles.labelSmall
+                        .copyWith(color: AppColors.warning),
                   ),
                 ],
               ),

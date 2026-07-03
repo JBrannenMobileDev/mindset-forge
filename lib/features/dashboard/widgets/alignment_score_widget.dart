@@ -123,20 +123,14 @@ class _ScoreRingPainter extends CustomPainter {
     const strokeWidth = 8.0;
 
     final bgPaint = Paint()
-      ..color = AppColors.border
+      ..color = AppColors.borderSubtle
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
 
-    final gradient = SweepGradient(
-      colors: const [AppColors.primary, AppColors.secondary],
-      startAngle: -math.pi / 2,
-      endAngle: -math.pi / 2 + math.pi * 2 * (score / 100),
-    );
-
     final rect = Rect.fromCircle(center: center, radius: radius);
     final fgPaint = Paint()
-      ..shader = gradient.createShader(rect)
+      ..color = AppColors.secondary
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
@@ -166,7 +160,7 @@ class _DimensionBar extends StatelessWidget {
     return Row(
       children: [
         SizedBox(
-          width: 80,
+          width: 92,
           child: Text(
             label,
             style: AppTextStyles.labelSmall.copyWith(
@@ -174,6 +168,7 @@ class _DimensionBar extends StatelessWidget {
             ),
           ),
         ),
+        const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(2),

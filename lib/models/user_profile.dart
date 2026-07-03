@@ -15,6 +15,8 @@ import 'accountability_relationship.dart';
 import 'journal_summary.dart';
 import 'coach_memory.dart';
 import 'notification_prefs.dart';
+import 'weekly_insight.dart';
+import 'blueprint_snapshot.dart';
 
 class UserProfile {
   final String uid;
@@ -31,6 +33,10 @@ class UserProfile {
   final List<String> identityQualities;
   final List<IdentityReadLog> identityReadLog;
   final List<Goal> goals;
+
+  /// Id of the goal the user marked as their #1 focus during onboarding. Empty
+  /// when unset; downstream code falls back to the first active goal.
+  final String primaryGoalId;
   final List<Habit> habits;
   final List<Affirmation> affirmations;
   final List<AffirmationCompletion> affirmationCompletions;
@@ -48,6 +54,8 @@ class UserProfile {
   /// (trait sliders, mental toughness, fear quiz) after the lightweight onboarding.
   final bool blueprintCompleted;
   final String mindsetBlueprintSummary;
+  final String? mindsetBlueprintSnapshotAt;
+  final List<BlueprintSnapshot> blueprintSnapshotHistory;
   final Map<String, String> dailyWisdom;
   final List<String> priorityActions;
   final String priorityActionsDate;
@@ -77,6 +85,10 @@ class UserProfile {
   /// True once the user has seen the home screen widget education prompt, so we
   /// stop nudging them in the Getting Started checklist and post-onboarding.
   final bool widgetPromptSeen;
+
+  /// True once the user dismisses the affirmations intro/education card, so the
+  /// "new to affirmations?" primer stops appearing on the Affirmations screen.
+  final bool affirmationsIntroDismissed;
   final CoachMemory coachMemory;
   final DateTime? coachDisclaimerAcceptedAt;
   final String? fcmToken;
@@ -90,6 +102,13 @@ class UserProfile {
   /// User-controllable notification preferences (categories, reminder times,
   /// quiet hours, partner-slip consent).
   final NotificationPrefs notificationPrefs;
+
+  /// Current structured weekly coaching review (generated Sunday cron or manual refresh).
+  final WeeklyInsight? weeklyInsight;
+
+  /// Prior weekly reviews, newest first (max 12).
+  final List<WeeklyInsight> weeklyInsightHistory;
+
   final DateTime createdAt;
 
   const UserProfile({
@@ -107,6 +126,7 @@ class UserProfile {
     this.identityQualities = const [],
     this.identityReadLog = const [],
     this.goals = const [],
+    this.primaryGoalId = '',
     this.habits = const [],
     this.affirmations = const [],
     this.affirmationCompletions = const [],
@@ -122,6 +142,8 @@ class UserProfile {
     this.mentalToughnessScore = 50.0,
     this.blueprintCompleted = false,
     this.mindsetBlueprintSummary = '',
+    this.mindsetBlueprintSnapshotAt,
+    this.blueprintSnapshotHistory = const [],
     this.dailyWisdom = const {},
     this.priorityActions = const [],
     this.priorityActionsDate = '',
@@ -138,17 +160,24 @@ class UserProfile {
     this.invitePromptSnoozedUntil,
     this.invitePromptsDismissed = false,
     this.widgetPromptSeen = false,
+    this.affirmationsIntroDismissed = false,
     this.coachMemory = const CoachMemory(),
     this.coachDisclaimerAcceptedAt,
     this.fcmToken,
     this.lastActiveAt,
     this.timezone = '',
     this.notificationPrefs = const NotificationPrefs(),
+    this.weeklyInsight,
+    this.weeklyInsightHistory = const [],
     required this.createdAt,
   });
 
   /// Whether the user has acknowledged the one-time coach disclaimer.
   bool get hasAcceptedCoachDisclaimer => coachDisclaimerAcceptedAt != null;
+
+  /// True when a weekly review exists and the user has not opened it yet.
+  bool get hasUnreadWeeklyInsight =>
+      weeklyInsight != null && weeklyInsight!.isUnread;
 
   /// The #1 focus is complete iff it appears in the authoritative completed
   /// list. Single source of truth so the dashboard and Priorities tab can
@@ -294,6 +323,7 @@ class UserProfile {
     List<String>? identityQualities,
     List<IdentityReadLog>? identityReadLog,
     List<Goal>? goals,
+    String? primaryGoalId,
     List<Habit>? habits,
     List<Affirmation>? affirmations,
     List<AffirmationCompletion>? affirmationCompletions,
@@ -309,6 +339,8 @@ class UserProfile {
     double? mentalToughnessScore,
     bool? blueprintCompleted,
     String? mindsetBlueprintSummary,
+    String? mindsetBlueprintSnapshotAt,
+    List<BlueprintSnapshot>? blueprintSnapshotHistory,
     Map<String, String>? dailyWisdom,
     List<String>? priorityActions,
     String? priorityActionsDate,
@@ -325,12 +357,15 @@ class UserProfile {
     DateTime? invitePromptSnoozedUntil,
     bool? invitePromptsDismissed,
     bool? widgetPromptSeen,
+    bool? affirmationsIntroDismissed,
     CoachMemory? coachMemory,
     DateTime? coachDisclaimerAcceptedAt,
     String? fcmToken,
     DateTime? lastActiveAt,
     String? timezone,
     NotificationPrefs? notificationPrefs,
+    WeeklyInsight? weeklyInsight,
+    List<WeeklyInsight>? weeklyInsightHistory,
     DateTime? createdAt,
   }) {
     return UserProfile(
@@ -350,6 +385,7 @@ class UserProfile {
       identityQualities: identityQualities ?? this.identityQualities,
       identityReadLog: identityReadLog ?? this.identityReadLog,
       goals: goals ?? this.goals,
+      primaryGoalId: primaryGoalId ?? this.primaryGoalId,
       habits: habits ?? this.habits,
       affirmations: affirmations ?? this.affirmations,
       affirmationCompletions:
@@ -367,6 +403,10 @@ class UserProfile {
       mentalToughnessScore: mentalToughnessScore ?? this.mentalToughnessScore,
       blueprintCompleted: blueprintCompleted ?? this.blueprintCompleted,
       mindsetBlueprintSummary: mindsetBlueprintSummary ?? this.mindsetBlueprintSummary,
+      mindsetBlueprintSnapshotAt:
+          mindsetBlueprintSnapshotAt ?? this.mindsetBlueprintSnapshotAt,
+      blueprintSnapshotHistory:
+          blueprintSnapshotHistory ?? this.blueprintSnapshotHistory,
       dailyWisdom: dailyWisdom ?? this.dailyWisdom,
       priorityActions: priorityActions ?? this.priorityActions,
       priorityActionsDate: priorityActionsDate ?? this.priorityActionsDate,
@@ -385,6 +425,8 @@ class UserProfile {
       invitePromptsDismissed:
           invitePromptsDismissed ?? this.invitePromptsDismissed,
       widgetPromptSeen: widgetPromptSeen ?? this.widgetPromptSeen,
+      affirmationsIntroDismissed:
+          affirmationsIntroDismissed ?? this.affirmationsIntroDismissed,
       coachMemory: coachMemory ?? this.coachMemory,
       coachDisclaimerAcceptedAt:
           coachDisclaimerAcceptedAt ?? this.coachDisclaimerAcceptedAt,
@@ -392,6 +434,8 @@ class UserProfile {
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
       timezone: timezone ?? this.timezone,
       notificationPrefs: notificationPrefs ?? this.notificationPrefs,
+      weeklyInsight: weeklyInsight ?? this.weeklyInsight,
+      weeklyInsightHistory: weeklyInsightHistory ?? this.weeklyInsightHistory,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -443,6 +487,7 @@ class UserProfile {
               ?.map((e) => Goal.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
+      primaryGoalId: json['primaryGoalId'] as String? ?? '',
       habits: (json['habits'] as List<dynamic>?)
               ?.map((e) => Habit.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -494,6 +539,14 @@ class UserProfile {
       mentalToughnessScore: (json['mentalToughnessScore'] as num?)?.toDouble() ?? 50.0,
       blueprintCompleted: json['blueprintCompleted'] as bool? ?? false,
       mindsetBlueprintSummary: json['mindsetBlueprintSummary'] as String? ?? '',
+      mindsetBlueprintSnapshotAt:
+          json['mindsetBlueprintSnapshotAt'] as String?,
+      blueprintSnapshotHistory:
+          (json['blueprintSnapshotHistory'] as List<dynamic>?)
+                  ?.map((e) =>
+                      BlueprintSnapshot.fromJson(e as Map<String, dynamic>))
+                  .toList() ??
+              [],
       dailyWisdom:
           Map<String, String>.from(json['dailyWisdom'] as Map? ?? {}),
       priorityActions:
@@ -530,6 +583,8 @@ class UserProfile {
       invitePromptsDismissed:
           json['invitePromptsDismissed'] as bool? ?? false,
       widgetPromptSeen: json['widgetPromptSeen'] as bool? ?? false,
+      affirmationsIntroDismissed:
+          json['affirmationsIntroDismissed'] as bool? ?? false,
       coachMemory: json['coachMemory'] != null
           ? CoachMemory.fromJson(json['coachMemory'] as Map<String, dynamic>)
           : const CoachMemory(),
@@ -545,6 +600,13 @@ class UserProfile {
           ? NotificationPrefs.fromJson(
               json['notificationPrefs'] as Map<String, dynamic>)
           : const NotificationPrefs(),
+      weeklyInsight: WeeklyInsight.tryFromJson(
+        json['weeklyInsight'] as Map<String, dynamic>?,
+      ),
+      weeklyInsightHistory: (json['weeklyInsightHistory'] as List<dynamic>?)
+              ?.map((e) => WeeklyInsight.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
     );
   }
@@ -564,6 +626,7 @@ class UserProfile {
         'identityQualities': identityQualities,
         'identityReadLog': identityReadLog.map((e) => e.toJson()).toList(),
         'goals': goals.map((g) => g.toJson()).toList(),
+        'primaryGoalId': primaryGoalId,
         'habits': habits.map((h) => h.toJson()).toList(),
         'affirmations': affirmations.map((a) => a.toJson()).toList(),
         'affirmationCompletions':
@@ -583,6 +646,10 @@ class UserProfile {
         'mentalToughnessScore': mentalToughnessScore,
         'blueprintCompleted': blueprintCompleted,
         'mindsetBlueprintSummary': mindsetBlueprintSummary,
+        if (mindsetBlueprintSnapshotAt != null)
+          'mindsetBlueprintSnapshotAt': mindsetBlueprintSnapshotAt,
+        'blueprintSnapshotHistory':
+            blueprintSnapshotHistory.map((e) => e.toJson()).toList(),
         'dailyWisdom': dailyWisdom,
         'priorityActions': priorityActions,
         'priorityActionsDate': priorityActionsDate,
@@ -602,12 +669,16 @@ class UserProfile {
         'invitePromptSnoozedUntil': invitePromptSnoozedUntil?.toIso8601String(),
         'invitePromptsDismissed': invitePromptsDismissed,
         'widgetPromptSeen': widgetPromptSeen,
+        'affirmationsIntroDismissed': affirmationsIntroDismissed,
         'coachMemory': coachMemory.toJson(),
         'coachDisclaimerAcceptedAt': coachDisclaimerAcceptedAt?.toIso8601String(),
         'fcmToken': fcmToken,
         'lastActiveAt': lastActiveAt?.toIso8601String(),
         'timezone': timezone,
         'notificationPrefs': notificationPrefs.toJson(),
+        if (weeklyInsight != null) 'weeklyInsight': weeklyInsight!.toJson(),
+        'weeklyInsightHistory':
+            weeklyInsightHistory.map((e) => e.toJson()).toList(),
         'createdAt': createdAt.toIso8601String(),
       };
 }

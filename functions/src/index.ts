@@ -1059,10 +1059,6 @@ function completedCount(c: CompletionDoc): number {
  * the streak when at least this many of the 9 required wins are done. */
 const STREAK_THRESHOLD = 5;
 
-/** Mirrors ManifestationScoring.habitDayThreshold: a day counts toward the
- * Action score if at least this fraction of active habits were completed. */
-const HABIT_DAY_THRESHOLD = 0.7;
-
 function localDateKey(d: Date): string {
   const m = (d.getMonth() + 1).toString().padStart(2, '0');
   const day = d.getDate().toString().padStart(2, '0');
@@ -1391,12 +1387,198 @@ async function forEachDocPaged(
 }
 
 /**
- * weeklyMindsetAnalysis — runs every Sunday at 9am UTC.
- * Analyzes each active user's week and updates mindset scores.
+ * weeklyInsightDelivery — runs every hour. For each user whose local time is
+ * Sunday 9:00, generates a structured weekly review (if they had ≥3 active
+ * days), rotates prior reports into history, and sends a push notification.
  */
-export const weeklyMindsetAnalysis = onSchedule(
-  { schedule: '0 9 * * 0', secrets: [anthropicKey], timeoutSeconds: 540 },
+const WEEKLY_INSIGHT_ACTIVE_DAY_THRESHOLD = 3;
+const WEEKLY_INSIGHT_HISTORY_MAX = 12;
+const WEEKLY_INSIGHT_DELIVERY_HOUR = 9;
+
+interface WeeklyInsightDoc {
+  pattern: string;
+  breakthrough: string;
+  focus: string;
+  generatedAt: string;
+  viewedAt?: string;
+  weekEnding: string;
+}
+
+function getLocalTimeInfo(
+  d: Date,
+  tz?: string,
+): { weekday: number; hour: number; dateKey: string } {
+  const timeZone = tz && tz.length > 0 ? tz : 'UTC';
+  try {
+    const dateKey = new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+    const weekdayStr = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      weekday: 'short',
+    }).format(d);
+    const weekdayMap: Record<string, number> = {
+      Sun: 0,
+      Mon: 1,
+      Tue: 2,
+      Wed: 3,
+      Thu: 4,
+      Fri: 5,
+      Sat: 6,
+    };
+    const hourStr = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hour: 'numeric',
+      hour12: false,
+    }).format(d);
+    return {
+      weekday: weekdayMap[weekdayStr] ?? 0,
+      hour: parseInt(hourStr, 10),
+      dateKey,
+    };
+  } catch {
+    const y = d.getUTCFullYear();
+    const m = (d.getUTCMonth() + 1).toString().padStart(2, '0');
+    const day = d.getUTCDate().toString().padStart(2, '0');
+    return {
+      weekday: d.getUTCDay(),
+      hour: d.getUTCHours(),
+      dateKey: `${y}-${m}-${day}`,
+    };
+  }
+}
+
+function isWeeklyInsightDeliveryWindow(d: Date, tz?: string): boolean {
+  const { weekday, hour } = getLocalTimeInfo(d, tz);
+  return weekday === 0 && hour === WEEKLY_INSIGHT_DELIVERY_HOUR;
+}
+
+function countActiveDaysPastWeek(
+  completions: CompletionDoc[],
+  tz?: string,
+  nowMs = Date.now(),
+): number {
+  const byDate = new Map<string, CompletionDoc>();
+  for (const c of completions) {
+    if (c.date) byDate.set(c.date, c);
+  }
+  let activeDays = 0;
+  for (let i = 1; i <= 7; i++) {
+    const key = localDateKeyInTz(new Date(nowMs - i * 86400000), tz);
+    const c = byDate.get(key);
+    if (c && completedCount(c) >= WEEKLY_INSIGHT_ACTIVE_DAY_THRESHOLD) {
+      activeDays++;
+    }
+  }
+  return activeDays;
+}
+
+function parseStructuredWeeklyInsight(text: string): WeeklyInsightDoc | null {
+  try {
+    const jsonStr = text.includes('{')
+      ? text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1)
+      : text;
+    const data = JSON.parse(jsonStr) as Record<string, unknown>;
+    const pattern = String(data.pattern ?? '');
+    const breakthrough = String(data.breakthrough ?? '');
+    const focus = String(data.focus ?? '');
+    if (!pattern && !breakthrough && !focus) return null;
+    return {
+      pattern,
+      breakthrough,
+      focus,
+      generatedAt: new Date().toISOString(),
+      weekEnding: '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function rotateWeeklyInsightHistory(
+  current: WeeklyInsightDoc | undefined,
+  history: WeeklyInsightDoc[],
+): WeeklyInsightDoc[] {
+  if (!current || (!current.pattern && !current.breakthrough && !current.focus)) {
+    return history;
+  }
+  const archived = current.viewedAt
+    ? current
+    : { ...current, viewedAt: new Date().toISOString() };
+  return [archived, ...history].slice(0, WEEKLY_INSIGHT_HISTORY_MAX);
+}
+
+function buildWeeklyInsightUserPrompt(profile: {
+  displayName?: string;
+  identityStatement?: string;
+  limitingBeliefs?: string[];
+  goals?: Array<{ title: string; status: string; progressPercent?: number }>;
+  habits?: Array<{ name?: string; state?: string }>;
+  dailyCompletions?: CompletionDoc[];
+  recentJournalSummaries?: Array<{ date?: string; mood?: string; snippet?: string }>;
+  mindsetBlueprintSummary?: string;
+  deepDive?: { modules?: Record<string, { insight?: string }> };
+}): string {
+  const activeGoals = (profile.goals ?? [])
+    .filter(g => g.status === 'active')
+    .slice(0, 6)
+    .map(g => `  • ${g.title} (${(g.progressPercent ?? 0).toFixed(0)}%)`)
+    .join('\n');
+
+  const activeHabits = (profile.habits ?? [])
+    .filter(h => h.state === 'active')
+    .slice(0, 8)
+    .map(h => `  • ${h.name ?? 'Habit'}`)
+    .join('\n');
+
+  const completions = profile.dailyCompletions ?? [];
+  const streak = computeStreak(completions);
+
+  const journalLines = (profile.recentJournalSummaries ?? [])
+    .slice(-5)
+    .map(j => `  • ${j.date ?? ''}: mood=${j.mood ?? 'okay'} — ${(j.snippet ?? '').slice(0, 80)}`)
+    .join('\n');
+
+  const deepDiveInsights = profile.deepDive?.modules
+    ? Object.values(profile.deepDive.modules)
+        .map(m => m.insight?.trim())
+        .filter((t): t is string => !!t && t.length > 0)
+        .slice(-3)
+        .map(t => `  • ${t.slice(0, 120)}`)
+        .join('\n')
+    : '';
+
+  const summaryLine = profile.mindsetBlueprintSummary
+    ? `\nMindset Blueprint Summary: "${profile.mindsetBlueprintSummary}"`
+    : '';
+
+  return `USER CONTEXT:
+Name: ${profile.displayName ?? 'User'}
+Identity: "${profile.identityStatement ?? ''}"
+Limiting Beliefs: ${(profile.limitingBeliefs ?? []).join('; ') || 'None identified'}${summaryLine}
+
+Active Goals:
+${activeGoals || '  • None set'}
+
+Current Habits:
+${activeHabits || '  • None active'}
+
+Consistency: ${streak} day streak
+
+Recent Journal Mood:
+${journalLines || '  • No recent entries'}
+
+Deep Dive Insights:
+${deepDiveInsights || '  • None yet'}`;
+}
+
+export const weeklyInsightDelivery = onSchedule(
+  { schedule: '0 * * * *', secrets: [anthropicKey], timeoutSeconds: 540 },
   async () => {
+    const now = new Date();
     const apiKey = anthropicKey.value().trim();
     const usersQuery = db
       .collection('users')
@@ -1408,239 +1590,84 @@ export const weeklyMindsetAnalysis = onSchedule(
         displayName?: string;
         identityStatement?: string;
         limitingBeliefs?: string[];
-        mindsetBlueprint?: Record<string, number>;
-        dailyCompletions?: Array<{ date: string; completedCount?: number }>;
-        goals?: Array<{ title: string; status: string }>;
-        currentStreak?: number;
-      };
-
-      try {
-        const prompt = `Analyze this user's week and provide a mindset coaching insight:
-Name: ${profile.displayName ?? 'User'}
-Identity: "${profile.identityStatement ?? ''}"
-Limiting Beliefs: ${(profile.limitingBeliefs ?? []).join(', ')}
-Active Goals: ${(profile.goals ?? []).filter(g => g.status === 'active').map(g => g.title).join(', ')}
-Days completed this week: ${(profile.dailyCompletions ?? []).length}
-
-Write a 2-paragraph personalized weekly insight. Highlight their biggest win and their main growth edge for the coming week. Be specific and encouraging.`;
-
-        const insight = await callAnthropicInternal(
-          'You are a world-class mindset coach writing weekly insights for your clients. Be personal, specific, and transformational.',
-          prompt,
-          400,
-          apiKey,
-        );
-
-        await userDoc.ref.update({
-          weeklyInsight: {
-            text: insight,
-            generatedAt: new Date().toISOString(),
-          },
-        });
-
-        console.log(`Weekly analysis complete for user: ${userDoc.id}`);
-      } catch (err) {
-        console.error(`Failed weekly analysis for user ${userDoc.id}:`, err);
-      }
-    });
-  },
-);
-
-/**
- * Profile shape (subset) needed to compute manifestation alignment server-side.
- */
-interface ScorableProfile {
-  createdAt?: string;
-  dailyCompletions?: Array<{
-    date: string;
-    affirmationsMorning?: boolean;
-    affirmationsEvening?: boolean;
-    futureSelfCompleted?: boolean;
-    journalCompleted?: boolean;
-    chatCompleted?: boolean;
-    priorityActionsCompleted?: boolean;
-  }>;
-  habits?: Array<{ state?: string; completionHistory?: string[] }>;
-  goals?: Array<{ progressPercent?: number; status?: string }>;
-}
-
-interface ManifestationScores {
-  subconscious: number;
-  thought: number;
-  action: number;
-  results: number;
-  overall: number;
-  effectiveWindow: number;
-  daysSinceSignup: number;
-  isRampingUp: boolean;
-}
-
-function dateKey(d: Date): string {
-  const m = (d.getUTCMonth() + 1).toString().padStart(2, '0');
-  const day = d.getUTCDate().toString().padStart(2, '0');
-  return `${d.getUTCFullYear()}-${m}-${day}`;
-}
-
-/**
- * Server-side port of lib/core/utils/manifestation_scoring.dart. Computes the
- * four alignment layers from real activity over an effective window of
- * min(10, daysSinceSignup + 1) so new users are scored fairly.
- */
-function computeManifestationAlignment(
-  profile: ScorableProfile,
-  windowDays = 10,
-): ManifestationScores {
-  const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-
-  let daysSinceSignup = 0;
-  if (profile.createdAt) {
-    const created = new Date(profile.createdAt);
-    if (!isNaN(created.getTime())) {
-      const createdDay = Date.UTC(
-        created.getUTCFullYear(),
-        created.getUTCMonth(),
-        created.getUTCDate(),
-      );
-      const diff = Math.floor((today - createdDay) / 86400000);
-      daysSinceSignup = diff < 0 ? 0 : diff;
-    }
-  }
-
-  const available = daysSinceSignup + 1;
-  const window = Math.max(1, Math.min(windowDays, available));
-
-  // Recent date keys (today first).
-  const dates: string[] = [];
-  for (let i = 0; i < window; i++) {
-    dates.push(dateKey(new Date(today - i * 86400000)));
-  }
-
-  const byDate = new Map<string, NonNullable<ScorableProfile['dailyCompletions']>[number]>();
-  for (const c of profile.dailyCompletions ?? []) {
-    byDate.set(c.date, c);
-  }
-
-  let affirmationDays = 0;
-  let visualizationDays = 0;
-  let journalDays = 0;
-  let chatDays = 0;
-  let priorityDays = 0;
-
-  for (const date of dates) {
-    const c = byDate.get(date);
-    if (!c) continue;
-    if (c.affirmationsMorning && c.affirmationsEvening) affirmationDays++;
-    if (c.futureSelfCompleted) visualizationDays++;
-    if (c.journalCompleted) journalDays++;
-    if (c.chatCompleted) chatDays++;
-    if (c.priorityActionsCompleted) priorityDays++;
-  }
-
-  const activeHabits = (profile.habits ?? []).filter(h => h.state === 'active');
-  let habitDays = 0;
-  if (activeHabits.length > 0) {
-    for (const date of dates) {
-      const completed = activeHabits.filter(h =>
-        (h.completionHistory ?? []).some(iso => {
-          const t = new Date(iso);
-          return !isNaN(t.getTime()) && dateKey(t) === date;
-        }),
-      ).length;
-      if (completed >= activeHabits.length * HABIT_DAY_THRESHOLD) habitDays++;
-    }
-  }
-
-  const twoW = window * 2;
-  const pct = (count: number, denom: number): number =>
-    denom <= 0 ? 0 : Math.min(100, Math.max(0, (count / denom) * 100));
-
-  const subconscious = pct(affirmationDays + visualizationDays, twoW);
-  const thought = pct(journalDays + chatDays, twoW);
-  const action = pct(habitDays + priorityDays, twoW);
-
-  const activeGoals = (profile.goals ?? []).filter(g => g.status === 'active');
-  const results =
-    activeGoals.length === 0
-      ? 0
-      : Math.min(
-          100,
-          Math.max(
-            0,
-            activeGoals.reduce((sum, g) => sum + (g.progressPercent ?? 0), 0) /
-              activeGoals.length,
-          ),
-        );
-
-  const overall =
-    subconscious * 0.35 + thought * 0.25 + action * 0.25 + results * 0.15;
-
-  return {
-    subconscious,
-    thought,
-    action,
-    results,
-    overall,
-    effectiveWindow: window,
-    daysSinceSignup,
-    isRampingUp: daysSinceSignup < windowDays - 1,
-  };
-}
-
-/**
- * weeklyManifestationReport — runs every Sunday at 10am UTC.
- * Generates a manifestation alignment report for each user.
- */
-export const weeklyManifestationReport = onSchedule(
-  { schedule: '0 10 * * 0', secrets: [anthropicKey], timeoutSeconds: 540 },
-  async () => {
-    const apiKey = anthropicKey.value().trim();
-    const usersQuery = db
-      .collection('users')
-      .where('onboardingStep', '>=', 5)
-      .orderBy('onboardingStep');
-
-    await forEachDocPaged(usersQuery, 200, async (userDoc) => {
-      const profile = userDoc.data() as {
-        displayName?: string;
-        createdAt?: string;
-        dailyCompletions?: ScorableProfile['dailyCompletions'];
-        habits?: ScorableProfile['habits'];
         goals?: Array<{ title: string; status: string; progressPercent?: number }>;
-        evidenceLog?: Array<{ content: string }>;
+        habits?: Array<{ name?: string; state?: string }>;
+        dailyCompletions?: CompletionDoc[];
+        recentJournalSummaries?: Array<{ date?: string; mood?: string; snippet?: string }>;
+        mindsetBlueprintSummary?: string;
+        deepDive?: { modules?: Record<string, { insight?: string }> };
+        timezone?: string;
+        fcmToken?: string;
+        weeklyInsight?: WeeklyInsightDoc;
+        weeklyInsightHistory?: WeeklyInsightDoc[];
+        notificationPrefs?: {
+          masterEnabled?: boolean;
+          weeklyInsightEnabled?: boolean;
+        };
       };
 
+      if (!isWeeklyInsightDeliveryWindow(now, profile.timezone)) return;
+
+      const { dateKey: weekEnding } = getLocalTimeInfo(now, profile.timezone);
+      if (profile.weeklyInsight?.weekEnding === weekEnding) return;
+
+      if (
+        countActiveDaysPastWeek(profile.dailyCompletions ?? [], profile.timezone) <
+        WEEKLY_INSIGHT_ACTIVE_DAY_THRESHOLD
+      ) {
+        return;
+      }
+
       try {
-        const alignment = computeManifestationAlignment(profile);
-        const recentEvidence = (profile.evidenceLog ?? []).slice(-5).map(e => e.content).join('; ');
-
-        const rampUpNote = alignment.isRampingUp
-          ? `\nNOTE: This user is on day ${alignment.daysSinceSignup + 1} of their first 10 days. Scores are based on very little history and will look low regardless of effort. Do NOT call out low scores or frame them as a problem. Focus on encouragement and building the habit.`
-          : '';
-
-        const prompt = `Generate a weekly manifestation alignment report:
-Name: ${profile.displayName ?? 'User'}
-Alignment Scores (computed from real activity) - Subconscious: ${alignment.subconscious.toFixed(0)}%, Thought: ${alignment.thought.toFixed(0)}%, Action: ${alignment.action.toFixed(0)}%, Results: ${alignment.results.toFixed(0)}%
-Active Goals: ${(profile.goals ?? []).filter(g => g.status === 'active').map(g => g.title).join(', ')}
-Recent Evidence of Growth: ${recentEvidence || 'None logged'}${rampUpNote}
-
-Write a 2-paragraph report on their manifestation alignment. Identify the weakest layer and give one specific practice to strengthen it this week.`;
-
-        const report = await callAnthropicInternal(
-          'You are a manifestation coach writing weekly alignment reports. Be insightful, specific, and practical.',
-          prompt,
-          400,
+        const userPrompt = buildWeeklyInsightUserPrompt(profile);
+        const response = await callAnthropicInternal(
+          'You are a mindset coach delivering a weekly review. '
+            + 'Return ONLY valid JSON with three keys: '
+            + '"pattern" (one sentence about the user\'s key pattern this week), '
+            + '"breakthrough" (one sentence celebrating their win or progress), '
+            + '"focus" (one specific action or focus for next week). '
+            + 'Be personal, direct, energizing. No other text.',
+          userPrompt,
+          300,
           apiKey,
         );
 
+        const parsed = parseStructuredWeeklyInsight(response);
+        if (!parsed) {
+          console.error(`Failed to parse weekly insight for user ${userDoc.id}`);
+          return;
+        }
+        parsed.weekEnding = weekEnding;
+
+        const history = rotateWeeklyInsightHistory(
+          profile.weeklyInsight,
+          profile.weeklyInsightHistory ?? [],
+        );
+
         await userDoc.ref.update({
-          weeklyManifestationReport: {
-            text: report,
-            generatedAt: new Date().toISOString(),
-          },
+          weeklyInsight: parsed,
+          weeklyInsightHistory: history,
         });
+
+        const prefs = profile.notificationPrefs;
+        const pushAllowed =
+          prefs?.masterEnabled !== false && prefs?.weeklyInsightEnabled !== false;
+        if (profile.fcmToken && pushAllowed) {
+          const firstName = (profile.displayName ?? 'there').split(' ')[0];
+          await sendPush({
+            token: profile.fcmToken,
+            title: 'Your weekly review is ready',
+            body: `See what stood out in your week, ${firstName}.`,
+            type: 'weekly_insight',
+            category: 'lifecycle',
+            route: '/progress',
+            recipientUid: userDoc.id,
+          });
+        }
+
+        console.log(`Weekly insight delivered for user: ${userDoc.id}`);
       } catch (err) {
-        console.error(`Failed manifestation report for user ${userDoc.id}:`, err);
+        console.error(`Failed weekly insight for user ${userDoc.id}:`, err);
       }
     });
   },

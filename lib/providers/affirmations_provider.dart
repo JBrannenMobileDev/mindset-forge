@@ -119,6 +119,20 @@ class AffirmationsNotifier extends StateNotifier<List<Affirmation>> {
         );
   }
 
+  /// Persists that the user has dismissed the affirmations intro/education card
+  /// so it stops appearing on the Affirmations screen.
+  Future<void> markIntroSeen() async {
+    final uid = _ref.read(authStateProvider).valueOrNull?.uid;
+    if (uid == null) return;
+    try {
+      await _ref.read(firestoreServiceProvider).updateUserField(uid, {
+        'affirmationsIntroDismissed': true,
+      });
+    } catch (e) {
+      debugPrint('AffirmationsNotifier.markIntroSeen failed: $e');
+    }
+  }
+
   List<Affirmation> get activeAffirmations =>
       state.where((a) => a.isActive).toList();
 }

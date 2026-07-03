@@ -84,15 +84,20 @@ class _BlueprintSetupScreenState extends ConsumerState<BlueprintSetupScreen> {
       return;
     }
 
+    final isFirstCompletion = !profile.blueprintCompleted;
+    final now = DateTime.now().toIso8601String();
     final updated = profile.copyWith(
       mindsetBlueprint: _blueprint,
-      // This is the user's first real self-assessment, so it becomes the
-      // baseline that future growth is measured against.
-      originalMindsetBaseline: _blueprint,
+      // Frozen on first completion only — future snapshots never overwrite baseline.
+      originalMindsetBaseline: isFirstCompletion
+          ? _blueprint
+          : profile.originalMindsetBaseline,
       limitingBeliefs: _beliefs,
       mentalToughnessScore: _toughness,
       fearsDrift: fears,
       blueprintCompleted: true,
+      mindsetBlueprintSnapshotAt:
+          isFirstCompletion ? now : profile.mindsetBlueprintSnapshotAt,
     );
 
     try {

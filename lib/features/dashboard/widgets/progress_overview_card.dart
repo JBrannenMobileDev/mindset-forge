@@ -22,65 +22,141 @@ class ProgressOverviewCard extends StatefulWidget {
   State<ProgressOverviewCard> createState() => _ProgressOverviewCardState();
 }
 
+/// At/above this card width the two views are shown side by side instead of
+/// behind a toggle (the full-width desktop progress card); narrower placements
+/// (phones, the single-column reflow) keep the compact segmented toggle.
+const double _kProgressDualPaneMinWidth = 640;
+
 class _ProgressOverviewCardState extends State<ProgressOverviewCard> {
   int _tab = 0;
 
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _SegmentToggle(
-                  index: _tab,
-                  labels: const [
-                    AppStrings.progressTabAlignment,
-                    AppStrings.progressTabActivity,
-                  ],
-                  onChanged: (i) => setState(() => _tab = i),
-                ),
-              ),
-              // The "how this works" explainer only applies to alignment.
-              if (_tab == 0) ...[
-                const SizedBox(width: AppSpacing.sm),
-                IconButton(
-                  onPressed: () => showManifestationSystemSheet(context),
-                  icon: const Icon(Icons.info_outline_rounded),
-                  color: AppColors.textSecondary,
-                  iconSize: AppSpacing.iconLg,
-                  tooltip: 'How this works',
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOut,
-            alignment: Alignment.topCenter,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              transitionBuilder: (child, animation) =>
-                  FadeTransition(opacity: animation, child: child),
-              child: _tab == 0
-                  ? AlignmentScoreBody(
-                      key: const ValueKey('alignment'),
-                      profile: widget.profile,
-                    )
-                  : WeeklyChartBody(
-                      key: const ValueKey('activity'),
-                      profile: widget.profile,
-                    ),
-            ),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth >= _kProgressDualPaneMinWidth) {
+            return _buildDualPane(context);
+          }
+          return _buildToggle(context);
+        },
       ),
     ).animate().fadeIn(duration: 400.ms);
+  }
+
+  Widget _buildToggle(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _SegmentToggle(
+                index: _tab,
+                labels: const [
+                  AppStrings.progressTabAlignment,
+                  AppStrings.progressTabActivity,
+                ],
+                onChanged: (i) => setState(() => _tab = i),
+              ),
+            ),
+            // The "how this works" explainer only applies to alignment.
+            if (_tab == 0) ...[
+              const SizedBox(width: AppSpacing.sm),
+              _infoButton(context),
+            ],
+          ],
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+          alignment: Alignment.topCenter,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            transitionBuilder: (child, animation) =>
+                FadeTransition(opacity: animation, child: child),
+            child: _tab == 0
+                ? AlignmentScoreBody(
+                    key: const ValueKey('alignment'),
+                    profile: widget.profile,
+                  )
+                : WeeklyChartBody(
+                    key: const ValueKey('activity'),
+                    profile: widget.profile,
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Wide layout: both views at once, each under its own label, so the desktop
+  /// progress card uses its full width instead of hiding half behind a toggle.
+  Widget _buildDualPane(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: _PaneLabel(AppStrings.progressTabAlignment),
+                  ),
+                  _infoButton(context),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              AlignmentScoreBody(profile: widget.profile),
+            ],
+          ),
+        ),
+        const SizedBox(width: AppSpacing.xl),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _PaneLabel(AppStrings.progressTabActivity),
+              const SizedBox(height: AppSpacing.lg),
+              WeeklyChartBody(profile: widget.profile),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _infoButton(BuildContext context) {
+    return IconButton(
+      onPressed: () => showManifestationSystemSheet(context),
+      icon: const Icon(Icons.info_outline_rounded),
+      color: AppColors.textSecondary,
+      iconSize: AppSpacing.iconLg,
+      tooltip: 'How this works',
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(),
+    );
+  }
+}
+
+/// Small uppercase section label for the dual-pane progress views.
+class _PaneLabel extends StatelessWidget {
+  final String label;
+
+  const _PaneLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label.toUpperCase(),
+      style: AppTextStyles.overline.copyWith(
+        color: AppColors.textMuted,
+        letterSpacing: 1.2,
+      ),
+    );
   }
 }
 

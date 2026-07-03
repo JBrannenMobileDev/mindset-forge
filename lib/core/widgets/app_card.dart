@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_spacing.dart';
+import 'hover_builder.dart';
 
 class AppCard extends StatelessWidget {
   final Widget child;
@@ -24,27 +25,36 @@ class AppCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final container = Container(
+    if (onTap == null) {
+      return _decorated(borderColor ?? AppColors.border);
+    }
+    // Tappable cards get a desktop click cursor and a border that brightens on
+    // hover so they read as interactive on web.
+    return GestureDetector(
+      onTap: onTap,
+      child: HoverBuilder(
+        builder: (context, hovered) => _decorated(
+          hovered
+              ? AppColors.primary.withValues(alpha: 0.4)
+              : (borderColor ?? AppColors.border),
+        ),
+      ),
+    );
+  }
+
+  Widget _decorated(Color border) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
       padding: padding ?? const EdgeInsets.all(AppSpacing.cardPadding),
       decoration: BoxDecoration(
         color: backgroundColor ?? AppColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(borderRadius ?? AppSpacing.radiusLg),
-        border: Border.all(
-          color: borderColor ?? AppColors.border,
-          width: 1,
-        ),
+        borderRadius:
+            BorderRadius.circular(borderRadius ?? AppSpacing.radiusLg),
+        border: Border.all(color: border, width: 1),
         boxShadow: shadow,
       ),
       child: child,
     );
-
-    if (onTap != null) {
-      return GestureDetector(
-        onTap: onTap,
-        child: container,
-      );
-    }
-    return container;
   }
 }
 

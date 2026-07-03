@@ -53,6 +53,7 @@
 		<string>MindsetForge uses the microphone only if you choose to record a voice note or speak an entry. Audio is never captured without your action.</string>
 		<key>UIBackgroundModes</key>
 		<array>
+			<string>audio</string>
 			<string>remote-notification</string>
 		</array>
 		<key>ITSAppUsesNonExemptEncryption</key>

@@ -1,66 +1,70 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/hoverable.dart';
+import '../../../models/goal.dart';
+import '../../../providers/claude_provider.dart';
 
-/// Lightweight "what's holding you back?" step.
+/// "What's holding you back?" step.
 ///
-/// Collects at least one limiting belief (tap suggestions or type your own) plus
-/// an optional primary fear. This is the only blocker input required to reach the
-/// onboarding "aha" — the deeper fear quiz and trait blueprint are collected
-/// progressively in-app afterwards.
-class StepBlocker extends StatefulWidget {
+/// Instead of asking the user to self-diagnose from a cold list, the AI infers
+/// the limiting beliefs they most likely hold from what they already shared
+/// (situation, future-self qualities, goals). The user reacts by tapping the
+/// ones that resonate (recognition, not recall) and can add their own. The
+/// deeper fear quiz and trait blueprint are collected progressively in-app
+/// afterwards.
+class StepBlocker extends ConsumerStatefulWidget {
+  final String identitySituation;
+  final List<String> identityQualities;
+  final List<Goal> goals;
   final List<String> initialBeliefs;
-  final List<String> initialFears;
-  final void Function(List<String> beliefs, List<String> fears) onNext;
+  final void Function(List<String> beliefs) onNext;
   final VoidCallback onBack;
 
   const StepBlocker({
     super.key,
+    required this.identitySituation,
+    required this.identityQualities,
+    required this.goals,
     required this.initialBeliefs,
-    required this.initialFears,
     required this.onNext,
     required this.onBack,
   });
 
   @override
-  State<StepBlocker> createState() => _StepBlockerState();
+  ConsumerState<StepBlocker> createState() => _StepBlockerState();
 }
 
-class _StepBlockerState extends State<StepBlocker> {
-  late List<String> _beliefs;
-  String? _fear;
+class _StepBlockerState extends ConsumerState<StepBlocker> {
+  /// All belief options shown as chips (AI-inferred + any the user added).
+  late List<String> _candidates;
+
+  /// Beliefs the user has tapped as resonating.
+  late Set<String> _selected;
+
+  bool _loading = true;
   final _beliefCtrl = TextEditingController();
   String? _errorText;
 
-  static const _beliefSuggestions = [
+  static const _fallbackBeliefs = [
     "I'm not good enough",
     "Money is hard to make",
     "I always fail",
     "Success isn't for people like me",
     "I don't deserve success",
-    "People will judge me",
-    "I'm too young/old",
-    "I lack the talent",
-  ];
-
-  static const _fearOptions = [
-    'Fear of Failure',
-    'Fear of Judgment',
-    'Fear of Success',
-    'Fear of Rejection',
-    'Fear of Uncertainty',
-    'Imposter Syndrome',
-    'Perfectionism',
   ];
 
   @override
   void initState() {
     super.initState();
-    _beliefs = List.from(widget.initialBeliefs);
-    _fear = widget.initialFears.isNotEmpty ? widget.initialFears.first : null;
+    _candidates = List.from(widget.initialBeliefs);
+    _selected = widget.initialBeliefs.toSet();
+    _infer();
   }
 
   @override
@@ -69,25 +73,59 @@ class _StepBlockerState extends State<StepBlocker> {
     super.dispose();
   }
 
-  void _addBelief(String belief) {
-    final trimmed = belief.trim();
-    if (trimmed.isEmpty || _beliefs.contains(trimmed)) return;
+  Future<void> _infer() async {
+    List<String> inferred;
+    try {
+      inferred = await ref.read(claudeServiceProvider).inferLimitingBeliefs(
+            situation: widget.identitySituation,
+            qualities: widget.identityQualities,
+            goals: widget.goals,
+          );
+    } catch (_) {
+      inferred = _fallbackBeliefs;
+    }
+    if (!mounted) return;
     setState(() {
-      _beliefs = [..._beliefs, trimmed];
+      // Preserve any previously selected beliefs, then append fresh inferred
+      // options that aren't already present.
+      for (final b in inferred) {
+        if (!_candidates.contains(b)) _candidates.add(b);
+      }
+      if (_candidates.isEmpty) _candidates = List.from(_fallbackBeliefs);
+      _loading = false;
+    });
+  }
+
+  void _toggle(String belief) {
+    setState(() {
+      if (_selected.contains(belief)) {
+        _selected.remove(belief);
+      } else {
+        _selected.add(belief);
+        _errorText = null;
+      }
+    });
+  }
+
+  void _addCustom(String belief) {
+    final trimmed = belief.trim();
+    if (trimmed.isEmpty) return;
+    setState(() {
+      if (!_candidates.contains(trimmed)) _candidates.add(trimmed);
+      _selected.add(trimmed);
       _beliefCtrl.clear();
       _errorText = null;
     });
   }
 
-  void _removeBelief(String belief) =>
-      setState(() => _beliefs = _beliefs.where((b) => b != belief).toList());
-
   void _tryNext() {
-    if (_beliefs.isEmpty) {
-      setState(() => _errorText = 'Add at least one belief to continue.');
+    if (_selected.isEmpty) {
+      setState(() => _errorText = 'Tap at least one to continue.');
       return;
     }
-    widget.onNext(_beliefs, _fear != null ? [_fear!] : const []);
+    // Preserve the display order of the chips.
+    final ordered = _candidates.where(_selected.contains).toList();
+    widget.onNext(ordered);
   }
 
   @override
@@ -107,45 +145,48 @@ class _StepBlockerState extends State<StepBlocker> {
             AppSpacing.screenPaddingH,
             scrollBottomPadding,
           ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "What's holding you back?",
-                  style: AppTextStyles.headlineLarge,
-                ).animate().fadeIn(duration: 400.ms),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'Name the stories that keep you stuck. Awareness is the first step to outwitting them.',
-                  style: AppTextStyles.bodyMedium
-                      .copyWith(color: AppColors.textSecondary),
-                ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
-                const SizedBox(height: AppSpacing.xl),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                AppStrings.onboardingBlockerTitle,
+                style: AppTextStyles.headlineLarge,
+              ).animate().fadeIn(duration: 400.ms),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                AppStrings.onboardingBlockerSubtitle,
+                style: AppTextStyles.bodyMedium
+                    .copyWith(color: AppColors.textSecondary),
+              ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
+              const SizedBox(height: AppSpacing.xl),
 
-                // ── Limiting beliefs ─────────────────────────────────────────
-                Text('Tap any that ring true', style: AppTextStyles.labelLarge)
-                    .animate()
-                    .fadeIn(delay: 150.ms, duration: 400.ms),
-                const SizedBox(height: AppSpacing.md),
+              if (_loading)
+                _LoadingBeliefs()
+              else ...[
                 Wrap(
                   spacing: AppSpacing.sm,
                   runSpacing: AppSpacing.sm,
-                  children: _beliefSuggestions.map((s) {
-                    final added = _beliefs.contains(s);
-                    return GestureDetector(
-                      onTap: added ? () => _removeBelief(s) : () => _addBelief(s),
-                      child: AnimatedContainer(
+                  children: _candidates.asMap().entries.map((e) {
+                    final belief = e.value;
+                    final selected = _selected.contains(belief);
+                    return Hoverable(
+                      onTap: () => _toggle(belief),
+                      builder: (context, hovered) => AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         padding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.md,
                           vertical: AppSpacing.sm,
                         ),
                         decoration: BoxDecoration(
-                          color: added
+                          color: selected
                               ? AppColors.primaryContainer
                               : AppColors.surfaceElevated,
                           border: Border.all(
-                            color: added ? AppColors.primary : AppColors.border,
+                            color: selected
+                                ? AppColors.primary
+                                : hovered
+                                    ? AppColors.primary.withValues(alpha: 0.5)
+                                    : AppColors.border,
                           ),
                           borderRadius:
                               BorderRadius.circular(AppSpacing.radiusFull),
@@ -153,16 +194,16 @@ class _StepBlockerState extends State<StepBlocker> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (added)
+                            if (selected)
                               const Padding(
                                 padding: EdgeInsets.only(right: 4),
                                 child: Icon(Icons.check_rounded,
                                     size: 14, color: AppColors.primary),
                               ),
                             Text(
-                              s,
+                              belief,
                               style: AppTextStyles.bodySmall.copyWith(
-                                color: added
+                                color: selected
                                     ? AppColors.primary
                                     : AppColors.textSecondary,
                               ),
@@ -170,7 +211,10 @@ class _StepBlockerState extends State<StepBlocker> {
                           ],
                         ),
                       ),
-                    );
+                    ).animate().fadeIn(
+                          delay: Duration(milliseconds: e.key * 40),
+                          duration: 300.ms,
+                        );
                   }).toList(),
                 ),
                 const SizedBox(height: AppSpacing.lg),
@@ -184,9 +228,9 @@ class _StepBlockerState extends State<StepBlocker> {
                         style: AppTextStyles.bodyMedium,
                         cursorColor: AppColors.primary,
                         textCapitalization: TextCapitalization.sentences,
-                        onSubmitted: _addBelief,
+                        onSubmitted: _addCustom,
                         decoration: InputDecoration(
-                          hintText: 'Type your own...',
+                          hintText: AppStrings.onboardingBlockerCustomHint,
                           hintStyle: AppTextStyles.bodyMedium
                               .copyWith(color: AppColors.textMuted),
                           filled: true,
@@ -216,10 +260,10 @@ class _StepBlockerState extends State<StepBlocker> {
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     IconButton.filled(
-                      onPressed: () => _addBelief(_beliefCtrl.text),
+                      onPressed: () => _addCustom(_beliefCtrl.text),
                       icon: const Icon(Icons.add_rounded),
-                      style:
-                          IconButton.styleFrom(backgroundColor: AppColors.primary),
+                      style: IconButton.styleFrom(
+                          backgroundColor: AppColors.primary),
                     ),
                   ],
                 ),
@@ -228,67 +272,14 @@ class _StepBlockerState extends State<StepBlocker> {
                   const SizedBox(height: AppSpacing.sm),
                   Text(
                     _errorText!,
-                    style:
-                        AppTextStyles.bodySmall.copyWith(color: AppColors.error),
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: AppColors.error),
                   ),
                 ],
-
-                const SizedBox(height: AppSpacing.xl),
-                const Divider(color: AppColors.border),
-                const SizedBox(height: AppSpacing.xl),
-
-                // ── Optional primary fear ────────────────────────────────────
-                Text('Your biggest fear?', style: AppTextStyles.headlineMedium)
-                    .animate()
-                    .fadeIn(duration: 400.ms),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  'Pick the one that holds you back the most. You can always change it later.',
-                  style: AppTextStyles.bodyMedium
-                      .copyWith(color: AppColors.textSecondary),
-                ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
-                const SizedBox(height: AppSpacing.lg),
-                Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.sm,
-                  children: _fearOptions.map((f) {
-                    final selected = _fear == f;
-                    return GestureDetector(
-                      onTap: () =>
-                          setState(() => _fear = selected ? null : f),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.md,
-                          vertical: AppSpacing.sm,
-                        ),
-                        decoration: BoxDecoration(
-                          color: selected
-                              ? AppColors.primaryContainer
-                              : AppColors.surfaceElevated,
-                          border: Border.all(
-                            color:
-                                selected ? AppColors.primary : AppColors.border,
-                          ),
-                          borderRadius:
-                              BorderRadius.circular(AppSpacing.radiusFull),
-                        ),
-                        child: Text(
-                          f,
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: selected
-                                ? AppColors.primary
-                                : AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-
               ],
-            ),
+            ],
           ),
+        ),
 
         // Footer fades out when keyboard is open.
         Positioned(
@@ -301,44 +292,92 @@ class _StepBlockerState extends State<StepBlocker> {
             child: IgnorePointer(
               ignoring: keyboardVisible,
               child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  AppColors.background.withValues(alpha: 0),
-                  AppColors.background,
-                ],
-                stops: const [0.0, 0.45],
-              ),
-            ),
-            padding: EdgeInsets.fromLTRB(
-              AppSpacing.screenPaddingH,
-              AppSpacing.xl,
-              AppSpacing.screenPaddingH,
-              bottomInset + AppSpacing.md,
-            ),
-            child: Row(
-              children: [
-                AppSecondaryButton(
-                  label: 'Back',
-                  width: 100,
-                  onPressed: widget.onBack,
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: AppPrimaryButton(
-                    label: 'Continue',
-                    onPressed: _tryNext,
-                    icon: Icons.arrow_forward_rounded,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppColors.background.withValues(alpha: 0),
+                      AppColors.background,
+                    ],
+                    stops: const [0.0, 0.45],
                   ),
                 ),
-              ],
-            ),
-          ),
+                padding: EdgeInsets.fromLTRB(
+                  AppSpacing.screenPaddingH,
+                  AppSpacing.xl,
+                  AppSpacing.screenPaddingH,
+                  bottomInset + AppSpacing.md,
+                ),
+                child: Row(
+                  children: [
+                    AppSecondaryButton(
+                      label: 'Back',
+                      width: 100,
+                      onPressed: widget.onBack,
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: AppPrimaryButton(
+                        label: 'Continue',
+                        onPressed: _loading ? null : _tryNext,
+                        icon: Icons.arrow_forward_rounded,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// Skeleton shown while the AI infers likely limiting beliefs.
+class _LoadingBeliefs extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppColors.primary),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              AppStrings.onboardingBlockerLoading,
+              style: AppTextStyles.bodyMedium
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: List.generate(5, (i) {
+            return Container(
+              width: 120 + (i.isEven ? 40.0 : 0.0),
+              height: 34,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+                border: Border.all(color: AppColors.border),
+              ),
+            );
+          }),
+        )
+            .animate(onPlay: (c) => c.repeat())
+            .shimmer(
+                duration: 1500.ms,
+                color: AppColors.primary.withValues(alpha: 0.1)),
       ],
     );
   }

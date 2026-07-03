@@ -5,6 +5,12 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <!-- Google Play in-app billing (RevenueCat subscriptions) -->
     <uses-permission android:name="com.android.vending.BILLING"/>
+    <!-- Background audio: keep the Future Self practice binaural beats playing
+         when the screen locks or the app is backgrounded (just_audio_background /
+         audio_service foreground media service). -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <application
         android:label="MindsetForge"
         android:name="${applicationName}"
@@ -78,6 +84,24 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="es.antonborri.home_widget.action.BACKGROUND" />
+            </intent-filter>
+        </receiver>
+        <!-- just_audio_background: foreground media service + media-button receiver
+             that keep the practice audio alive in the background and expose
+             lock-screen / notification play-pause controls. -->
+        <service
+            android:name="com.ryanheise.audioservice.AudioService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+        <receiver
+            android:name="com.ryanheise.audioservice.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </receiver>
         <!-- Default channel for background FCM notifications (app killed / in background).

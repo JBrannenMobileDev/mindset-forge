@@ -121,7 +121,7 @@ A radar-chart assessment across five traits (Confidence, Discipline, and more), 
 - **Bi-directional sync** — `WidgetSyncService` builds a shared `WidgetPayload` JSON and pushes it to the iOS App Group and Android SharedPreferences, while `WatchBridge` (a MethodChannel) forwards the same payload to the watch over WatchConnectivity. The watch can fire `completeFocus` back to the phone, routing through the exact same Firestore logic as the in-app hero card so widget, watch, and app never drift.
 
 ### Progress & Insights
-Streaks, perfect-day tracking, an activity heatmap, and **AI-generated weekly insights** delivered via scheduled Cloud Functions.
+Streaks, perfect-day tracking, an activity heatmap, and **AI-generated weekly insights** delivered via push notification and in-app review (Sunday cron + dashboard banner).
 
 ### Monetization
 Freemium model with a **RevenueCat**-powered subscription paywall gating premium features after onboarding.
@@ -238,7 +238,7 @@ flowchart LR
 
 **Accountability:** `sendPartnerInviteEmail`, `acceptPartnerInvite`, `getPartnerProgress`, `sendEncouragement`, `removePartner`, `getPartnerInviteInfo`, `deleteUserAccount` (GDPR-style deletion).
 
-**Scheduled (cron):** `weeklyMindsetAnalysis`, `weeklyManifestationReport`, `lowActivityAlert`, `partnerAccountabilityDaily`, `weeklyPartnerDigest`.
+**Scheduled (cron):** `weeklyInsightDelivery`, `lowActivityAlert`, `partnerAccountabilityDaily`, `weeklyPartnerDigest`.
 
 ---
 

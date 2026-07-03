@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/services/analytics_service.dart';
 import '../models/chat_session.dart';
@@ -8,7 +9,11 @@ final chatSessionsProvider =
     StreamProvider.family<List<ChatSession>, String>((ref, mode) {
   final uid = ref.watch(authStateProvider).valueOrNull?.uid;
   if (uid == null) return const Stream.empty();
-  return ref.watch(firestoreServiceProvider).streamChatSessions(uid, mode);
+  // Surface query failures (e.g. a missing Firestore composite index) instead
+  // of letting `.valueOrNull ?? []` silently render an empty history.
+  return ref.watch(firestoreServiceProvider).streamChatSessions(uid, mode).handleError(
+        (Object e) => debugPrint('chatSessionsProvider($mode) failed: $e'),
+      );
 });
 
 class ActiveChatNotifier extends StateNotifier<ChatSession?> {

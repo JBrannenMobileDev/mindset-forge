@@ -309,6 +309,43 @@ void main() {
       expect(p.weekStreak[4], true);
       expect(p.weekStreak.last, false); // today still empty
     });
+
+    test('weekPerfect is always 7 days aligned to weekStreak', () {
+      final p = WidgetPayload.fromProfile(
+        profile(completions: [qualifying(today)]),
+        now: midday,
+      );
+      expect(p.weekPerfect.length, 7);
+    });
+
+    test('a 9/9 day is both qualifying and perfect', () {
+      final p = WidgetPayload.fromProfile(
+        profile(completions: [_perfect(today)]),
+        now: midday,
+      );
+      expect(p.weekStreak.last, true);
+      expect(p.weekPerfect.last, true);
+    });
+
+    test('a 5-8/9 qualifying day is not perfect', () {
+      final p = WidgetPayload.fromProfile(
+        profile(completions: [qualifying(today)]),
+        now: midday,
+      );
+      expect(p.weekStreak.last, true);
+      expect(p.weekPerfect.last, false);
+    });
+
+    test('a prior perfect day marks its perfect cell', () {
+      final p = WidgetPayload.fromProfile(
+        profile(completions: [_perfect('2026-06-25')]),
+        now: midday,
+      );
+      // 2026-06-25 is two days before today (index 4 in a 7-day window).
+      expect(p.weekStreak[4], true);
+      expect(p.weekPerfect[4], true);
+      expect(p.weekPerfect.last, false); // today not perfect
+    });
   });
 
   group('WidgetPayload JSON round trip', () {
@@ -332,6 +369,7 @@ void main() {
       expect(restored.canCompleteInWidget, original.canCompleteInWidget);
       expect(restored.deepLink, original.deepLink);
       expect(restored.weekStreak, original.weekStreak);
+      expect(restored.weekPerfect, original.weekPerfect);
       expect(restored.weekLabels, original.weekLabels);
       expect(restored.weekCaption, original.weekCaption);
     });

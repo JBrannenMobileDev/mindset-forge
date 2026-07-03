@@ -9,6 +9,7 @@ import '../../core/constants/app_text_styles.dart';
 import '../../core/widgets/shimmer_widget.dart';
 import '../../core/widgets/responsive_layout.dart';
 import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/hover_builder.dart';
 import '../../core/utils/breakpoints.dart';
 import '../../core/utils/app_date_utils.dart';
 import '../../models/daily_completion.dart';
@@ -26,6 +27,7 @@ import 'widgets/daily_habits_card.dart';
 import 'widgets/progress_overview_card.dart';
 import 'widgets/getting_started_checklist.dart';
 import 'widgets/accountability_banner.dart';
+import 'widgets/weekly_insight_banner.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   /// When true (deep link `mindsetforge://focus` → `/dashboard?focus=plan`,
@@ -52,6 +54,33 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   /// Guards against re-scheduling the deep-link action on every rebuild while
   /// the query param is still present. Reset once the param is consumed.
   bool _deepLinkScheduled = false;
+
+  bool get _hasDeepLinkIntent =>
+      widget.openPlanSheet ||
+      (widget.actionField != null && widget.actionField!.isNotEmpty);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _tryDeepLink());
+  }
+
+  @override
+  void didUpdateWidget(DashboardScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.openPlanSheet != widget.openPlanSheet ||
+        oldWidget.actionField != widget.actionField) {
+      _deepLinkScheduled = false;
+      _tryDeepLink();
+    }
+  }
+
+  /// Runs the deep-link action once profile data is available.
+  void _tryDeepLink() {
+    if (!_hasDeepLinkIntent) return;
+    final profile = ref.read(currentUserProfileProvider).valueOrNull;
+    if (profile != null) _handleActionDeepLink(profile);
+  }
 
   /// Acts on the widget/watch deep links: `?focus=plan` opens the Plan Day
   /// sheet when no focus is set; `?action=<field>` fires the matching routine
@@ -134,6 +163,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ref.listen<AsyncValue<UserProfile?>>(currentUserProfileProvider,
         (prev, next) {
       _onStreakChanged(prev?.valueOrNull, next.valueOrNull);
+      next.whenData((profile) {
+        if (profile != null) _tryDeepLink();
+      });
     });
 
     return Scaffold(
@@ -150,9 +182,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             if (profile == null) {
               return const _DashboardSkeleton();
             }
-
-            // Honor the home-screen widget / watch deep links (plan / action).
-            _handleActionDeepLink(profile);
 
             final deepDiveComplete = profile.deepDive.isFullyComplete;
             // Whether to surface the accountability banner (partner support card,
@@ -187,156 +216,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     hasFocusToday &&
                     !profile.isDailyFocusComplete;
 
-            return LayoutBuilder(
-              builder: (context, constraints) {
-                if (Breakpoints.isWideWidth(constraints.maxWidth)) {
-                  return _DashboardDesktopBody(
-                    profile: profile,
-                    showAccountabilityBanner: showAccountabilityBanner,
-                    showGettingStarted: !allOnboardingDone,
-                    showDeepDiveNudge: showDeepDiveNudge,
-                    showOpenFocusCard: showOpenFocusCard,
-                  );
-                }
-                return ResponsiveLayout(
-                  maxWidth: 680,
-                  child: CustomScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    slivers: [
-                      // ── Header ──────────────────────────────────────────
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.only(
-                            left: AppSpacing.screenPaddingH,
-                            right: AppSpacing.screenPaddingH,
-                            top: AppSpacing.md,
-                          ),
-                          child: DashboardHeader(profile: profile),
-                        ),
-                      ),
+            // Single source of truth: both layouts render from this list, so a
+            // card added once appears on mobile and web without drift.
+            final sections = _dashboardSections(
+              profile: profile,
+              showAccountabilityBanner: showAccountabilityBanner,
+              showGettingStarted: !allOnboardingDone,
+              showOpenFocusCard: showOpenFocusCard,
+              showDeepDiveNudge: showDeepDiveNudge,
+            );
 
-                      // ── Accountability (partner support banner / invite CTA) ──
-                      if (showAccountabilityBanner)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(
-                              AppSpacing.screenPaddingH,
-                              AppSpacing.lg,
-                              AppSpacing.screenPaddingH,
-                              0,
-                            ),
-                            child: AccountabilityBanner(profile: profile),
-                          ),
-                        ),
-
-                      // ── Getting Started (shown until all onboarding steps done) ──
-                      if (!allOnboardingDone)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(
-                              AppSpacing.screenPaddingH,
-                              AppSpacing.sectionGap,
-                              AppSpacing.screenPaddingH,
-                              0,
-                            ),
-                            child: GettingStartedChecklist(profile: profile),
-                          ),
-                        ),
-
-                      // ── GROUP: Today (time-aware single hero) ────────────
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: AppSpacing.xxl),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const _GroupLabel(AppStrings.groupToday),
-                              const SizedBox(height: AppSpacing.md),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: AppSpacing.screenPaddingH,
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    TodayHeroCard(profile: profile),
-                                    const SizedBox(height: AppSpacing.lg),
-                                    if (showOpenFocusCard) ...[
-                                      EveningFocusCard(profile: profile),
-                                      const SizedBox(height: AppSpacing.lg),
-                                    ],
-                                    DailyRoutineCard(profile: profile),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      // ── GROUP: Habits (clearly separated daytime work) ───
-                      const SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.only(top: AppSpacing.xxl),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _GroupLabel(AppStrings.groupHabits),
-                              SizedBox(height: AppSpacing.md),
-                              Padding(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: AppSpacing.screenPaddingH,
-                                ),
-                                child: DailyHabitsCard(),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      // ── GROUP: Your Progress (alignment | activity) ──────
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: AppSpacing.xxl),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const _GroupLabel(AppStrings.groupProgress),
-                              const SizedBox(height: AppSpacing.md),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: AppSpacing.screenPaddingH,
-                                ),
-                                child: ProgressOverviewCard(profile: profile),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      // ── Deep Dive nudge (after Blueprint, until all 5 modules complete) ───
-                      if (profile.blueprintCompleted && !deepDiveComplete)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(
-                              AppSpacing.screenPaddingH,
-                              AppSpacing.xxl,
-                              AppSpacing.screenPaddingH,
-                              0,
-                            ),
-                            child: _DeepDiveNudgeCard(),
-                          ),
-                        ),
-
-                      // Extra bottom space so the final card clears the floating
-                      // nav and is comfortably scrollable into view.
-                      const SliverToBoxAdapter(
-                        child: SizedBox(height: 140),
-                      ),
-                    ],
-                  ),
-                );
-              },
+            // Web small screens never reach here (the shell shows the download
+            // gate), so the mobile branch below is native-only. Desktop turns on
+            // exactly when the sidebar appears, keyed off the true viewport.
+            if (Breakpoints.isWide(context)) {
+              return _DashboardDesktopBody(
+                profile: profile,
+                sections: sections,
+              );
+            }
+            return ResponsiveLayout(
+              maxWidth: 680,
+              child: CustomScrollView(
+                physics: const BouncingScrollPhysics(),
+                slivers: _dashboardMobileSlivers(context, profile, sections),
+              ),
             );
           },
         ),
@@ -345,84 +249,274 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 }
 
-/// Wide-screen dashboard: a full-width header above two independent columns.
-/// Primary (left) carries today's hero + habits; secondary (right) carries
-/// onboarding/progress context. Falls back to a single column automatically
-/// via [ResponsiveTwoColumn] if the content area is narrow.
-class _DashboardDesktopBody extends StatelessWidget {
+/// Single source of truth for the dashboard's content cards. Both the mobile
+/// (`CustomScrollView`) and desktop (`_DashboardDesktopBody`) layouts render
+/// from the same ordered, grouped list, so a card added here shows up in both
+/// and the two can never drift. Header/streak stay layout-specific by design.
+enum _DashGroup { top, today, habits, progress }
+
+class _DashSection {
+  final _DashGroup group;
+  final WidgetBuilder build;
+  const _DashSection(this.group, this.build);
+}
+
+List<_DashSection> _dashboardSections({
+  required UserProfile profile,
+  required bool showAccountabilityBanner,
+  required bool showGettingStarted,
+  required bool showOpenFocusCard,
+  required bool showDeepDiveNudge,
+}) =>
+    [
+      if (profile.hasUnreadWeeklyInsight)
+        _DashSection(
+            _DashGroup.top, (_) => WeeklyInsightBanner(profile: profile)),
+      if (showAccountabilityBanner)
+        _DashSection(
+            _DashGroup.top, (_) => AccountabilityBanner(profile: profile)),
+      if (showGettingStarted)
+        _DashSection(
+            _DashGroup.top, (_) => GettingStartedChecklist(profile: profile)),
+      _DashSection(_DashGroup.today, (_) => TodayHeroCard(profile: profile)),
+      if (showOpenFocusCard)
+        _DashSection(
+            _DashGroup.today, (_) => EveningFocusCard(profile: profile)),
+      _DashSection(_DashGroup.today, (_) => DailyRoutineCard(profile: profile)),
+      _DashSection(_DashGroup.habits, (_) => const DailyHabitsCard()),
+      if (showDeepDiveNudge)
+        _DashSection(_DashGroup.habits, (_) => _DeepDiveNudgeCard()),
+      _DashSection(
+          _DashGroup.progress, (_) => ProgressOverviewCard(profile: profile)),
+    ];
+
+/// Builds the mobile dashboard slivers from the shared section list: header,
+/// full-width `top` cards, then a labelled group per [_DashGroup].
+List<Widget> _dashboardMobileSlivers(
+  BuildContext context,
+  UserProfile profile,
+  List<_DashSection> sections,
+) {
+  Widget group(_DashGroup g, String label) {
+    final cards = sections.where((s) => s.group == g).toList();
+    if (cards.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.xxl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _GroupLabel(label),
+          const SizedBox(height: AppSpacing.md),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.screenPaddingH,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < cards.length; i++) ...[
+                  if (i > 0) const SizedBox(height: AppSpacing.lg),
+                  cards[i].build(context),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  final topSections =
+      sections.where((s) => s.group == _DashGroup.top).toList();
+
+  return [
+    SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.only(
+          left: AppSpacing.screenPaddingH,
+          right: AppSpacing.screenPaddingH,
+          top: AppSpacing.md,
+        ),
+        child: DashboardHeader(profile: profile),
+      ),
+    ),
+    for (final s in topSections)
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.screenPaddingH,
+            AppSpacing.lg,
+            AppSpacing.screenPaddingH,
+            0,
+          ),
+          child: s.build(context),
+        ),
+      ),
+    SliverToBoxAdapter(child: group(_DashGroup.today, AppStrings.groupToday)),
+    SliverToBoxAdapter(child: group(_DashGroup.habits, AppStrings.groupHabits)),
+    SliverToBoxAdapter(
+        child: group(_DashGroup.progress, AppStrings.groupProgress)),
+    // Extra bottom space so the final card clears the floating nav.
+    const SliverToBoxAdapter(child: SizedBox(height: 140)),
+  ];
+}
+
+// Dashboard desktop grid tuning. The frame is a touch wider than the shared
+// web content max so the two columns + full-width progress card can breathe;
+// the reflow threshold is measured on the padded content area beside the
+// sidebar (so the 900px viewport / ~660px content case collapses to one column).
+const double _kDashboardMaxWidth = 1200;
+const double _kTwoColumnMinWidth = 720;
+const double _kStreakCardWidth = 320;
+
+/// Wide-screen dashboard. A two-part header band (greeting + streak momentum)
+/// sits above an adaptive grid: TODAY (hero + routine) and HABITS columns side
+/// by side, with a full-width PROGRESS card beneath. Reflows to a single column
+/// when the content area beside the sidebar is narrow.
+class _DashboardDesktopBody extends StatefulWidget {
   final UserProfile profile;
-  final bool showAccountabilityBanner;
-  final bool showGettingStarted;
-  final bool showDeepDiveNudge;
-  final bool showOpenFocusCard;
+  final List<_DashSection> sections;
 
   const _DashboardDesktopBody({
     required this.profile,
-    required this.showAccountabilityBanner,
-    required this.showGettingStarted,
-    required this.showDeepDiveNudge,
-    required this.showOpenFocusCard,
+    required this.sections,
   });
 
   @override
+  State<_DashboardDesktopBody> createState() => _DashboardDesktopBodyState();
+}
+
+class _DashboardDesktopBodyState extends State<_DashboardDesktopBody> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final leftColumn = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (showAccountabilityBanner) ...[
-          AccountabilityBanner(profile: profile),
-          const SizedBox(height: AppSpacing.sectionGap),
-        ],
-        const _DesktopSectionLabel(AppStrings.groupToday),
-        const SizedBox(height: AppSpacing.md),
-        TodayHeroCard(profile: profile),
-        const SizedBox(height: AppSpacing.lg),
-        if (showOpenFocusCard) ...[
-          EveningFocusCard(profile: profile),
-          const SizedBox(height: AppSpacing.lg),
-        ],
-        DailyRoutineCard(profile: profile),
-        const SizedBox(height: AppSpacing.sectionGap),
-        const _DesktopSectionLabel(AppStrings.groupHabits),
-        const SizedBox(height: AppSpacing.md),
-        const DailyHabitsCard(),
-        if (showDeepDiveNudge) ...[
-          const SizedBox(height: AppSpacing.sectionGap),
-          _DeepDiveNudgeCard(),
-        ],
-      ],
-    );
+    final profile = widget.profile;
+    final sections = widget.sections;
 
-    final rightColumn = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (showGettingStarted) ...[
-          GettingStartedChecklist(profile: profile),
-          const SizedBox(height: AppSpacing.sectionGap),
-        ],
-        const _DesktopSectionLabel(AppStrings.groupProgress),
-        const SizedBox(height: AppSpacing.md),
-        ProgressOverviewCard(profile: profile),
-      ],
-    );
+    List<Widget> cardsFor(_DashGroup g) =>
+        sections.where((s) => s.group == g).map((s) => s.build(context)).toList();
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      child: WebContentFrame(
-        child: Column(
+    // Label + cards for a group, each card separated by a consistent gap.
+    Widget labelledColumn(String label, List<Widget> cards) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: AppSpacing.xl),
-            DashboardHeader(profile: profile),
-            const SizedBox(height: AppSpacing.sectionGap),
-            ResponsiveTwoColumn(
-              primary: leftColumn,
-              secondary: rightColumn,
-            ),
-            const SizedBox(height: AppSpacing.xxl),
+            _DesktopSectionLabel(label),
+            const SizedBox(height: AppSpacing.md),
+            for (var i = 0; i < cards.length; i++) ...[
+              if (i > 0) const SizedBox(height: AppSpacing.lg),
+              cards[i],
+            ],
           ],
+        );
+
+    return Scrollbar(
+      controller: _scrollController,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        // Desktop/web uses a mouse — clamp instead of the mobile bounce.
+        physics: const ClampingScrollPhysics(),
+        child: WebContentFrame(
+          maxWidth: _kDashboardMaxWidth,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final twoColumn = constraints.maxWidth >= _kTwoColumnMinWidth;
+
+              final todayColumn =
+                  labelledColumn(AppStrings.groupToday, cardsFor(_DashGroup.today));
+              final habitsColumn = labelledColumn(
+                  AppStrings.groupHabits, cardsFor(_DashGroup.habits));
+
+              final grid = twoColumn
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 3, child: todayColumn),
+                        const SizedBox(width: AppSpacing.lg),
+                        Expanded(flex: 2, child: habitsColumn),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        todayColumn,
+                        const SizedBox(height: AppSpacing.sectionGap),
+                        habitsColumn,
+                      ],
+                    );
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: AppSpacing.xl),
+                  _HeaderBand(profile: profile, twoColumn: twoColumn),
+                  const SizedBox(height: AppSpacing.sectionGap),
+                  for (final card in cardsFor(_DashGroup.top)) ...[
+                    card,
+                    const SizedBox(height: AppSpacing.sectionGap),
+                  ],
+                  grid,
+                  const SizedBox(height: AppSpacing.sectionGap),
+                  labelledColumn(
+                      AppStrings.groupProgress, cardsFor(_DashGroup.progress)),
+                  const SizedBox(height: AppSpacing.xxl),
+                ],
+              );
+            },
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// The desktop header band: greeting/wisdom paired with the bounded streak
+/// momentum card. Side by side when there's room, stacked when narrow.
+class _HeaderBand extends StatelessWidget {
+  final UserProfile profile;
+  final bool twoColumn;
+
+  const _HeaderBand({required this.profile, required this.twoColumn});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!twoColumn) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DashboardHeader(
+            profile: profile,
+            showAvatar: false,
+            showStreak: false,
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          StreakMomentumCard(profile: profile),
+        ],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: DashboardHeader(
+            profile: profile,
+            showAvatar: false,
+            showStreak: false,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.xl),
+        SizedBox(
+          width: _kStreakCardWidth,
+          child: StreakMomentumCard(profile: profile),
+        ),
+      ],
     );
   }
 }
@@ -476,78 +570,181 @@ class _DeepDiveNudgeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => context.push('/deep-dive'),
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              AppColors.secondary.withValues(alpha: 0.15),
-              AppColors.primary.withValues(alpha: 0.10),
+      child: HoverBuilder(
+        builder: (context, hovered) => AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.secondary.withValues(alpha: 0.15),
+                AppColors.primary.withValues(alpha: 0.10),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+            border: Border.all(
+              color: AppColors.secondary.withValues(alpha: hovered ? 0.6 : 0.3),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: AppColors.secondary.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                ),
+                child: const Icon(Icons.psychology_alt_rounded,
+                    color: AppColors.secondary, size: 24),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Go Deeper with Your Coach',
+                        style: AppTextStyles.labelLarge),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Five modules to go deeper on your Blueprint and give your coach your full story.',
+                      style: AppTextStyles.bodySmall
+                          .copyWith(color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              const Icon(Icons.arrow_forward_ios_rounded,
+                  color: AppColors.textMuted, size: 14),
             ],
           ),
-          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-          border: Border.all(color: AppColors.secondary.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.sm),
-              decoration: BoxDecoration(
-                color: AppColors.secondary.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-              ),
-              child: const Icon(Icons.psychology_alt_rounded,
-                  color: AppColors.secondary, size: 24),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Go Deeper with Your Coach',
-                      style: AppTextStyles.labelLarge),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Five modules to go deeper on your Blueprint and give your coach your full story.',
-                    style: AppTextStyles.bodySmall
-                        .copyWith(color: AppColors.textSecondary),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            const Icon(Icons.arrow_forward_ios_rounded,
-                color: AppColors.textMuted, size: 14),
-          ],
         ),
       ).animate().fadeIn(duration: 400.ms),
     );
   }
 }
 
+/// Loading placeholder that mirrors the loaded layout: a centered single column
+/// on narrow (native mobile) and the desktop header band + grid on wide, so the
+/// dashboard doesn't visibly re-flow when the profile resolves.
 class _DashboardSkeleton extends StatelessWidget {
   const _DashboardSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.screenPaddingH,
-        AppSpacing.md,
-        AppSpacing.screenPaddingH,
-        100,
+    if (Breakpoints.isWide(context)) {
+      return SingleChildScrollView(
+        physics: const ClampingScrollPhysics(),
+        child: WebContentFrame(
+          maxWidth: _kDashboardMaxWidth,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final twoColumn = constraints.maxWidth >= _kTwoColumnMinWidth;
+
+              const greeting = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ShimmerBox(
+                      width: 220,
+                      height: 28,
+                      borderRadius: AppSpacing.radiusSm),
+                  SizedBox(height: AppSpacing.sm),
+                  ShimmerBox(
+                      width: 260,
+                      height: 16,
+                      borderRadius: AppSpacing.radiusSm),
+                ],
+              );
+              final headerBand = twoColumn
+                  ? const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: greeting),
+                        SizedBox(width: AppSpacing.xl),
+                        SizedBox(
+                          width: _kStreakCardWidth,
+                          child: ShimmerCard(height: 150),
+                        ),
+                      ],
+                    )
+                  : const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        greeting,
+                        SizedBox(height: AppSpacing.lg),
+                        ShimmerCard(height: 150),
+                      ],
+                    );
+
+              const todayCol = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ShimmerCard(height: 180),
+                  SizedBox(height: AppSpacing.lg),
+                  ShimmerCard(height: 260),
+                ],
+              );
+              const habitsCol = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [ShimmerCard(height: 220)],
+              );
+              final grid = twoColumn
+                  ? const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 3, child: todayCol),
+                        SizedBox(width: AppSpacing.lg),
+                        Expanded(flex: 2, child: habitsCol),
+                      ],
+                    )
+                  : const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        todayCol,
+                        SizedBox(height: AppSpacing.sectionGap),
+                        habitsCol,
+                      ],
+                    );
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: AppSpacing.xl),
+                  headerBand,
+                  const SizedBox(height: AppSpacing.sectionGap),
+                  grid,
+                  const SizedBox(height: AppSpacing.sectionGap),
+                  const ShimmerCard(height: 200),
+                  const SizedBox(height: AppSpacing.xxl),
+                ],
+              );
+            },
+          ),
+        ),
+      );
+    }
+
+    return ResponsiveLayout(
+      maxWidth: 680,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.screenPaddingH,
+          AppSpacing.md,
+          AppSpacing.screenPaddingH,
+          140,
+        ),
+        children: const [
+          ShimmerBox(width: 200, height: 24, borderRadius: AppSpacing.radiusSm),
+          SizedBox(height: AppSpacing.sm),
+          ShimmerBox(width: 140, height: 16, borderRadius: AppSpacing.radiusSm),
+          SizedBox(height: AppSpacing.xl),
+          ShimmerCard(height: 80),
+          SizedBox(height: AppSpacing.lg),
+          ShimmerCard(height: 100),
+          SizedBox(height: AppSpacing.lg),
+          ShimmerCard(height: 260),
+        ],
       ),
-      children: const [
-        ShimmerBox(width: 200, height: 24, borderRadius: AppSpacing.radiusSm),
-        SizedBox(height: AppSpacing.sm),
-        ShimmerBox(width: 140, height: 16, borderRadius: AppSpacing.radiusSm),
-        SizedBox(height: AppSpacing.xl),
-        ShimmerCard(height: 80),
-        SizedBox(height: AppSpacing.lg),
-        ShimmerCard(height: 100),
-        SizedBox(height: AppSpacing.lg),
-        ShimmerCard(height: 260),
-      ],
     );
   }
 }

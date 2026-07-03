@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/widgets/app_card.dart';
 import '../../models/notification_prefs.dart';
 import '../../providers/auth_provider.dart';
@@ -224,6 +225,15 @@ class _NotificationSettingsScreenState
                 value: prefs.lifecycleEnabled,
                 enabled: on,
                 onChanged: (v) => _save(prefs.copyWith(lifecycleEnabled: v)),
+              ),
+              const _CardDivider(),
+              _SwitchRow(
+                label: AppStrings.weeklyInsightNotificationTitle,
+                subtitle: AppStrings.weeklyInsightNotificationSubtitle,
+                value: prefs.weeklyInsightEnabled,
+                enabled: on,
+                onChanged: (v) =>
+                    _save(prefs.copyWith(weeklyInsightEnabled: v)),
               ),
             ],
           ),

@@ -14,7 +14,11 @@ import '../../providers/analytics_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/notification_provider.dart';
 import '../../providers/invite_prompt_provider.dart';
+import '../../core/utils/breakpoints.dart';
+import '../../core/widgets/brand_backdrop.dart';
+import '../../core/widgets/glass_pane.dart';
 import '../../core/widgets/widget_education_sheet.dart';
+import 'widgets/onboarding_companion_panel.dart';
 import 'steps/step_welcome.dart';
 import 'steps/step_goals.dart';
 import 'steps/step_identity.dart';
@@ -51,11 +55,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final MindsetBlueprint _blueprint = const MindsetBlueprint();
   final double _mentalToughnessScore = 50.0;
   List<Goal> _goals = [];
+  String _primaryGoalId = '';
   String _identityStatement = '';
   String _identitySituation = '';
   List<String> _identityQualities = [];
   List<String> _limitingBeliefs = [];
-  List<String> _fearsDrift = [];
+  final List<String> _fearsDrift = [];
   String _mindsetBlueprintSummary = '';
 
   @override
@@ -66,7 +71,19 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   void _restoreStep() {
     final profile = ref.read(currentUserProfileProvider).valueOrNull;
-    if (profile != null && profile.onboardingStep > 0) {
+    if (profile == null) return;
+
+    // Hydrate any answers already captured so a user returning mid-flow (app
+    // kill, back-out) keeps their goals, identity inputs and beliefs instead of
+    // starting each step blank.
+    _goals = profile.goals;
+    _primaryGoalId = profile.primaryGoalId;
+    _identitySituation = profile.identitySituation;
+    _identityQualities = List.from(profile.identityQualities);
+    _limitingBeliefs = List.from(profile.limitingBeliefs);
+    _identityStatement = profile.identityStatement;
+
+    if (profile.onboardingStep > 0) {
       final step = profile.onboardingStep.clamp(0, _kTotalSteps - 1);
       _currentStep = step;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -99,10 +116,21 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Future<void> _saveStep(int step) async {
     final uid = ref.read(authStateProvider).valueOrNull?.uid;
     if (uid == null) return;
-    await ref.read(firestoreServiceProvider).updateOnboardingStep(uid, step);
+    // Persist accumulated answers alongside the step index so nothing is lost
+    // if the user abandons and returns mid-flow.
+    await ref.read(firestoreServiceProvider).updateUserField(uid, {
+      'onboardingStep': step,
+      'goals': _goals.map((g) => g.toJson()).toList(),
+      'primaryGoalId': _primaryGoalId,
+      'identitySituation': _identitySituation,
+      'identityQualities': _identityQualities,
+      'limitingBeliefs': _limitingBeliefs,
+    });
   }
 
-  Future<void> _completeOnboarding(String summaryText) async {
+  Future<void> _completeOnboarding(
+      String identityStatement, String summaryText) async {
+    _identityStatement = identityStatement;
     _mindsetBlueprintSummary = summaryText;
 
     final authUser = ref.read(authStateProvider).valueOrNull;
@@ -129,6 +157,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       identitySituation: _identitySituation,
       identityQualities: _identityQualities,
       goals: _goals,
+      primaryGoalId: _primaryGoalId,
       fearsDrift: _fearsDrift,
       mindsetBlueprintSummary: _mindsetBlueprintSummary,
       // Land new users with a ready starter deck so the affirmations practice is
@@ -214,76 +243,155 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     }
   }
 
+  /// The shared step deck. Layout-agnostic: the mobile column and the wide
+  /// glass pane both host this same [PageView]; only the surrounding chrome
+  /// differs. Data wiring is identical across layouts.
+  Widget _buildPageView() {
+    return PageView(
+      controller: _pageController,
+      physics: const NeverScrollableScrollPhysics(),
+      children: [
+        // Step 0 — Welcome
+        StepWelcome(onNext: () => _goToStep(_kStepGoals)),
+
+        // Step 1 — Goals
+        StepGoals(
+          initial: _goals,
+          initialPrimaryGoalId: _primaryGoalId,
+          onNext: (goals, primaryGoalId) {
+            _goals = goals;
+            _primaryGoalId = primaryGoalId;
+            _goToStep(_kStepIdentity);
+          },
+          onBack: () => _goToStep(_kStepWelcome),
+        ),
+
+        // Step 2 — Identity inputs (situation + qualities)
+        StepIdentity(
+          initialSituation: _identitySituation,
+          initialQualities: _identityQualities,
+          onNext: (situation, qualities) {
+            _identitySituation = situation;
+            _identityQualities = qualities;
+            _goToStep(_kStepBlocker);
+          },
+          onBack: () => _goToStep(_kStepGoals),
+        ),
+
+        // Step 3 — Blocker (AI-inferred limiting beliefs)
+        StepBlocker(
+          identitySituation: _identitySituation,
+          identityQualities: _identityQualities,
+          goals: _goals,
+          initialBeliefs: _limitingBeliefs,
+          onNext: (beliefs) {
+            _limitingBeliefs = beliefs;
+            _goToStep(_kStepAiAnalysis);
+          },
+          onBack: () => _goToStep(_kStepIdentity),
+        ),
+
+        // Step 4 — Merged reveal (identity statement + analysis)
+        StepAiSummary(
+          blueprint: _blueprint,
+          limitingBeliefs: _limitingBeliefs,
+          goals: _goals,
+          identitySituation: _identitySituation,
+          identityQualities: _identityQualities,
+          fearsDrift: _fearsDrift,
+          mentalToughnessScore: _mentalToughnessScore,
+          onComplete: _completeOnboarding,
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            _OnboardingProgressBar(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          if (Breakpoints.isWideWidth(constraints.maxWidth)) {
+            return _buildWideLayout();
+          }
+          return _buildMobileLayout();
+        },
+      ),
+    );
+  }
+
+  /// Mobile (< tablet breakpoint): unchanged single column — top progress bar
+  /// above the full-bleed step deck on the base background.
+  Widget _buildMobileLayout() {
+    return SafeArea(
+      bottom: false,
+      child: Column(
+        children: [
+          _OnboardingProgressBar(
+            currentStep: _currentStep,
+            totalSteps: _kTotalSteps,
+          ),
+          Expanded(child: _buildPageView()),
+        ],
+      ),
+    );
+  }
+
+  /// Wide (>= tablet breakpoint): a branded two-pane layout over the shared
+  /// nebula backdrop — a dynamic companion panel beside a width-capped frosted
+  /// glass step pane. The companion panel replaces the top progress bar.
+  Widget _buildWideLayout() {
+    return BrandBackdrop(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: 5,
+            child: OnboardingCompanionPanel(
               currentStep: _currentStep,
-              totalSteps: _kTotalSteps,
+              goals: _goals,
+              primaryGoalId: _primaryGoalId,
+              identityQualities: _identityQualities,
             ),
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  // Step 0 — Welcome
-                  StepWelcome(onNext: () => _goToStep(_kStepGoals)),
+          ),
+          Expanded(flex: 4, child: _StepPane(child: _buildPageView())),
+        ],
+      ),
+    );
+  }
+}
 
-                  // Step 1 — Goals
-                  StepGoals(
-                    initial: _goals,
-                    onNext: (goals) {
-                      _goals = goals;
-                      _goToStep(_kStepIdentity);
-                    },
-                    onBack: () => _goToStep(_kStepWelcome),
-                  ),
+/// Right-hand pane on wide screens: a vertically filling, width-capped frosted
+/// glass card that hosts the active onboarding step. Bounding the step to the
+/// pane's width fixes the stretched content, full-width footers and oversized
+/// grids in one place — each step keeps its own internal scroll + footer.
+class _StepPane extends StatelessWidget {
+  final Widget child;
 
-                  // Step 2 — Identity Wizard
-                  StepIdentity(
-                    initial: _identityStatement,
-                    blueprint: _blueprint,
-                    goals: _goals,
-                    onNext: (statement, situation, qualities) {
-                      _identityStatement = statement;
-                      _identitySituation = situation;
-                      _identityQualities = qualities;
-                      _goToStep(_kStepBlocker);
-                    },
-                    onBack: () => _goToStep(_kStepGoals),
-                  ),
+  const _StepPane({required this.child});
 
-                  // Step 3 — Blocker (limiting belief + optional fear)
-                  StepBlocker(
-                    initialBeliefs: _limitingBeliefs,
-                    initialFears: _fearsDrift,
-                    onNext: (beliefs, fears) {
-                      _limitingBeliefs = beliefs;
-                      _fearsDrift = fears;
-                      _goToStep(_kStepAiAnalysis);
-                    },
-                    onBack: () => _goToStep(_kStepIdentity),
-                  ),
-
-                  // Step 4 — AI Analysis (the "aha")
-                  StepAiSummary(
-                    blueprint: _blueprint,
-                    limitingBeliefs: _limitingBeliefs,
-                    goals: _goals,
-                    identityStatement: _identityStatement,
-                    fearsDrift: _fearsDrift,
-                    mentalToughnessScore: _mentalToughnessScore,
-                    onComplete: _completeOnboarding,
-                  ),
-                ],
-              ),
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.xl,
+          vertical: AppSpacing.xl,
+        ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            // Zero padding: the steps carry their own screen padding + footer,
+            // so the glass edge hugs them. The rounded clip trims the corners.
+            child: GlassPane(
+              padding: EdgeInsets.zero,
+              // PageView needs a bounded height; the stretched Row gives this
+              // pane full height, and Column(mainAxisSize.max) + Expanded pass
+              // that bound down to the PageView.
+              child: Column(children: [Expanded(child: child)]),
             ),
-          ],
+          ),
         ),
       ),
     );
