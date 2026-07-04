@@ -12,6 +12,7 @@ import '../../core/widgets/section_header.dart';
 import '../../core/widgets/shimmer_widget.dart';
 import '../../core/widgets/weekly_insight_card.dart';
 import '../../core/utils/app_date_utils.dart';
+import '../../core/utils/manifestation_scoring.dart';
 import '../../models/user_profile.dart';
 import '../../models/weekly_insight.dart';
 import '../../providers/auth_provider.dart';
@@ -19,6 +20,7 @@ import '../../providers/streak_provider.dart';
 import '../../providers/weekly_insight_provider.dart';
 import '../../models/daily_completion.dart';
 import '../mindset/blueprint_tab.dart';
+import '../mindset/widgets/alignment_detail_sheet.dart';
 import '../../core/widgets/app_button.dart';
 
 class ProgressScreen extends ConsumerStatefulWidget {
@@ -131,6 +133,9 @@ class _ProgressScreenState extends ConsumerState<ProgressScreen> {
     final streak = ref.watch(streakProvider);
     final perfectDays = ref.watch(perfectDayCountProvider);
     final isRefreshing = ref.watch(weeklyInsightRefreshingProvider);
+    final alignment = profile != null
+        ? ManifestationScoring.calculate(profile)
+        : null;
 
     final insight = profile?.weeklyInsight;
     if (insight != null && insight.isUnread && !_markedViewed) {
@@ -185,6 +190,14 @@ class _ProgressScreenState extends ConsumerState<ProgressScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: AppSpacing.xl),
+                  if (alignment != null)
+                    _AlignmentSection(
+                      alignmentScore: alignment.overall.round(),
+                      masteryLevel: alignment.masteryLevel,
+                      onTap: () =>
+                          showAlignmentDetailSheet(context, profile),
+                    ).animate().fadeIn(delay: 50.ms, duration: 400.ms),
                   const SizedBox(height: AppSpacing.xl),
                   Text('Activity Heatmap', style: AppTextStyles.headlineSmall),
                   const SizedBox(height: AppSpacing.md),
@@ -356,6 +369,62 @@ class _StatCard extends StatelessWidget {
           Text(value, style: AppTextStyles.statNumber.copyWith(color: color)),
           Text(label, style: AppTextStyles.labelSmall),
         ],
+      ),
+    );
+  }
+}
+
+class _AlignmentSection extends StatelessWidget {
+  final int alignmentScore;
+  final String masteryLevel;
+  final VoidCallback onTap;
+
+  const _AlignmentSection({
+    required this.alignmentScore,
+    required this.masteryLevel,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AppCard(
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: const BoxDecoration(
+                color: AppColors.primaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  '$alignmentScore',
+                  style: AppTextStyles.headlineSmall
+                      .copyWith(color: AppColors.primary),
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(AppStrings.mindsetAlignmentTitle,
+                      style: AppTextStyles.labelLarge),
+                  Text(
+                    AppStrings.mindsetAlignmentSubtitle(masteryLevel),
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+          ],
+        ),
       ),
     );
   }

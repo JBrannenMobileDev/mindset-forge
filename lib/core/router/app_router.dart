@@ -12,6 +12,7 @@ import '../../features/dashboard/dashboard_screen.dart';
 import '../../features/coach_chat/chat_screen.dart';
 import '../../features/goals_habits/actions_screen.dart';
 import '../../features/goals_habits/goal_detail_screen.dart';
+import '../../features/goals_habits/habit_detail_screen.dart';
 import '../../features/journal/journal_screen.dart';
 import '../../features/journal/new_journal_entry_screen.dart';
 import '../../features/journal/journal_entry_detail_screen.dart';
@@ -134,18 +135,28 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Wait for profile to load before making routing decisions
       if (profileAsync.isLoading) return null;
 
+      // Signed in but no Firestore profile — send to splash/welcome; splash signs
+      // out and restarts at auth welcome.
+      if (profile == null) {
+        if (location != '/welcome' && location != '/splash') {
+          return '/welcome';
+        }
+        return null;
+      }
+
+      // Completed users shouldn't land back on onboarding.
+      if (profile.hasCompletedOnboarding && location == '/onboarding') {
+        return '/dashboard';
+      }
+
       // Onboarding gate. New users must finish onboarding before using the app.
       // Partner accounts are exempt — they support their friend first and only
       // run onboarding when they opt into their own personal features.
-      final needsOnboarding =
-          profile == null || !profile.hasCompletedOnboarding;
-      if (needsOnboarding && !(profile?.isPartnerAccount ?? false)) {
+      final needsOnboarding = !profile.hasCompletedOnboarding;
+      if (needsOnboarding && !profile.isPartnerAccount) {
         if (location == '/onboarding') return null;
         return '/onboarding';
       }
-      // Past this point a null profile is impossible (it would not be a partner
-      // and would have been redirected above) — guard for null safety.
-      if (profile == null) return null;
 
       // Subscription gate. Free "partner" accounts are exempt (they get limited
       // app access funneled toward their own trial). Regular users must have an
@@ -244,6 +255,12 @@ final routerProvider = Provider<GoRouter>((ref) {
                   goalId: state.pathParameters['id']!,
                 ),
               ),
+              GoRoute(
+                path: 'habit/:id',
+                builder: (_, state) => HabitDetailScreen(
+                  habitId: state.pathParameters['id']!,
+                ),
+              ),
             ],
           ),
           GoRoute(
@@ -332,9 +349,44 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
+/// Refreshes the router only when something the `redirect` callback actually
+/// reads has changed — not on every emission of the auth/profile streams.
+/// Firestore commonly delivers a cache snapshot immediately followed by a
+/// server snapshot on cold start; without this filter each one forces a full
+/// redirect re-evaluation (and downstream rebuild of whatever's on screen),
+/// which is unnecessary churn right when the app is most likely to have
+/// several other providers settling at the same time.
 class _RouterRefreshNotifier extends ChangeNotifier {
+  String? _lastUid;
+  bool? _lastHasCompletedOnboarding;
+  bool? _lastIsPartnerAccount;
+  bool? _lastHasActiveSubscription;
+  String? _lastUserType;
+
   _RouterRefreshNotifier(ProviderRef ref) {
-    ref.listen(authStateProvider, (_, __) => notifyListeners());
-    ref.listen(currentUserProfileProvider, (_, __) => notifyListeners());
+    ref.listen(authStateProvider, (_, next) {
+      final uid = next.valueOrNull?.uid;
+      if (uid == _lastUid) return;
+      _lastUid = uid;
+      notifyListeners();
+    });
+    ref.listen(currentUserProfileProvider, (_, next) {
+      final profile = next.valueOrNull;
+      final hasCompletedOnboarding = profile?.hasCompletedOnboarding;
+      final isPartnerAccount = profile?.isPartnerAccount;
+      final hasActiveSubscription = profile?.hasActiveSubscription;
+      final userType = profile?.userType;
+      if (hasCompletedOnboarding == _lastHasCompletedOnboarding &&
+          isPartnerAccount == _lastIsPartnerAccount &&
+          hasActiveSubscription == _lastHasActiveSubscription &&
+          userType == _lastUserType) {
+        return;
+      }
+      _lastHasCompletedOnboarding = hasCompletedOnboarding;
+      _lastIsPartnerAccount = isPartnerAccount;
+      _lastHasActiveSubscription = hasActiveSubscription;
+      _lastUserType = userType;
+      notifyListeners();
+    });
   }
 }

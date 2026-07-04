@@ -1,5 +1,3 @@
-import 'date_range.dart';
-
 class Habit {
   final String id;
   final String name;
@@ -9,8 +7,15 @@ class Habit {
   final String state;
   final DateTime? lastCompletedDate;
   final List<DateTime> completionHistory;
-  final List<DateRange> pausedDates;
   final DateTime createdAt;
+
+  /// Opt-in cue-based reminder: off by default so existing/new habits never
+  /// silently start notifying. [reminderMinutes] is minutes since local
+  /// midnight, only meaningful while [reminderEnabled] is true.
+  final bool reminderEnabled;
+  final int reminderMinutes;
+
+  static const int defaultReminderMinutes = 8 * 60; // 08:00
 
   const Habit({
     required this.id,
@@ -21,8 +26,9 @@ class Habit {
     this.state = 'active',
     this.lastCompletedDate,
     this.completionHistory = const [],
-    this.pausedDates = const [],
     required this.createdAt,
+    this.reminderEnabled = false,
+    this.reminderMinutes = defaultReminderMinutes,
   });
 
   /// Active day (4 AM–4 AM): midnight–4 AM counts as the prior day, matching
@@ -33,6 +39,26 @@ class Habit {
     return DateTime(a.year, a.month, a.day);
   }
 
+  /// The Monday of the calendar week containing [d]'s active day. 'weekly'
+  /// habits are satisfied once per week rather than on a specific day, so
+  /// streaks and "done for now" key off this instead of [activeDay].
+  static DateTime activeWeekStart(DateTime d) {
+    final day = activeDay(d);
+    return day.subtract(Duration(days: day.weekday - 1));
+  }
+
+  /// The cadence period [d] falls into: a specific day for 'daily' habits,
+  /// the Monday of its week for 'weekly' habits. Streaks and "completed for
+  /// now" are both computed in terms of this period so a weekly habit only
+  /// needs one completion per week, not one per day.
+  DateTime _periodOf(DateTime d) =>
+      frequency == 'weekly' ? activeWeekStart(d) : activeDay(d);
+
+  /// The gap between consecutive cadence periods: one day for 'daily', one
+  /// week for 'weekly'.
+  Duration get _periodSpan =>
+      frequency == 'weekly' ? const Duration(days: 7) : const Duration(days: 1);
+
   int get currentStreak {
     if (completionHistory.isEmpty) return 0;
 
@@ -40,15 +66,15 @@ class Habit {
       ..sort((a, b) => b.compareTo(a));
 
     int streak = 0;
-    DateTime checkDate = activeDay(DateTime.now());
+    DateTime checkPeriod = _periodOf(DateTime.now());
 
     for (final completion in sorted) {
-      final completionDate = activeDay(completion);
+      final period = _periodOf(completion);
 
-      if (completionDate == checkDate ||
-          completionDate == checkDate.subtract(const Duration(days: 1))) {
+      if (period == checkPeriod ||
+          period == checkPeriod.subtract(_periodSpan)) {
         streak++;
-        checkDate = completionDate.subtract(const Duration(days: 1));
+        checkPeriod = period.subtract(_periodSpan);
       } else {
         break;
       }
@@ -57,9 +83,31 @@ class Habit {
     return streak;
   }
 
+  /// True once this habit has been completed for its current cadence period
+  /// — today for 'daily' habits, this week for 'weekly' habits.
   bool get isCompletedToday {
     if (lastCompletedDate == null) return false;
-    return activeDay(lastCompletedDate!) == activeDay(DateTime.now());
+    return _periodOf(lastCompletedDate!) == _periodOf(DateTime.now());
+  }
+
+  /// Whether [date]'s cadence period (that calendar day for 'daily', that
+  /// calendar week — Monday-start — for 'weekly') contains at least one raw
+  /// completion. Deliberately calendar-day based (no 4 AM grace shift) so it
+  /// matches simple day-key comparisons, e.g. the Alignment Score's per-day
+  /// credit and the history heatmap, both of which key dates the same way.
+  bool hasCompletionInPeriodContaining(DateTime date) {
+    if (frequency == 'weekly') {
+      final d = DateTime(date.year, date.month, date.day);
+      final weekStart = d.subtract(Duration(days: d.weekday - 1));
+      final weekEnd = weekStart.add(const Duration(days: 6));
+      return completionHistory.any((t) {
+        final td = DateTime(t.year, t.month, t.day);
+        return !td.isBefore(weekStart) && !td.isAfter(weekEnd);
+      });
+    }
+    return completionHistory.any(
+      (t) => t.year == date.year && t.month == date.month && t.day == date.day,
+    );
   }
 
   Habit copyWith({
@@ -71,8 +119,9 @@ class Habit {
     String? state,
     DateTime? lastCompletedDate,
     List<DateTime>? completionHistory,
-    List<DateRange>? pausedDates,
     DateTime? createdAt,
+    bool? reminderEnabled,
+    int? reminderMinutes,
   }) {
     return Habit(
       id: id ?? this.id,
@@ -83,8 +132,9 @@ class Habit {
       state: state ?? this.state,
       lastCompletedDate: lastCompletedDate ?? this.lastCompletedDate,
       completionHistory: completionHistory ?? this.completionHistory,
-      pausedDates: pausedDates ?? this.pausedDates,
       createdAt: createdAt ?? this.createdAt,
+      reminderEnabled: reminderEnabled ?? this.reminderEnabled,
+      reminderMinutes: reminderMinutes ?? this.reminderMinutes,
     );
   }
 
@@ -104,11 +154,10 @@ class Habit {
               .whereType<DateTime>()
               .toList() ??
           [],
-      pausedDates: (json['pausedDates'] as List<dynamic>?)
-              ?.map((e) => DateRange.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+      reminderEnabled: json['reminderEnabled'] as bool? ?? false,
+      reminderMinutes:
+          (json['reminderMinutes'] as num?)?.toInt() ?? defaultReminderMinutes,
     );
   }
 
@@ -122,7 +171,8 @@ class Habit {
         'lastCompletedDate': lastCompletedDate?.toIso8601String(),
         'completionHistory':
             completionHistory.map((d) => d.toIso8601String()).toList(),
-        'pausedDates': pausedDates.map((r) => r.toJson()).toList(),
         'createdAt': createdAt.toIso8601String(),
+        'reminderEnabled': reminderEnabled,
+        'reminderMinutes': reminderMinutes,
       };
 }

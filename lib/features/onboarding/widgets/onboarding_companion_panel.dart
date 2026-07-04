@@ -30,6 +30,7 @@ class OnboardingCompanionPanel extends StatelessWidget {
   static const _steps = <String>[
     'Welcome',
     'Goals',
+    'Focus',
     'Identity',
     'Beliefs',
     'Reveal',

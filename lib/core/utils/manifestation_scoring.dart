@@ -121,6 +121,12 @@ abstract final class ManifestationScoring {
     // fraction of active habits completed, capped to a full point once the
     // [habitDayThreshold] (70%) bar is met. This keeps partial days fair
     // (e.g. 2/3 = 0.67) without giving full credit away below the bar.
+    //
+    // 'weekly' habits are satisfied for every day of their calendar week
+    // (Monday-start) once completed once that week, rather than needing a
+    // completion on the exact day — matching their cadence instead of
+    // silently expecting daily check-ins. See
+    // [Habit.hasCompletionInPeriodContaining].
     final activeHabits = p.habits.where((h) => h.state == 'active').toList();
     double habitCredit = 0;
     double todayHabitCredit = 0;
@@ -130,11 +136,10 @@ abstract final class ManifestationScoring {
         final y = int.parse(parts[0]);
         final m = int.parse(parts[1]);
         final d = int.parse(parts[2]);
-        final completed = activeHabits.where((h) {
-          return h.completionHistory.any(
-            (t) => t.year == y && t.month == m && t.day == d,
-          );
-        }).length;
+        final dayDate = DateTime(y, m, d);
+        final completed = activeHabits
+            .where((h) => h.hasCompletionInPeriodContaining(dayDate))
+            .length;
         final fraction = completed / activeHabits.length;
         final dayCredit = fraction >= habitDayThreshold ? 1.0 : fraction;
         habitCredit += dayCredit;

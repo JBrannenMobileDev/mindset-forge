@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/utils/boot_log.dart';
+import '../../providers/auth_notifier.dart';
 import '../../providers/auth_provider.dart';
 import 'widgets/splash_view.dart';
 
@@ -44,21 +45,34 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
     _navigated = true;
 
-    // Defer the navigation to after the current build frame completes.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final u = ref.read(authStateProvider).valueOrNull;
-      if (u == null) {
-        context.go('/welcome');
-        return;
-      }
-      final profile = ref.read(currentUserProfileProvider).valueOrNull;
-      if (profile == null || !profile.hasCompletedOnboarding) {
-        context.go('/onboarding');
-      } else {
-        context.go('/dashboard');
-      }
+      _navigateFromSplash();
     });
+  }
+
+  Future<void> _navigateFromSplash() async {
+    if (!mounted) return;
+
+    final u = ref.read(authStateProvider).valueOrNull;
+    if (u == null) {
+      context.go('/welcome');
+      return;
+    }
+
+    final profile = ref.read(currentUserProfileProvider).valueOrNull;
+    if (profile == null) {
+      // Signed in but no Firestore profile — broken/orphan session.
+      await ref.read(authNotifierProvider.notifier).signOut();
+      if (!mounted) return;
+      context.go('/welcome');
+      return;
+    }
+
+    if (!profile.hasCompletedOnboarding) {
+      context.go('/onboarding');
+    } else {
+      context.go('/dashboard');
+    }
   }
 
   @override

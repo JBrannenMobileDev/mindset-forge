@@ -244,7 +244,7 @@ class _NotificationSettingsScreenState
             icon: Icons.bedtime_rounded,
             iconColor: AppColors.primary,
             title: 'Quiet Hours',
-            subtitle: 'No reminders during this window — streak alerts can still fire.',
+            subtitle: 'No reminders during this window. Streak alerts can still fire.',
             disabled: !on,
             children: [
               _TimeRow(

@@ -105,6 +105,11 @@ class GettingStartedChecklist extends StatelessWidget {
         onTap: () => context.go('/actions?tab=goals'),
       ),
       _ChecklistItem(
+        label: 'Add your first habit',
+        isDone: profile.habits.isNotEmpty,
+        onTap: () => context.go('/actions?tab=habits'),
+      ),
+      _ChecklistItem(
         label: 'Complete your first journal entry',
         isDone: profile.dailyCompletions.any((c) => c.journalCompleted),
         onTap: () => context.go('/journal/new'),

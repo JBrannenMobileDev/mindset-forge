@@ -44,7 +44,7 @@ abstract final class AppStrings {
   // Small-screen web gate (mobile web falls back to the app; see MobileWebGate)
   static const String mobileGateTitle = 'Continue in the app';
   static const String mobileGateSubtitle =
-      'MindsetForge is built for your phone. Download the app for the full experience — your dashboard, coach, and daily practice.';
+      'MindsetForge is built for your phone. Download the app for the full experience, your dashboard, coach, and daily practice.';
   static const String mobileGateOpenCta = 'Already have it? Open the app';
   static const String mobileGateDownloadLabel = 'GET THE APP';
   static const String mobileGateOpenError =
@@ -81,7 +81,7 @@ abstract final class AppStrings {
   static const String partnerSignupSubtitle =
       'Create your free account to support your friend and follow their progress.';
   static const String partnerSignupBanner =
-      "You've been invited to be an accountability partner. Partners join free — no subscription needed.";
+      "You've been invited to be an accountability partner. Partners join free, no subscription needed.";
 
   // Partner dashboard
   static const String partnerWeekTitle = 'This week';
@@ -143,7 +143,7 @@ abstract final class AppStrings {
   static const String manifestationLayer1Name = 'Subconscious';
   static const String manifestationLayer1Tagline = 'Foundation Layer';
   static const String manifestationLayer1Desc =
-      'Your subconscious runs roughly 95% of your behavior. If it believes you are unworthy or incapable, you will sabotage yourself without realizing it. This is the deepest layer — reprogram it and everything above gets easier. You rewire it two ways: affirmations train your inner voice through repetition, and visualization rehearses the outcome so vividly your brain builds the neural pathways as if it already happened.';
+      'Your subconscious runs roughly 95% of your behavior. If it believes you are unworthy or incapable, you will sabotage yourself without realizing it. This is the deepest layer. Reprogram it and everything above gets easier. You rewire it two ways: affirmations train your inner voice through repetition, and visualization rehearses the outcome so vividly your brain builds the neural pathways as if it already happened.';
   static const String manifestationLayer1FedBy =
       'Morning and evening affirmations, future-self visualization';
   static const String manifestationLayer1Book =
@@ -161,7 +161,7 @@ abstract final class AppStrings {
   static const String manifestationLayer3Name = 'Actions';
   static const String manifestationLayer3Tagline = 'Discipline Layer';
   static const String manifestationLayer3Desc =
-      'Beliefs and thoughts mean nothing without action — this is where most people stall. You act as if you are already the person you want to become, and small daily reps compound into momentum. Discipline, not motivation, is what carries you on the days you do not feel like it.';
+      'Beliefs and thoughts mean nothing without action. This is where most people stall. You act as if you are already the person you want to become, and small daily reps compound into momentum. Discipline, not motivation, is what carries you on the days you do not feel like it.';
   static const String manifestationLayer3FedBy = 'Habits and priority actions';
   static const String manifestationLayer3Book =
       'From "177 Mental Toughness Secrets": champions take action first and let motivation follow. Discipline is what creates freedom.';
@@ -169,7 +169,7 @@ abstract final class AppStrings {
   static const String manifestationLayer4Name = 'Results';
   static const String manifestationLayer4Tagline = 'Outcome Layer';
   static const String manifestationLayer4Desc =
-      'When the three layers below are aligned, results become inevitable. Your subconscious starts hunting for evidence of your new identity, your thoughts steer you toward opportunities, and your actions build proof. Results are not the goal — they are confirmation that the inner work has landed.';
+      'When the three layers below are aligned, results become inevitable. Your subconscious starts hunting for evidence of your new identity, your thoughts steer you toward opportunities, and your actions build proof. Results are not the goal. They are confirmation that the inner work has landed.';
   static const String manifestationLayer4FedBy = 'Progress on your goals';
   static const String manifestationLayer4Book =
       'From "Think and Grow Rich": when desire is backed by faith it becomes an irresistible force, and faith is built by consistent evidence validating your new beliefs.';
@@ -185,12 +185,13 @@ abstract final class AppStrings {
 
   static const String manifestationKeyTitle = 'The key to manifestation';
   static const String manifestationKeyBody =
-      'Manifestation is not magic — it is alignment. When your subconscious beliefs, conscious thoughts, daily actions, and real-world results all point the same direction, you become unstoppable. Your alignment score shows how close those four layers are. The nearer to 100%, the faster it all moves.';
+      'Manifestation is not magic. It is alignment. When your subconscious beliefs, conscious thoughts, daily actions, and real-world results all point the same direction, you become unstoppable. Your alignment score shows how close those four layers are. The nearer to 100%, the faster it all moves.';
 
   static const String manifestationSystemCta = 'Got it';
 
   // Onboarding
   static const String onboardingWelcomeTitle = 'Welcome to MindsetForge';
+  static const String onboardingUseDifferentAccount = 'Use a different account';
   static const String onboardingWelcomeSubtitle =
       'Your personal coaching system to rewire limiting beliefs, align your mindset, and forge the future you deserve.';
   static const String onboardingNext = 'Continue';
@@ -216,6 +217,30 @@ abstract final class AppStrings {
       'Here\'s what your coach sees about you right now.';
   static const String enterMindsetForge = 'Enter MindsetForge';
   static const String onboardingStartFirstRitual = 'Start My First Ritual';
+
+  // Onboarding — goals: select + focus (two-step)
+  static const String onboardingGoalsSelectTitle =
+      'What do you want to achieve?';
+  static const String onboardingGoalsSelectSubtitle =
+      'Choose from common goals or create your own. You can pick multiple.';
+  static const String onboardingGoalsSelectEmptyHint =
+      'Select at least one goal to continue.';
+  static const String onboardingGoalsSomethingElse = 'Something else';
+  static const String onboardingGoalsSomethingElseHint = 'Write your own goal';
+  static const String onboardingGoalsCustomAdded = 'YOUR CUSTOM GOALS';
+  static const String onboardingGoalsCustomTitle = 'Custom Goal';
+  static const String onboardingGoalsCustomTitleHint =
+      'What do you want to achieve?';
+  static const String onboardingGoalsCategoryLabel = 'Category';
+  static const String onboardingGoalsAddCustom = 'Add Goal';
+  static const String onboardingGoalsFocusTitle = 'Which matters most?';
+  static const String onboardingGoalsFocusSubtitle =
+      'Tap the goal you want to focus on first. We\'ll build your first steps around it.';
+  static const String onboardingGoalsFocusTitleSingle =
+      'Why does this matter to you?';
+  static const String onboardingGoalsFocusSubtitleSingle =
+      'A few words about why this goal matters helps your coach personalize your plan.';
+  static const String onboardingGoalsChangeGoals = 'Change goals';
 
   // Onboarding — goals: prioritization + why
   static const String onboardingPrimaryGoalPrompt =
@@ -310,7 +335,7 @@ abstract final class AppStrings {
   static const String heroOnTrackTrait =
       'Now move like someone who is {trait}.';
   static const String focusStillOpenNote =
-      'Your #1 focus is still open — close it out before you wind down.';
+      'Your #1 focus is still open. Close it out before you wind down.';
   static const String otherRoutineMorningLink = 'Morning recap';
   static const String otherRoutineEveningLink = 'Evening routine';
   static const String dailyRoutine = 'Daily Routine';
@@ -322,17 +347,17 @@ abstract final class AppStrings {
   static const String dailyWinsInfoTitle = 'What makes a perfect day';
   static const String dailyWinsInfoBody =
       'Finish all of today\'s daily wins to earn a perfect day. Completing your '
-      '#1 focus is the action that drives real change — it\'s required.';
+      '#1 focus is the action that drives real change, it\'s required.';
 
   // Streak strip (dashboard header)
   static const String streakDayStreak = 'day streak';
   static const String streakDaysStreak = 'days streak';
   static const String streakStartToday = 'Start your streak today';
   static const String streakKeepGoing = 'Complete today to keep your streak';
-  static const String streakLockedIn = 'Locked in for today — keep it rolling';
+  static const String streakLockedIn = 'Locked in for today. Keep it rolling';
   static const String streakPerfectWeek = 'Perfect week. You\'re unstoppable.';
   static const String streakFlawlessWeek =
-      'Flawless week — every single win, seven days straight.';
+      'Flawless week. Every single win, seven days straight.';
   static const String streakPerfectWeekBadge = 'PERFECT WEEK';
   static const String streakFlawlessWeekBadge = 'FLAWLESS WEEK';
   static const String streakBest = 'best';
@@ -349,6 +374,16 @@ abstract final class AppStrings {
   static const String habits = 'Habits';
   static const String addGoal = 'Add Goal';
   static const String addHabit = 'Add Habit';
+  static const String editHabit = 'Edit Habit';
+  static const String habitDetailTitle = 'Habit';
+  static const String habitNotFound = 'Habit not found.';
+  static const String habitHistoryTitle = 'History';
+  static const String habitCompletionRate = 'Completion rate';
+  static const String habitTotalCompletions = 'Total';
+  static const String habitsActiveSectionTitle = 'Active';
+  static const String habitsPausedSectionTitle = 'Paused';
+  static String habitStreakMilestoneToast(String name, int days) =>
+      '$name: $days-day streak! Keep it going.';
   static const String goalTitle = 'Goal Title';
   static const String goalDescription = 'Description (optional)';
   static const String goalTargetDate = 'Target Date';
@@ -394,7 +429,7 @@ abstract final class AppStrings {
   // Post-creation setup sheet
   static const String goalSetupTitle = 'Build your plan';
   static const String goalSetupSubtitle =
-      'Your coach mapped the path. Add what resonates — you can change it anytime.';
+      'Your coach mapped the path. Add what resonates, you can change it anytime.';
   static const String goalSetupMilestones = 'Suggested milestones';
   static const String goalSetupMilestonesLoading = 'Mapping your milestones...';
   static const String goalSetupAddMilestone = 'Add milestone';
@@ -406,7 +441,7 @@ abstract final class AppStrings {
   static const String goalSetupHabitAdded = 'Habit added';
   static const String goalSetupAffirmationAdded = 'Affirmation added';
   static const String goalSetupFutureSelfNote =
-      'This goal now feeds your Future Self Practice — visualize it there.';
+      'This goal now feeds your Future Self Practice. Visualize it there.';
   static const String goalSetupDone = 'Done';
   static const String goalHabitAddedToast = 'Habit added to your routine!';
   static const String goalAffirmationAddedToast = 'Affirmation added!';
@@ -435,6 +470,7 @@ abstract final class AppStrings {
   static const String priorityActionsEmptyTitle = "Plan today's priorities";
   static const String priorityActionsEmptySubtitle =
       "Add the few actions that move you closest to who you want to become, or let your coach suggest some. Anything you don't finish rolls over to tomorrow.";
+  static const String priorityActionsTodayPrefix = 'Today · ';
   static const String priorityActionsHeader = "TODAY'S PRIORITIES";
   static const String priorityActionsFocusLabel = 'TOP PRIORITY';
   static const String priorityActionsSetFocus = 'Set as top priority';
@@ -453,9 +489,15 @@ abstract final class AppStrings {
   static const String dailyHabits = 'Daily Habits';
   static const String habitsAllDone = 'All habits done';
   static const String setUpHabits = 'Set up habits';
+  static const String habitReminderLabel = 'Remind me';
+  static const String habitReminderGuidance =
+      "We'll nudge you at this time if the habit isn't done yet, mentioning your cue.";
   static const String habitPause = 'Pause';
   static const String habitResume = 'Resume';
   static const String habitDelete = 'Delete';
+  static const String habitDeleteConfirmTitle = 'Delete Habit?';
+  static const String habitDeleteConfirmBody =
+      'This habit and its history will be permanently deleted.';
   static const String habitNameHint = 'e.g., Read one page';
   static const String habitTriggerHint = 'After I pour my morning coffee';
   static const String habitIdentityHint = 'e.g., I am a disciplined person';
@@ -473,13 +515,13 @@ abstract final class AppStrings {
       'Borrow your future self\'s habits';
   static const String habitGuidanceFutureSelfBody =
       'What does your future self already do every day? Pick one of their habits and start it now.';
-  static const String habitNameLabel = 'Habit — what will you do?';
+  static const String habitNameLabel = 'Habit, what will you do?';
   static const String habitNameGuidance =
-      'Start tiny — something you can do in under two minutes.';
-  static const String habitCueLabel = 'Cue — when will you do it?';
+      'Start tiny. Something you can do in under two minutes.';
+  static const String habitCueLabel = 'Cue, when will you do it?';
   static const String habitCueGuidance =
       'Anchor it to a routine you already have so it sticks.';
-  static const String habitIdentityLabel = 'Identity — who does this make you?';
+  static const String habitIdentityLabel = 'Identity, who does this make you?';
   static const String habitIdentityGuidance =
       'Every time you do this, you cast a vote for this identity.';
   static const List<String> habitCuePresets = [
@@ -698,12 +740,28 @@ abstract final class AppStrings {
   static const String masteryLevel = 'Mastery Level';
   static const String overallScore = 'Overall Score';
 
-  // Mindset hub (Foundation layer)
+  // Mindset hub
   static const String mindsetHubSubtitle =
-      'Your foundation layer, where identity is reprogrammed.';
-  static const String subconsciousPracticeTitle = 'Subconscious Practice';
-  static const String subconsciousPracticeSubtitle =
-      'Reprogram the foundation with affirmations and future-self visualization.';
+      'Daily practices to reprogram your subconscious.';
+  static const String mindsetPracticeHeroLabel = "TODAY'S PRACTICE";
+  static const String mindsetPracticeHeroMorningTitle = 'Morning Affirmations';
+  static const String mindsetPracticeHeroMorningSubtitle =
+      'Start your day by speaking your new beliefs.';
+  static const String mindsetPracticeHeroMorningButton = 'Start Session';
+  static const String mindsetPracticeHeroEveningTitle = 'Evening Affirmations';
+  static const String mindsetPracticeHeroEveningSubtitle =
+      'Close the day by reinforcing who you are becoming.';
+  static const String mindsetPracticeHeroEveningButton = 'Start Session';
+  static const String mindsetPracticeHeroFutureSelfTitle = 'Future Self';
+  static const String mindsetPracticeHeroFutureSelfSubtitle =
+      'Return to your scene and embody your future self.';
+  static const String mindsetPracticeHeroFutureSelfButton = 'Start Practice';
+  static const String mindsetPracticeOnTrackTitle = "You're On Track";
+  static const String mindsetPracticeOnTrackSubtitle =
+      'Today\'s subconscious practices are complete. Keep showing up.';
+  static const String mindsetProgressEntryTitle = 'Your Progress';
+  static String mindsetProgressEntryStatus(int alignment, int streak) =>
+      'Alignment $alignment · $streak-day streak';
   static const String identityStatementLabel = 'IDENTITY STATEMENT';
   static const String identityStatementHint =
       'I am a disciplined, focused person who follows through';
@@ -719,9 +777,6 @@ abstract final class AppStrings {
   static const String mindsetAlignmentTitle = 'Manifestation Alignment';
   static String mindsetAlignmentSubtitle(String level) =>
       '$level, tap for breakdown';
-  static const String mindsetMomentumTitle = 'Momentum \u0026 Progress';
-  static const String mindsetMomentumSubtitle =
-      'Streaks, perfect days, and your activity heatmap';
   static const String mindsetAffirmationsAddPrompt =
       'Add affirmations to start your daily reprogramming';
   static String mindsetAffirmationsActiveCount(int count) =>
@@ -855,7 +910,7 @@ abstract final class AppStrings {
 
   static const String invitePromptOnboardingTitle = 'Bring someone along';
   static const String invitePromptOnboardingBody =
-      'People who are watched follow through. Invite a friend as your accountability partner — they get the app free and can cheer you on from day one.';
+      'People who are watched follow through. Invite a friend as your accountability partner. They get the app free and can cheer you on from day one.';
 
   static const String invitePromptPerfectDayTitle =
       'Perfect day! Make it stick';
@@ -864,7 +919,7 @@ abstract final class AppStrings {
 
   static String invitePromptStreakTitle(int days) => '$days-day streak!';
   static String invitePromptStreakBody(int days) =>
-      "You're on a $days-day streak — lock it in by inviting someone to keep you honest. They join free and can send you encouragement.";
+      "You're on a $days-day streak. Lock it in by inviting someone to keep you honest. They join free and can send you encouragement.";
 
   static const String inviteShareSubject = 'Be my accountability partner';
   static String inviteShareText(String partnerLabel, String link) =>
@@ -878,7 +933,7 @@ abstract final class AppStrings {
       'Could not create invite. Please try again.';
 
   // Home screen widget — 7-day streak chain (focus-complete state)
-  static const String widgetStreakSafe = "Today's locked in — streak safe";
+  static const String widgetStreakSafe = "Today's locked in, streak safe";
   static const String widgetStreakFinish = 'finish to extend your streak';
 
   // Home screen widget education prompt

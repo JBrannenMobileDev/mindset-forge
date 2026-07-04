@@ -6,36 +6,78 @@ import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/utils/app_date_utils.dart';
+import '../../core/widgets/adaptive_sheet.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
+import '../../core/widgets/app_text_field.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/priority_actions_provider.dart';
+import 'actions_layout.dart';
 import 'widgets/actions_tab_skeleton.dart';
+import 'widgets/sheet_handle.dart';
 
 class PriorityActionsTab extends ConsumerWidget {
-  const PriorityActionsTab({super.key});
+  final ActionsLayoutContext layoutContext;
+
+  const PriorityActionsTab({
+    super.key,
+    this.layoutContext = ActionsLayoutContext.mobileTab,
+  });
+
+  static Future<void> showAddSheet(BuildContext context, WidgetRef ref) async {
+    await showAdaptiveSheet<void>(
+      context: context,
+      builder: (_) => _AddPrioritySheet(
+        onSubmit: (text) =>
+            ref.read(priorityActionsProvider.notifier).addAction(text),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(currentUserProfileProvider);
+    final isMobile = layoutContext == ActionsLayoutContext.mobileTab;
 
     return profileAsync.when(
-      loading: () => const ActionsTabSkeleton(),
-      error: (_, __) => ErrorState(
-        message: AppStrings.errorGeneric,
-        onRetry: () => ref.invalidate(currentUserProfileProvider),
+      loading: () => ActionsTabSkeleton(layoutContext: layoutContext),
+      error: (_, __) => _wrapDesktopEmpty(
+        layoutContext,
+        ErrorState(
+          message: AppStrings.errorGeneric,
+          onRetry: () => ref.invalidate(currentUserProfileProvider),
+        ),
       ),
       data: (profile) {
-        if (profile == null) return const ActionsTabSkeleton();
-        return const _PriorityActionsContent();
+        if (profile == null) {
+          return ActionsTabSkeleton(layoutContext: layoutContext);
+        }
+        return _PriorityActionsContent(
+          layoutContext: layoutContext,
+          showFab: isMobile,
+        );
       },
     );
+  }
+
+  static Widget _wrapDesktopEmpty(
+    ActionsLayoutContext ctx,
+    Widget child,
+  ) {
+    if (ctx == ActionsLayoutContext.mobileTab) return child;
+    return Center(child: child);
   }
 }
 
 class _PriorityActionsContent extends ConsumerStatefulWidget {
-  const _PriorityActionsContent();
+  final ActionsLayoutContext layoutContext;
+  final bool showFab;
+
+  const _PriorityActionsContent({
+    required this.layoutContext,
+    required this.showFab,
+  });
 
   @override
   ConsumerState<_PriorityActionsContent> createState() =>
@@ -45,6 +87,8 @@ class _PriorityActionsContent extends ConsumerStatefulWidget {
 class _PriorityActionsContentState
     extends ConsumerState<_PriorityActionsContent> {
   final _addCtrl = TextEditingController();
+
+  ActionsLayoutContext get _ctx => widget.layoutContext;
 
   @override
   void dispose() {
@@ -72,83 +116,93 @@ class _PriorityActionsContentState
     }
   }
 
+  Future<void> _showAddSheet() async {
+    await PriorityActionsTab.showAddSheet(context, ref);
+  }
+
+  String get _todayLabel =>
+      '${AppStrings.priorityActionsTodayPrefix}${AppDateUtils.formatWeekdayLong(DateTime.now())}';
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(priorityActionsProvider);
+    final padding = actionsTabPadding(_ctx);
+    final shrinkWrap = actionsTabShrinkWrap(_ctx);
+    final physics = actionsTabScrollPhysics(_ctx);
 
     if (!state.isPlanned) {
-      return ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.screenPaddingH,
-          AppSpacing.lg,
-          AppSpacing.screenPaddingH,
-          100,
-        ),
+      final content = ListView(
+        shrinkWrap: shrinkWrap,
+        physics: physics,
+        padding: padding,
         children: _emptyChildren(state),
       );
+      if (_ctx == ActionsLayoutContext.mobileTab) return content;
+      return PriorityActionsTab._wrapDesktopEmpty(_ctx, content);
     }
-
-    // Planned state: full-height list with a FAB (bottom-right, above the nav)
-    // that opens a quick-add sheet. The list reserves enough bottom padding for
-    // the last item to clear the FAB.
-    //
-    // The nav shell uses `extendBody: true`, which inflates the in-body
-    // `MediaQuery.padding.bottom` and reduces its `viewPadding.bottom`, so
-    // neither is reliable here. Read the true device inset straight from the
-    // view and mirror the shell's own bottom rule to sit just above the pill.
-    final safeBottom = MediaQueryData.fromView(View.of(context)).padding.bottom;
-    final bottomPad =
-        safeBottom > 0 ? safeBottom : AppSpacing.bottomNavMargin;
-    final pillTop = bottomPad + AppSpacing.bottomNavHeight;
-    final fabBottom = pillTop + AppSpacing.sm;
-    const fabSize = 56.0;
 
     final focus = state.focusAction;
     final hasFocus = focus.isNotEmpty && state.actions.contains(focus);
     final movable =
         state.actions.where((a) => !hasFocus || a != focus).toList();
 
+    double listBottomPad = padding.bottom;
+    if (widget.showFab) {
+      final safeBottom =
+          MediaQueryData.fromView(View.of(context)).padding.bottom;
+      final bottomPad =
+          safeBottom > 0 ? safeBottom : AppSpacing.bottomNavMargin;
+      final pillTop = bottomPad + AppSpacing.bottomNavHeight;
+      final fabBottom = pillTop + AppSpacing.sm;
+      const fabSize = 56.0;
+      listBottomPad = fabBottom + fabSize + AppSpacing.md;
+    }
+
+    final list = ReorderableListView.builder(
+      shrinkWrap: shrinkWrap,
+      physics: physics,
+      buildDefaultDragHandles: false,
+      padding: padding.copyWith(bottom: listBottomPad),
+      header: _PlannedHeader(state: state, todayLabel: _todayLabel),
+      itemCount: movable.length,
+      onReorder: (oldIndex, newIndex) {
+        if (newIndex > oldIndex) newIndex--;
+        ref
+            .read(priorityActionsProvider.notifier)
+            .reorderActions(oldIndex, newIndex);
+      },
+      itemBuilder: (context, index) {
+        final action = movable[index];
+        return Padding(
+          key: ValueKey(action),
+          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+          child: _PriorityActionCard(
+            action: action,
+            isCompleted: state.completed.contains(action),
+            isFocus: false,
+            dragIndex: index,
+            onToggleComplete: () => ref
+                .read(priorityActionsProvider.notifier)
+                .toggleComplete(action),
+            onSetFocus: () =>
+                ref.read(priorityActionsProvider.notifier).setFocus(action),
+            onRemove: () =>
+                ref.read(priorityActionsProvider.notifier).removeAction(action),
+          ),
+        );
+      },
+    );
+
+    if (!widget.showFab) return list;
+
+    final safeBottom = MediaQueryData.fromView(View.of(context)).padding.bottom;
+    final bottomPad = safeBottom > 0 ? safeBottom : AppSpacing.bottomNavMargin;
+    final pillTop = bottomPad + AppSpacing.bottomNavHeight;
+    final fabBottom = pillTop + AppSpacing.sm;
+
     return Stack(
       children: [
-        ReorderableListView.builder(
-          buildDefaultDragHandles: false,
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.screenPaddingH,
-            AppSpacing.lg,
-            AppSpacing.screenPaddingH,
-            fabBottom + fabSize + AppSpacing.md,
-          ),
-          header: _PlannedHeader(state: state),
-          itemCount: movable.length,
-          onReorder: (oldIndex, newIndex) {
-            if (newIndex > oldIndex) newIndex--;
-            ref
-                .read(priorityActionsProvider.notifier)
-                .reorderActions(oldIndex, newIndex);
-          },
-          itemBuilder: (context, index) {
-            final action = movable[index];
-            return Padding(
-              key: ValueKey(action),
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: _PriorityActionCard(
-                action: action,
-                isCompleted: state.completed.contains(action),
-                isFocus: false,
-                dragIndex: index,
-                onToggleComplete: () => ref
-                    .read(priorityActionsProvider.notifier)
-                    .toggleComplete(action),
-                onSetFocus: () => ref
-                    .read(priorityActionsProvider.notifier)
-                    .setFocus(action),
-                onRemove: () => ref
-                    .read(priorityActionsProvider.notifier)
-                    .removeAction(action),
-              ),
-            );
-          },
-        ),
+        list,
         Positioned(
           right: AppSpacing.screenPaddingH,
           bottom: fabBottom,
@@ -158,76 +212,35 @@ class _PriorityActionsContentState
     );
   }
 
-  Future<void> _showAddSheet() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppColors.surface,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppSpacing.radiusXl),
-        ),
-      ),
-      builder: (_) => _AddPrioritySheet(
-        onSubmit: (text) =>
-            ref.read(priorityActionsProvider.notifier).addAction(text),
-      ),
-    );
-  }
-
-  /// Always-visible label so it's clear the list is scoped to today.
-  Widget _todayLabel() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: Text(
-        'Today · ${AppDateUtils.formatWeekdayLong(DateTime.now())}',
-        style: AppTextStyles.overline.copyWith(color: AppColors.textMuted),
-      ),
-    );
-  }
-
   List<Widget> _emptyChildren(PriorityActionsState state) {
     return [
-      _todayLabel(),
-      Container(
-        width: 64,
-        height: 64,
-        decoration: const BoxDecoration(
-          color: AppColors.primaryContainer,
-          shape: BoxShape.circle,
+      Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+        child: Text(
+          _todayLabel,
+          style: AppTextStyles.overline.copyWith(color: AppColors.textMuted),
         ),
-        child: const Icon(Icons.flag_rounded,
-            color: AppColors.primary, size: 30),
       ),
-      const SizedBox(height: AppSpacing.lg),
-      Text(AppStrings.priorityActionsEmptyTitle,
-          style: AppTextStyles.headlineSmall),
-      const SizedBox(height: AppSpacing.sm),
-      Text(
-        AppStrings.priorityActionsEmptySubtitle,
-        style:
-            AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+      const EmptyState(
+        icon: Icons.flag_rounded,
+        title: AppStrings.priorityActionsEmptyTitle,
+        subtitle: AppStrings.priorityActionsEmptySubtitle,
       ),
       const SizedBox(height: AppSpacing.lg),
       _AddPriorityRow(controller: _addCtrl, onAdd: _add),
       const SizedBox(height: AppSpacing.md),
       Row(
         children: [
-          const Expanded(
-            child: Divider(color: AppColors.border, height: 1),
-          ),
+          const Expanded(child: Divider(color: AppColors.border, height: 1)),
           Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
             child: Text(
               AppStrings.orLabel,
               style: AppTextStyles.labelSmall
                   .copyWith(color: AppColors.textMuted),
             ),
           ),
-          const Expanded(
-            child: Divider(color: AppColors.border, height: 1),
-          ),
+          const Expanded(child: Divider(color: AppColors.border, height: 1)),
         ],
       ),
       const SizedBox(height: AppSpacing.md),
@@ -239,15 +252,13 @@ class _PriorityActionsContentState
       ),
     ];
   }
-
 }
 
-/// Non-reorderable top section for the planned list: the today label, the
-/// header + focus hint, and the pinned #1 focus card (when one is set).
 class _PlannedHeader extends ConsumerWidget {
   final PriorityActionsState state;
+  final String todayLabel;
 
-  const _PlannedHeader({required this.state});
+  const _PlannedHeader({required this.state, required this.todayLabel});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -269,7 +280,7 @@ class _PlannedHeader extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.only(bottom: AppSpacing.md),
           child: Text(
-            'Today · ${AppDateUtils.formatWeekdayLong(DateTime.now())}',
+            todayLabel,
             style: AppTextStyles.overline.copyWith(color: AppColors.textMuted),
           ),
         ),
@@ -293,8 +304,9 @@ class _PlannedHeader extends ConsumerWidget {
               isCompleted: focusComplete,
               isFocus: true,
               dragIndex: null,
-              onToggleComplete: () =>
-                  ref.read(priorityActionsProvider.notifier).toggleComplete(focus),
+              onToggleComplete: () => ref
+                  .read(priorityActionsProvider.notifier)
+                  .toggleComplete(focus),
               onSetFocus: () =>
                   ref.read(priorityActionsProvider.notifier).setFocus(focus),
               onRemove: () =>
@@ -306,8 +318,6 @@ class _PlannedHeader extends ConsumerWidget {
   }
 }
 
-/// Circular add button that floats above the bottom nav and opens the
-/// quick-add sheet.
 class _AddFab extends StatelessWidget {
   final VoidCallback onTap;
 
@@ -315,31 +325,32 @@ class _AddFab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        width: 56,
-        height: 56,
-        decoration: const BoxDecoration(
-          color: AppColors.primary,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primaryGlow,
-              blurRadius: 16,
-              offset: Offset(0, 4),
-            ),
-          ],
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          width: 56,
+          height: 56,
+          decoration: const BoxDecoration(
+            color: AppColors.primary,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primaryGlow,
+                blurRadius: 16,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
         ),
-        child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
       ),
     );
   }
 }
 
-/// Quick-add bottom sheet: a drag handle, an autofocused field, and an Add
-/// button. Adds and stays open so the user can add several in a row.
 class _AddPrioritySheet extends StatefulWidget {
   final void Function(String text) onSubmit;
 
@@ -351,12 +362,10 @@ class _AddPrioritySheet extends StatefulWidget {
 
 class _AddPrioritySheetState extends State<_AddPrioritySheet> {
   final _ctrl = TextEditingController();
-  final _focus = FocusNode();
 
   @override
   void dispose() {
     _ctrl.dispose();
-    _focus.dispose();
     super.dispose();
   }
 
@@ -384,52 +393,18 @@ class _AddPrioritySheetState extends State<_AddPrioritySheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
+              const SheetHandle(),
               const SizedBox(height: AppSpacing.lg),
               Text(AppStrings.priorityActionsEmptyTitle,
                   style: AppTextStyles.headlineSmall),
               const SizedBox(height: AppSpacing.md),
-              TextField(
+              AppTextField(
                 controller: _ctrl,
-                focusNode: _focus,
+                hint: AppStrings.priorityActionAddHint,
                 autofocus: true,
-                style: AppTextStyles.bodyMedium,
                 textCapitalization: TextCapitalization.sentences,
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _submit(),
-                decoration: InputDecoration(
-                  hintText: AppStrings.priorityActionAddHint,
-                  hintStyle: AppTextStyles.bodyMedium
-                      .copyWith(color: AppColors.textMuted),
-                  filled: true,
-                  fillColor: AppColors.surfaceElevated,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                    vertical: AppSpacing.sm + 2,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                    borderSide: const BorderSide(color: AppColors.border),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                    borderSide:
-                        const BorderSide(color: AppColors.primary, width: 1.5),
-                  ),
-                ),
               ),
               const SizedBox(height: AppSpacing.md),
               AppPrimaryButton(label: AppStrings.add, onPressed: _submit),
@@ -450,16 +425,17 @@ class _AddPriorityRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.only(left: AppSpacing.md, right: AppSpacing.xs),
+      padding:
+          const EdgeInsets.only(left: AppSpacing.md, right: AppSpacing.xs),
       decoration: BoxDecoration(
         color: AppColors.surfaceElevated,
         borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
         border: Border.all(color: AppColors.border),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x400A0A0F),
+            color: AppColors.scrim.withValues(alpha: 0.25),
             blurRadius: 12,
-            offset: Offset(0, 4),
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -486,18 +462,21 @@ class _AddPriorityRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.xs),
-          GestureDetector(
-            onTap: onAdd,
-            behavior: HitTestBehavior.opaque,
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
-                shape: BoxShape.circle,
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: onAdd,
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: const BoxDecoration(
+                  color: AppColors.primary,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.add_rounded,
+                    color: Colors.white, size: 22),
               ),
-              child:
-                  const Icon(Icons.add_rounded, color: Colors.white, size: 22),
             ),
           ),
         ],
@@ -510,9 +489,6 @@ class _PriorityActionCard extends StatelessWidget {
   final String action;
   final bool isCompleted;
   final bool isFocus;
-
-  /// Position within the reorderable list. When null (e.g. the pinned focus
-  /// card), no drag handle is shown and the card can't be reordered.
   final int? dragIndex;
   final VoidCallback onToggleComplete;
   final VoidCallback onSetFocus;
@@ -546,26 +522,28 @@ class _PriorityActionCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Completion circle — primary action, stays prominent on the left.
-          GestureDetector(
-            onTap: onToggleComplete,
-            behavior: HitTestBehavior.opaque,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: isCompleted ? AppColors.primary : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isCompleted ? AppColors.primary : AppColors.border,
-                  width: 2,
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: onToggleComplete,
+              behavior: HitTestBehavior.opaque,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: isCompleted ? AppColors.primary : Colors.transparent,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isCompleted ? AppColors.primary : AppColors.border,
+                    width: 2,
+                  ),
                 ),
+                child: isCompleted
+                    ? const Icon(Icons.check_rounded,
+                        color: Colors.white, size: 14)
+                    : null,
               ),
-              child: isCompleted
-                  ? const Icon(Icons.check_rounded,
-                      color: Colors.white, size: 14)
-                  : null,
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
@@ -584,16 +562,18 @@ class _PriorityActionCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.xs),
-          // Focus toggle — icon-only to keep the row compact.
-          GestureDetector(
-            onTap: onSetFocus,
-            behavior: HitTestBehavior.opaque,
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.xs),
-              child: Icon(
-                isFocus ? Icons.star_rounded : Icons.star_outline_rounded,
-                color: isFocus ? AppColors.primary : AppColors.textMuted,
-                size: 20,
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: onSetFocus,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xs),
+                child: Icon(
+                  isFocus ? Icons.star_rounded : Icons.star_outline_rounded,
+                  color: isFocus ? AppColors.primary : AppColors.textMuted,
+                  size: 20,
+                ),
               ),
             ),
           ),
@@ -626,12 +606,15 @@ class _PriorityActionCard extends StatelessWidget {
             ],
           ),
           if (dragIndex != null)
-            ReorderableDragStartListener(
-              index: dragIndex!,
-              child: const Padding(
-                padding: EdgeInsets.only(left: AppSpacing.xs),
-                child: Icon(Icons.drag_indicator_rounded,
-                    color: AppColors.textMuted, size: 20),
+            MouseRegion(
+              cursor: SystemMouseCursors.grab,
+              child: ReorderableDragStartListener(
+                index: dragIndex!,
+                child: const Padding(
+                  padding: EdgeInsets.only(left: AppSpacing.xs),
+                  child: Icon(Icons.drag_indicator_rounded,
+                      color: AppColors.textMuted, size: 20),
+                ),
               ),
             ),
         ],

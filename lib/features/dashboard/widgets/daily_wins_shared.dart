@@ -77,7 +77,7 @@ const requiredWinSummary = <(String, String)>[
   ('affirmationsMorning', 'Morning affirmations'),
   ('futureSelfCompleted', 'Future Self practice'),
   ('journalCompleted', 'Journal'),
-  ('dayPlanned', 'Plan day — pick your #1 focus'),
+  ('dayPlanned', 'Plan day, pick your #1 focus'),
   ('focusCompleted', 'Complete your #1 focus'),
   ('habitsCompleted', 'Daily habits'),
   ('affirmationsEvening', 'Evening affirmations'),
@@ -531,7 +531,7 @@ void showIdentitySheet(BuildContext context, UserProfile profile) {
                             .toggle('identityRead', true);
                         Navigator.pop(sheetCtx);
                       },
-                      child: const Text('Done — I\'ve read this'),
+                      child: const Text('Done, I\'ve read this'),
                     ),
                   )
                 else

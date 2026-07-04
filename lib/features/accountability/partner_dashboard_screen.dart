@@ -157,7 +157,7 @@ class _PartnerDashboardScreenState extends ConsumerState<PartnerDashboardScreen>
             const SizedBox(height: AppSpacing.xs),
             Text(
               needsSetup
-                  ? "You've seen ${_progress?.firstName ?? 'them'} grow — set up your free mindset profile and start yours."
+                  ? "You've seen ${_progress?.firstName ?? 'them'} grow. Set up your free mindset profile and start yours."
                   : 'Unlock unlimited coaching, goals, and more with a 7-day free trial.',
               style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
             ),

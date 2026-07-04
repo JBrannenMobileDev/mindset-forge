@@ -8,6 +8,7 @@ import '../../../core/constants/app_text_styles.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/habit_completion_checkbox.dart';
 import '../../../models/habit.dart';
 import '../../../providers/habits_provider.dart';
 
@@ -118,35 +119,11 @@ class _HabitRow extends StatelessWidget {
           ),
           child: Row(
             children: [
-              MouseRegion(
-                cursor: habit.isCompletedToday
-                    ? MouseCursor.defer
-                    : SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: habit.isCompletedToday ? null : onComplete,
-                  behavior: HitTestBehavior.opaque,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: habit.isCompletedToday
-                          ? AppColors.primary
-                          : Colors.transparent,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: habit.isCompletedToday
-                            ? AppColors.primary
-                            : AppColors.border,
-                        width: 2,
-                      ),
-                    ),
-                    child: habit.isCompletedToday
-                        ? const Icon(Icons.check_rounded,
-                            size: 16, color: Colors.white)
-                        : null,
-                  ),
-                ),
+              HabitCompletionCheckbox(
+                isDone: habit.isCompletedToday,
+                onTap: onComplete,
+                size: 28,
+                iconSize: 16,
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(

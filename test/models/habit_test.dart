@@ -157,6 +157,8 @@ void main() {
           lastCompletedDate: now,
           completionHistory: [now.subtract(const Duration(days: 1)), now],
           createdAt: createdAt,
+          reminderEnabled: true,
+          reminderMinutes: 7 * 60 + 30,
         );
 
         final restored = Habit.fromJson(original.toJson());
@@ -169,6 +171,8 @@ void main() {
         expect(restored.state, original.state);
         expect(restored.completionHistory.length, 2);
         expect(restored.lastCompletedDate?.day, original.lastCompletedDate?.day);
+        expect(restored.reminderEnabled, isTrue);
+        expect(restored.reminderMinutes, 7 * 60 + 30);
       });
 
       test('invalid completion history entries are filtered out', () {
@@ -189,7 +193,92 @@ void main() {
         expect(habit.state, 'active');
         expect(habit.lastCompletedDate, isNull);
         expect(habit.completionHistory, isEmpty);
-        expect(habit.pausedDates, isEmpty);
+        expect(habit.reminderEnabled, isFalse);
+        expect(habit.reminderMinutes, Habit.defaultReminderMinutes);
+      });
+    });
+
+    // ── weekly frequency (cadence-aware completion/streak) ──────────────────
+
+    group('weekly frequency', () {
+      // A safe mid-day hour so constructed dates round-trip through the 4 AM
+      // grace period unchanged (real completions always carry a genuine
+      // wall-clock hour; only synthetic hour-0 test dates would get
+      // reinterpreted as the prior day by `activeDay`).
+      DateTime atNoon(DateTime d) => DateTime(d.year, d.month, d.day, 12);
+
+      test('isCompletedToday is true once completed anywhere in the current week', () {
+        final now = DateTime.now();
+        final weekStart = atNoon(Habit.activeWeekStart(now));
+        final habit = Habit(
+          id: '1',
+          name: 'Weekly review',
+          frequency: 'weekly',
+          lastCompletedDate: weekStart,
+          createdAt: createdAt,
+        );
+        expect(habit.isCompletedToday, isTrue);
+      });
+
+      test('isCompletedToday is false once the last completion was in a prior week', () {
+        final now = DateTime.now();
+        final lastWeek =
+            atNoon(Habit.activeWeekStart(now).subtract(const Duration(days: 7)));
+        final habit = Habit(
+          id: '1',
+          name: 'Weekly review',
+          frequency: 'weekly',
+          lastCompletedDate: lastWeek,
+          createdAt: createdAt,
+        );
+        expect(habit.isCompletedToday, isFalse);
+      });
+
+      test('currentStreak counts consecutive weeks, not consecutive days', () {
+        final now = DateTime.now();
+        final thisWeek = atNoon(Habit.activeWeekStart(now));
+        final lastWeek = thisWeek.subtract(const Duration(days: 7));
+        final twoWeeksAgo = thisWeek.subtract(const Duration(days: 14));
+
+        final habit = Habit(
+          id: '1',
+          name: 'Weekly review',
+          frequency: 'weekly',
+          completionHistory: [twoWeeksAgo, lastWeek, thisWeek],
+          createdAt: createdAt,
+        );
+        expect(habit.currentStreak, 3);
+      });
+
+      test('currentStreak breaks on a skipped week', () {
+        final now = DateTime.now();
+        final thisWeek = atNoon(Habit.activeWeekStart(now));
+        final threeWeeksAgo = thisWeek.subtract(const Duration(days: 21));
+
+        final habit = Habit(
+          id: '1',
+          name: 'Weekly review',
+          frequency: 'weekly',
+          completionHistory: [threeWeeksAgo, thisWeek],
+          createdAt: createdAt,
+        );
+        expect(habit.currentStreak, 1);
+      });
+
+      test('multiple completions within the same week count as one streak week', () {
+        final now = DateTime.now();
+        final thisWeek = atNoon(Habit.activeWeekStart(now));
+        final habit = Habit(
+          id: '1',
+          name: 'Weekly review',
+          frequency: 'weekly',
+          completionHistory: [
+            thisWeek,
+            thisWeek.add(const Duration(days: 2)),
+          ],
+          createdAt: createdAt,
+        );
+        expect(habit.currentStreak, 1);
       });
     });
   });

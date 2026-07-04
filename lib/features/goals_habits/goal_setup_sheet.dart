@@ -366,7 +366,7 @@ class _MilestonesSection extends StatelessWidget {
                             if (why.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 4),
-                                child: Text('— $why',
+                                child: Text('- $why',
                                     style: AppTextStyles.bodySmall.copyWith(
                                         color: AppColors.textMuted,
                                         fontStyle: FontStyle.italic)),

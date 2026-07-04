@@ -147,6 +147,43 @@ void main() {
       expect(acted.thought, closeTo(baseline.thought, 0.001));
     });
 
+    test(
+        'a weekly habit earns credit for every day of the week it was completed in, not just the exact day',
+        () {
+      // Completed on the Monday of the current week — still "this week" as
+      // of today, so a 'weekly' habit should count as satisfied for today's
+      // credit too, unlike a 'daily' habit with the same single completion.
+      final weekStart = anchor.subtract(Duration(days: anchor.weekday - 1));
+      final weeklyHabit = Habit(
+        id: 'h1',
+        name: 'Weekly review',
+        frequency: 'weekly',
+        completionHistory: [weekStart],
+        createdAt: ago(30),
+      );
+      final dailyHabit = Habit(
+        id: 'h2',
+        name: 'Daily read',
+        completionHistory: [weekStart],
+        createdAt: ago(30),
+      );
+
+      final weeklyAction =
+          ManifestationScoring.calculate(profileWith([], habits: [weeklyHabit]))
+              .action;
+      final dailyAction =
+          ManifestationScoring.calculate(profileWith([], habits: [dailyHabit]))
+              .action;
+
+      if (anchor.weekday == DateTime.monday) {
+        // weekStart == anchor: both habits are completed "today" itself, so
+        // there's nothing to differentiate on a Monday test run.
+        expect(weeklyAction, closeTo(dailyAction, 0.001));
+      } else {
+        expect(weeklyAction, greaterThan(dailyAction));
+      }
+    });
+
     test('overall score does not dip in the morning', () {
       final baseline = ManifestationScoring.calculate(
         profileWith(steadyAffirmationPast()),

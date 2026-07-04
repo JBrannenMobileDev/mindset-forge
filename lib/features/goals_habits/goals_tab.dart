@@ -13,32 +13,50 @@ import '../../core/widgets/section_header.dart';
 import '../../models/goal.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/goals_provider.dart';
+import 'actions_layout.dart';
 import 'goal_form_modal.dart';
 import 'widgets/actions_tab_skeleton.dart';
 
 class GoalsTab extends ConsumerWidget {
-  const GoalsTab({super.key});
+  final ActionsLayoutContext layoutContext;
+
+  const GoalsTab({
+    super.key,
+    this.layoutContext = ActionsLayoutContext.mobileTab,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(currentUserProfileProvider);
 
     return profileAsync.when(
-      loading: () => const ActionsTabSkeleton(),
-      error: (_, __) => ErrorState(
-        message: AppStrings.errorGeneric,
-        onRetry: () => ref.invalidate(currentUserProfileProvider),
+      loading: () => ActionsTabSkeleton(layoutContext: layoutContext),
+      error: (_, __) => _wrapIfDesktop(
+        layoutContext,
+        ErrorState(
+          message: AppStrings.errorGeneric,
+          onRetry: () => ref.invalidate(currentUserProfileProvider),
+        ),
       ),
       data: (profile) {
-        if (profile == null) return const ActionsTabSkeleton();
-        return const _GoalsContent();
+        if (profile == null) {
+          return ActionsTabSkeleton(layoutContext: layoutContext);
+        }
+        return _GoalsContent(layoutContext: layoutContext);
       },
     );
+  }
+
+  static Widget _wrapIfDesktop(ActionsLayoutContext ctx, Widget child) {
+    if (ctx == ActionsLayoutContext.mobileTab) return child;
+    return Center(child: child);
   }
 }
 
 class _GoalsContent extends ConsumerWidget {
-  const _GoalsContent();
+  final ActionsLayoutContext layoutContext;
+
+  const _GoalsContent({required this.layoutContext});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -49,22 +67,25 @@ class _GoalsContent extends ConsumerWidget {
         goals.where((g) => !g.isLongTerm && g.status == 'active').toList();
 
     if (longTerm.isEmpty && shortTerm.isEmpty) {
-      return EmptyState(
-        icon: Icons.track_changes_rounded,
-        title: AppStrings.noGoalsYet,
-        subtitle: AppStrings.noGoalsSubtitle,
-        ctaLabel: AppStrings.addGoal,
-        onCta: () => GoalFormModal.show(context, ref),
+      return GoalsTab._wrapIfDesktop(
+        layoutContext,
+        EmptyState(
+          icon: Icons.track_changes_rounded,
+          title: AppStrings.noGoalsYet,
+          subtitle: AppStrings.noGoalsSubtitle,
+          ctaLabel: AppStrings.addGoal,
+          onCta: () => GoalFormModal.show(context, ref),
+        ),
       );
     }
 
+    final padding = actionsTabPadding(layoutContext);
+    final shrinkWrap = actionsTabShrinkWrap(layoutContext);
+
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.screenPaddingH,
-        AppSpacing.lg,
-        AppSpacing.screenPaddingH,
-        100,
-      ),
+      shrinkWrap: shrinkWrap,
+      physics: actionsTabScrollPhysics(layoutContext),
+      padding: padding,
       children: [
         if (longTerm.isNotEmpty) ...[
           const SectionHeader(title: AppStrings.goalLongTerm),

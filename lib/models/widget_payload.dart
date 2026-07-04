@@ -157,7 +157,7 @@ class WidgetPayload {
     final weekPerfect = _weekPerfect(profile, dc, at);
     final weekCaption = dc.countsForStreak
         ? AppStrings.widgetStreakSafe
-        : '${dc.completedCount}/${DailyCompletion.totalCount} today — '
+        : '${dc.completedCount}/${DailyCompletion.totalCount} today, '
             '${AppStrings.widgetStreakFinish}';
 
     return WidgetPayload(

@@ -8,6 +8,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/services/confetti_gate.dart';
 import '../../core/utils/app_date_utils.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
@@ -46,7 +47,7 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
 
   Future<void> _completeGoal() async {
     await ref.read(goalsProvider.notifier).completeGoal(widget.goalId);
-    _confettiCtrl.play();
+    ConfettiGate.play(_confettiCtrl, const Duration(seconds: 3));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text(AppStrings.goalCompletedToast)),

@@ -7,6 +7,7 @@ import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/constants/goal_meta.dart';
 import '../../core/utils/app_date_utils.dart';
+import '../../core/widgets/adaptive_sheet.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_text_field.dart';
 import '../../core/widgets/partner_upgrade_sheet.dart';
@@ -51,14 +52,9 @@ class GoalFormModal {
 
     // The form sheet pops with the newly created goal (or null for edits/cancel)
     // so we can chain the post-creation "build your plan" experience.
-    final created = await showModalBottomSheet<Goal?>(
+    final created = await showAdaptiveSheet<Goal?>(
       context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXl)),
-      ),
+      dialogMaxWidth: 560,
       builder: (_) => ProviderScope(
         parent: ProviderScope.containerOf(context),
         child: _GoalFormSheet(existing: existing, initialTitle: initialTitle),

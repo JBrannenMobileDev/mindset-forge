@@ -103,7 +103,7 @@ class _PartnerSetupSheet extends StatelessWidget {
             Text('Set up your journey first', style: AppTextStyles.headlineSmall),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              "You've been supporting $supporter — ready for your own? Take 2 minutes to set up your mindset profile so $featureName is personalized to you. It's free.",
+              "You've been supporting $supporter. Ready for your own? Take 2 minutes to set up your mindset profile so $featureName is personalized to you. It's free.",
               style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -116,7 +116,7 @@ class _PartnerSetupSheet extends StatelessWidget {
                 border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
               ),
               child: Text(
-                "You'll get a personalized mindset analysis at the end — on us.",
+                "You'll get a personalized mindset analysis at the end, on us.",
                 style: AppTextStyles.bodySmall.copyWith(color: AppColors.primary),
                 textAlign: TextAlign.center,
               ),

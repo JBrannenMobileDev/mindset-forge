@@ -217,11 +217,21 @@ class UserProfile {
     return null;
   }
 
-  /// Onboarding has 5 steps (0–4): Welcome, Goal, Identity, Blocker, AI Analysis.
-  /// It is only complete once [onboardingStep] reaches the total set on the
-  /// final step. Deferred mindset data (blueprint, toughness, fears) is collected
-  /// in-app afterwards and tracked separately via [blueprintCompleted].
-  bool get hasCompletedOnboarding => onboardingStep >= 5;
+  /// Onboarding has 6 steps (0–5): Welcome, Goals Select, Goals Focus,
+  /// Identity, Blocker, AI Analysis. It is only complete once [onboardingStep]
+  /// reaches the total set on the final step. Deferred mindset data (blueprint,
+  /// toughness, fears) is collected in-app afterwards and tracked separately
+  /// via [blueprintCompleted].
+  ///
+  /// Legacy 5-step onboarding stored completion as [onboardingStep] == 5 with a
+  /// populated [mindsetBlueprintSummary]. The new flow also saves step index 5
+  /// mid-flow on the AI summary screen, but those users lack a summary until
+  /// they finish.
+  bool get hasCompletedOnboarding {
+    if (onboardingStep >= 6) return true;
+    if (onboardingStep == 5 && mindsetBlueprintSummary.isNotEmpty) return true;
+    return false;
+  }
 
   String get firstName =>
       displayName.isNotEmpty ? displayName.split(' ').first : 'there';

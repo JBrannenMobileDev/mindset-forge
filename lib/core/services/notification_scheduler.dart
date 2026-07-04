@@ -29,6 +29,8 @@ class NotificationScheduler {
   static const int _morningBase = 1000; // + day offset (0..6)
   static const int _eveningBase = 2000; // + day offset (0..6)
   static const int _streakId = 3000; // today only
+  static const int _habitBase = 4000; // + habit index, today only
+  static const int _maxHabitReminders = 50;
   static const int _windowDays = 7;
   // Need fewer than the streak threshold today to be "at risk".
   static const int _streakReminderAt = DailyCompletion.streakThreshold;
@@ -47,6 +49,7 @@ class NotificationScheduler {
 
     if (prefs.routineEnabled) {
       await _scheduleRoutineWindow(profile, now, today, streakScheduledToday);
+      await _scheduleHabitReminders(profile, now);
     }
   }
 
@@ -152,6 +155,42 @@ class NotificationScheduler {
           );
         }
       }
+    }
+  }
+
+  // ── Per-habit cue reminders ───────────────────────────────────────────────
+
+  /// Today-only, per-habit reminders (like streak protection, not the 7-day
+  /// routine window) — opt-in per habit via [Habit.reminderEnabled], and
+  /// suppressed once the habit is already done for its current cadence
+  /// period. Re-evaluated on every reschedule, so they stay accurate as long
+  /// as the app is opened at least once a day.
+  Future<void> _scheduleHabitReminders(UserProfile profile, DateTime now) async {
+    final prefs = profile.notificationPrefs;
+    final habits = profile.habits
+        .where((h) => h.state == 'active' && h.reminderEnabled)
+        .take(_maxHabitReminders)
+        .toList();
+
+    for (var i = 0; i < habits.length; i++) {
+      final habit = habits[i];
+      if (habit.isCompletedToday) continue;
+
+      final when = _atMinutes(now, habit.reminderMinutes);
+      if (prefs.isWithinQuietHours(habit.reminderMinutes) ||
+          !when.isAfter(now)) {
+        continue;
+      }
+
+      final cue = habit.trigger.trim();
+      await _service.scheduleAt(
+        id: _habitBase + i,
+        when: when,
+        title: 'Habit reminder',
+        body: cue.isNotEmpty ? '${habit.name} — $cue' : habit.name,
+        category: 'routine',
+        route: '/actions?tab=habits',
+      );
     }
   }
 
@@ -270,6 +309,9 @@ class NotificationScheduler {
         await _service.cancel(_eveningBase + i);
       }
       await _service.cancel(_streakId);
+      for (int i = 0; i < _maxHabitReminders; i++) {
+        await _service.cancel(_habitBase + i);
+      }
     } catch (e) {
       debugPrint('NotificationScheduler: cancel failed: $e');
     }

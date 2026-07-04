@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
@@ -9,10 +10,12 @@ import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../models/mindset_blueprint.dart';
 import '../../../models/goal.dart';
+import '../../../models/habit.dart';
 import '../../../models/user_profile.dart';
 import '../../../models/deep_dive.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/claude_provider.dart';
+import '../../../providers/habits_provider.dart';
 
 /// The single, merged onboarding "aha": one AI call produces BOTH the user's
 /// identity statement (editable) AND a personalized coach analysis, revealed
@@ -21,6 +24,7 @@ class StepAiSummary extends ConsumerStatefulWidget {
   final MindsetBlueprint blueprint;
   final List<String> limitingBeliefs;
   final List<Goal> goals;
+  final String primaryGoalId;
   final String identitySituation;
   final List<String> identityQualities;
   final List<String> fearsDrift;
@@ -35,6 +39,7 @@ class StepAiSummary extends ConsumerStatefulWidget {
     required this.blueprint,
     required this.limitingBeliefs,
     required this.goals,
+    this.primaryGoalId = '',
     required this.identitySituation,
     required this.identityQualities,
     this.fearsDrift = const [],
@@ -54,16 +59,42 @@ class _StepAiSummaryState extends ConsumerState<StepAiSummary> {
   bool _isEditing = false;
   final _editCtrl = TextEditingController();
 
+  // Optional, skippable habit suggestion tied to the user's primary goal —
+  // loaded independently of the identity reveal so a slow/failed AI call
+  // here never blocks onboarding completion.
+  Map<String, String>? _habitSuggestion;
+  bool _habitHandled = false;
+
   @override
   void initState() {
     super.initState();
     _generate();
+    _loadHabitSuggestion();
   }
 
   @override
   void dispose() {
     _editCtrl.dispose();
     super.dispose();
+  }
+
+  UserProfile _buildTempProfile() {
+    final authUser = ref.read(authStateProvider).valueOrNull;
+    return UserProfile(
+      uid: authUser?.uid ?? '',
+      email: authUser?.email ?? '',
+      displayName: authUser?.displayName ?? 'Friend',
+      mindsetBlueprint: widget.blueprint,
+      originalMindsetBaseline: widget.blueprint,
+      limitingBeliefs: widget.limitingBeliefs,
+      goals: widget.goals,
+      identitySituation: widget.identitySituation,
+      identityQualities: widget.identityQualities,
+      fearsDrift: widget.fearsDrift,
+      mentalToughnessScore: widget.mentalToughnessScore,
+      deepDive: DeepDive.initial(),
+      createdAt: DateTime.now(),
+    );
   }
 
   Future<void> _generate() async {
@@ -74,25 +105,9 @@ class _StepAiSummaryState extends ConsumerState<StepAiSummary> {
     });
 
     try {
-      final authUser = ref.read(authStateProvider).valueOrNull;
-      final tempProfile = UserProfile(
-        uid: authUser?.uid ?? '',
-        email: authUser?.email ?? '',
-        displayName: authUser?.displayName ?? 'Friend',
-        mindsetBlueprint: widget.blueprint,
-        originalMindsetBaseline: widget.blueprint,
-        limitingBeliefs: widget.limitingBeliefs,
-        goals: widget.goals,
-        identitySituation: widget.identitySituation,
-        identityQualities: widget.identityQualities,
-        fearsDrift: widget.fearsDrift,
-        mentalToughnessScore: widget.mentalToughnessScore,
-        deepDive: DeepDive.initial(),
-        createdAt: DateTime.now(),
-      );
-
-      final result =
-          await ref.read(claudeServiceProvider).generateOnboardingReveal(tempProfile);
+      final result = await ref
+          .read(claudeServiceProvider)
+          .generateOnboardingReveal(_buildTempProfile());
       if (!mounted) return;
       setState(() {
         _statement = result['identityStatement'] ?? '';
@@ -108,6 +123,47 @@ class _StepAiSummaryState extends ConsumerState<StepAiSummary> {
       });
     }
   }
+
+  /// Best-effort, silent — a failed or empty suggestion just means the card
+  /// never appears; it never blocks or errors the onboarding flow.
+  Future<void> _loadHabitSuggestion() async {
+    if (widget.goals.isEmpty) return;
+    final goal = widget.goals.firstWhere(
+      (g) => g.id == widget.primaryGoalId,
+      orElse: () => widget.goals.first,
+    );
+    try {
+      final suggestion = await ref
+          .read(claudeServiceProvider)
+          .generateHabitForGoal(goal, _buildTempProfile());
+      if (!mounted) return;
+      if (suggestion.isEmpty || (suggestion['name'] ?? '').isEmpty) return;
+      setState(() => _habitSuggestion = suggestion);
+    } catch (_) {
+      // Silent — see doc comment above.
+    }
+  }
+
+  Future<void> _addSuggestedHabit() async {
+    final suggestion = _habitSuggestion;
+    if (suggestion == null) return;
+    setState(() => _habitHandled = true);
+    try {
+      await ref.read(habitsProvider.notifier).addHabit(
+            Habit(
+              id: const Uuid().v4(),
+              name: suggestion['name'] ?? '',
+              trigger: suggestion['trigger'] ?? '',
+              identityReinforces: suggestion['identityReinforces'] ?? '',
+              createdAt: DateTime.now(),
+            ),
+          );
+    } catch (e) {
+      debugPrint('StepAiSummary._addSuggestedHabit failed: $e');
+    }
+  }
+
+  void _skipHabitSuggestion() => setState(() => _habitHandled = true);
 
   @override
   Widget build(BuildContext context) {
@@ -187,6 +243,14 @@ class _StepAiSummaryState extends ConsumerState<StepAiSummary> {
                   ],
                 ),
               ).animate().fadeIn(duration: 600.ms),
+            if (_habitSuggestion != null && !_habitHandled) ...[
+              const SizedBox(height: AppSpacing.lg),
+              _HabitSuggestionCard(
+                suggestion: _habitSuggestion!,
+                onAdd: _addSuggestedHabit,
+                onSkip: _skipHabitSuggestion,
+              ).animate().fadeIn(duration: 400.ms),
+            ],
           ],
 
           const SizedBox(height: AppSpacing.xl),
@@ -294,6 +358,77 @@ class _IdentityReveal extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Optional, one-tap habit suggestion tied to the user's primary goal —
+/// skippable, never blocks the "Start First Ritual" CTA below it.
+class _HabitSuggestionCard extends StatelessWidget {
+  final Map<String, String> suggestion;
+  final VoidCallback onAdd;
+  final VoidCallback onSkip;
+
+  const _HabitSuggestionCard({
+    required this.suggestion,
+    required this.onAdd,
+    required this.onSkip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final name = suggestion['name'] ?? '';
+    final trigger = suggestion['trigger'] ?? '';
+    final identity = suggestion['identityReinforces'] ?? '';
+
+    return AppCard(
+      borderColor: AppColors.primary.withValues(alpha: 0.25),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.repeat_rounded, color: AppColors.primary, size: 18),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                'A habit to back this up',
+                style: AppTextStyles.labelLarge.copyWith(color: AppColors.primary),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(name, style: AppTextStyles.bodyLarge),
+          if (trigger.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '${AppStrings.habitWhenPrefix} $trigger',
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+              ),
+            ),
+          if (identity.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                identity,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.primary,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: AppSecondaryButton(label: 'Add this habit', onPressed: onAdd),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              AppTextButton(label: AppStrings.skip, onPressed: onSkip),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

@@ -10,17 +10,21 @@ import '../../models/affirmation.dart';
 import '../../models/mindset_blueprint.dart';
 import '../../models/goal.dart';
 import '../../models/user_profile.dart';
+import '../../core/constants/app_strings.dart';
 import '../../providers/analytics_provider.dart';
+import '../../providers/auth_notifier.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/notification_provider.dart';
 import '../../providers/invite_prompt_provider.dart';
 import '../../core/utils/breakpoints.dart';
+import '../../core/widgets/app_button.dart';
 import '../../core/widgets/brand_backdrop.dart';
 import '../../core/widgets/glass_pane.dart';
 import '../../core/widgets/widget_education_sheet.dart';
 import 'widgets/onboarding_companion_panel.dart';
 import 'steps/step_welcome.dart';
-import 'steps/step_goals.dart';
+import 'steps/step_goals_select.dart';
+import 'steps/step_goals_focus.dart';
 import 'steps/step_identity.dart';
 import 'steps/step_blocker.dart';
 import 'steps/step_ai_summary.dart';
@@ -32,11 +36,12 @@ import 'steps/step_ai_summary.dart';
 /// off into the app. Deeper mindset data (trait blueprint, mental toughness,
 /// full fear quiz) is collected progressively in-app afterwards.
 const _kStepWelcome = 0;
-const _kStepGoals = 1;
-const _kStepIdentity = 2;
-const _kStepBlocker = 3;
-const _kStepAiAnalysis = 4;
-const _kTotalSteps = 5;
+const _kStepGoalsSelect = 1;
+const _kStepGoalsFocus = 2;
+const _kStepIdentity = 3;
+const _kStepBlocker = 4;
+const _kStepAiAnalysis = 5;
+const _kTotalSteps = 6;
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -72,6 +77,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   void _restoreStep() {
     final profile = ref.read(currentUserProfileProvider).valueOrNull;
     if (profile == null) return;
+    if (profile.hasCompletedOnboarding) return;
 
     // Hydrate any answers already captured so a user returning mid-flow (app
     // kill, back-out) keeps their goals, identity inputs and beliefs instead of
@@ -252,21 +258,32 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       physics: const NeverScrollableScrollPhysics(),
       children: [
         // Step 0 — Welcome
-        StepWelcome(onNext: () => _goToStep(_kStepGoals)),
+        StepWelcome(onNext: () => _goToStep(_kStepGoalsSelect)),
 
-        // Step 1 — Goals
-        StepGoals(
+        // Step 1 — Goals: select
+        StepGoalsSelect(
           initial: _goals,
+          onNext: (goals) {
+            _goals = goals;
+            _goToStep(_kStepGoalsFocus);
+          },
+          onBack: () => _goToStep(_kStepWelcome),
+        ),
+
+        // Step 2 — Goals: focus (#1 + why)
+        StepGoalsFocus(
+          goals: _goals,
           initialPrimaryGoalId: _primaryGoalId,
           onNext: (goals, primaryGoalId) {
             _goals = goals;
             _primaryGoalId = primaryGoalId;
             _goToStep(_kStepIdentity);
           },
-          onBack: () => _goToStep(_kStepWelcome),
+          onBack: () => _goToStep(_kStepGoalsSelect),
+          onChangeGoals: () => _goToStep(_kStepGoalsSelect),
         ),
 
-        // Step 2 — Identity inputs (situation + qualities)
+        // Step 3 — Identity inputs (situation + qualities)
         StepIdentity(
           initialSituation: _identitySituation,
           initialQualities: _identityQualities,
@@ -275,10 +292,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             _identityQualities = qualities;
             _goToStep(_kStepBlocker);
           },
-          onBack: () => _goToStep(_kStepGoals),
+          onBack: () => _goToStep(_kStepGoalsFocus),
         ),
 
-        // Step 3 — Blocker (AI-inferred limiting beliefs)
+        // Step 4 — Blocker (AI-inferred limiting beliefs)
         StepBlocker(
           identitySituation: _identitySituation,
           identityQualities: _identityQualities,
@@ -291,11 +308,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           onBack: () => _goToStep(_kStepIdentity),
         ),
 
-        // Step 4 — Merged reveal (identity statement + analysis)
+        // Step 5 — Merged reveal (identity statement + analysis)
         StepAiSummary(
           blueprint: _blueprint,
           limitingBeliefs: _limitingBeliefs,
           goals: _goals,
+          primaryGoalId: _primaryGoalId,
           identitySituation: _identitySituation,
           identityQualities: _identityQualities,
           fearsDrift: _fearsDrift,
@@ -332,10 +350,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             currentStep: _currentStep,
             totalSteps: _kTotalSteps,
           ),
+          AppTextButton(
+            label: AppStrings.onboardingUseDifferentAccount,
+            onPressed: _useDifferentAccount,
+          ),
           Expanded(child: _buildPageView()),
         ],
       ),
     );
+  }
+
+  Future<void> _useDifferentAccount() async {
+    await ref.read(authNotifierProvider.notifier).signOut();
+    if (!mounted) return;
+    context.go('/welcome');
   }
 
   /// Wide (>= tablet breakpoint): a branded two-pane layout over the shared

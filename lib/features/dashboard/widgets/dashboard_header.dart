@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -7,6 +9,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/services/confetti_gate.dart';
 import '../../../core/services/streak_celebration_store.dart';
 import '../../../core/utils/app_date_utils.dart';
 import '../../../core/widgets/app_card.dart';
@@ -208,37 +211,49 @@ class _StreakStripState extends State<_StreakStrip> {
   // A full week (7 consecutive days) fills the chart and unlocks the glow.
   static const int _weekThreshold = 7;
 
-  late final ConfettiController _perfectConfetti;
   late final ConfettiController _flawlessConfetti;
 
   // Loaded from persistence so the one-time burst fires exactly once per
   // milestone — not again the next day and not again on relaunch. Null until
   // loaded; celebration checks wait for a non-null value.
-  bool? _perfectCelebrated;
   bool? _flawlessCelebrated;
+
+  // Debounces a genuine active/inactive edge briefly so a rapid
+  // cache-then-server double-emission of the profile stream can't be read as
+  // two separate crossings — only whichever value is still current once the
+  // window elapses actually fires or re-arms.
+  Timer? _celebrationDebounce;
 
   @override
   void initState() {
     super.initState();
-    _perfectConfetti = ConfettiController(duration: const Duration(seconds: 3));
     _flawlessConfetti =
         ConfettiController(duration: const Duration(seconds: 4));
-    _loadCelebrationFlags();
+    _loadCelebrationFlag();
   }
 
-  Future<void> _loadCelebrationFlags() async {
-    final perfect = await StreakCelebrationStore.perfectCelebrated();
+  Future<void> _loadCelebrationFlag() async {
     final flawless = await StreakCelebrationStore.flawlessCelebrated();
     if (!mounted) return;
-    setState(() {
-      _perfectCelebrated = perfect;
-      _flawlessCelebrated = flawless;
-    });
+    setState(() => _flawlessCelebrated = flawless);
+    // Covers the case where the milestone is already active the first time
+    // this loads (e.g. cold app open with an existing flawless streak).
+    _scheduleCelebrationCheck(widget.perfectStreak >= _weekThreshold);
+  }
+
+  @override
+  void didUpdateWidget(_StreakStrip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final wasActive = oldWidget.perfectStreak >= _weekThreshold;
+    final isActive = widget.perfectStreak >= _weekThreshold;
+    // Only react to a genuine edge between consecutive widget updates — never
+    // re-evaluated on rebuilds that don't actually change perfectStreak.
+    if (wasActive != isActive) _scheduleCelebrationCheck(isActive);
   }
 
   @override
   void dispose() {
-    _perfectConfetti.dispose();
+    _celebrationDebounce?.cancel();
     _flawlessConfetti.dispose();
     super.dispose();
   }
@@ -256,37 +271,28 @@ class _StreakStripState extends State<_StreakStrip> {
   String _key(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  /// Fires the one-time celebration for a newly-reached tier and re-arms the
-  /// flag when a tier lapses. Flawless takes precedence (it implies perfect) so
-  /// only one burst plays when both cross at once.
-  void _handleCelebrations(bool perfectActive, bool flawlessActive) {
-    if (_perfectCelebrated == null || _flawlessCelebrated == null) return;
+  /// Fires the one-time flawless-week celebration on a newly-reached edge, or
+  /// re-arms the flag once the streak actually lapses — but only once the edge
+  /// has held for the whole debounce window, so a same-session snapshot
+  /// hiccup can't flip it twice.
+  void _scheduleCelebrationCheck(bool isActive) {
+    _celebrationDebounce?.cancel();
+    _celebrationDebounce = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted || _flawlessCelebrated == null) return;
+      final stillActive = widget.perfectStreak >= _weekThreshold;
+      // The value moved again before the window elapsed — bail and let the
+      // most recent call (which reset this timer) settle it instead.
+      if (stillActive != isActive) return;
 
-    if (flawlessActive && !_flawlessCelebrated!) {
-      _flawlessCelebrated = true;
-      // Reaching flawless also satisfies the perfect tier — mark it so it does
-      // not fire a second, redundant burst.
-      _perfectCelebrated = true;
-      StreakCelebrationStore.setFlawlessCelebrated(true);
-      StreakCelebrationStore.setPerfectCelebrated(true);
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _flawlessConfetti.play());
-    } else if (perfectActive && !_perfectCelebrated!) {
-      _perfectCelebrated = true;
-      StreakCelebrationStore.setPerfectCelebrated(true);
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _perfectConfetti.play());
-    }
-
-    // Re-arm each flag once its streak lapses so a fresh week celebrates again.
-    if (!perfectActive && _perfectCelebrated!) {
-      _perfectCelebrated = false;
-      StreakCelebrationStore.setPerfectCelebrated(false);
-    }
-    if (!flawlessActive && _flawlessCelebrated!) {
-      _flawlessCelebrated = false;
-      StreakCelebrationStore.setFlawlessCelebrated(false);
-    }
+      if (stillActive && !_flawlessCelebrated!) {
+        _flawlessCelebrated = true;
+        StreakCelebrationStore.setFlawlessCelebrated(true);
+        ConfettiGate.play(_flawlessConfetti, const Duration(seconds: 4));
+      } else if (!stillActive && _flawlessCelebrated!) {
+        _flawlessCelebrated = false;
+        StreakCelebrationStore.setFlawlessCelebrated(false);
+      }
+    });
   }
 
   @override
@@ -320,8 +326,6 @@ class _StreakStripState extends State<_StreakStrip> {
         : perfectActive
             ? WeekGlow.perfect
             : WeekGlow.none;
-
-    _handleCelebrations(perfectActive, flawlessActive);
 
     final (String subtitle, Color subtitleColor) = switch ((
       currentStreak,
@@ -438,19 +442,7 @@ class _StreakStripState extends State<_StreakStrip> {
                 ),
               ],
             ),
-            // One-time celebration bursts (top-center) — sized per tier.
-            ConfettiWidget(
-              confettiController: _perfectConfetti,
-              blastDirectionality: BlastDirectionality.explosive,
-              numberOfParticles: 40,
-              gravity: 0.15,
-              colors: const [
-                AppColors.primary,
-                AppColors.secondary,
-                AppColors.warning,
-                Colors.white,
-              ],
-            ),
+            // One-time flawless-week celebration burst (top-center).
             ConfettiWidget(
               confettiController: _flawlessConfetti,
               blastDirectionality: BlastDirectionality.explosive,

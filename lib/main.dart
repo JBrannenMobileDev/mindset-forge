@@ -453,6 +453,11 @@ class _MindsetForgeAppState extends ConsumerState<MindsetForgeApp>
           final uid = ref.read(authStateProvider).valueOrNull?.uid;
           if (uid != null) {
             ref.read(analyticsServiceProvider).identify(uid, profile);
+            migrateLegacyOnboardingStep(
+              ref.read(firestoreServiceProvider),
+              profile,
+              uid,
+            );
           }
         }
       });

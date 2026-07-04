@@ -105,8 +105,40 @@ class HabitsNotifier extends StateNotifier<List<Habit>> {
     await updateHabit(habit.copyWith(state: newState));
   }
 
+  /// Reorders the active habits list (drag-and-drop on the Habits tab).
+  /// Paused habits keep their existing relative order and are simply
+  /// appended after the reordered active ones, matching the active-first
+  /// section layout the UI renders.
+  Future<void> reorderActive(int oldIndex, int newIndex) async {
+    final active = activeHabits;
+    final paused = pausedHabits;
+    if (oldIndex < 0 ||
+        oldIndex >= active.length ||
+        newIndex < 0 ||
+        newIndex > active.length) {
+      return;
+    }
+
+    final reordered = List<Habit>.from(active);
+    final item = reordered.removeAt(oldIndex);
+    reordered.insert(newIndex.clamp(0, reordered.length), item);
+
+    final previous = state;
+    final updated = [...reordered, ...paused];
+    state = updated;
+    try {
+      await _persist(updated);
+    } catch (e) {
+      debugPrint('HabitsNotifier.reorderActive failed: $e');
+      state = previous;
+    }
+  }
+
   List<Habit> get activeHabits =>
       state.where((h) => h.state == 'active').toList();
+
+  List<Habit> get pausedHabits =>
+      state.where((h) => h.state != 'active').toList();
 }
 
 final habitsProvider = StateNotifierProvider<HabitsNotifier, List<Habit>>(

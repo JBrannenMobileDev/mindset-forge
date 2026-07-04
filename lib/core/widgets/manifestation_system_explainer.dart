@@ -454,7 +454,7 @@ class _QuoteBlock extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            '— $author',
+            '- $author',
             style: AppTextStyles.labelSmall.copyWith(color: AppColors.textMuted),
           ),
         ],

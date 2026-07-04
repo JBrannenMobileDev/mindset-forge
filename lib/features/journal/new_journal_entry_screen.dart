@@ -813,7 +813,7 @@ class _TagsStepState extends State<_TagsStep> {
                       ),
                       child: Text(
                         'Limiting beliefs are the stories you tell yourself that hold '
-                        'you back — things like "I\'m not good enough" or "I\'ll never '
+                        'you back, things like "I\'m not good enough" or "I\'ll never '
                         'have enough." Your coach helped you identify yours during '
                         'onboarding. Tap any that felt challenged or shifted by what '
                         'you wrote today.',

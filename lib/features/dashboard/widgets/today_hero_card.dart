@@ -1,13 +1,16 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/services/confetti_gate.dart';
 import '../../../core/services/perfect_day_celebration_store.dart';
 import '../../../core/utils/app_date_utils.dart';
 import '../../../core/widgets/app_button.dart';
@@ -42,6 +45,13 @@ class _TodayHeroCardState extends ConsumerState<TodayHeroCard> {
   bool _celebratedToday = true;
   bool _focusCompleting = false;
 
+  // Transient checkmark pulse shown when Today's Focus is completed on its
+  // own (not as part of a perfect day). The token forces the pulse widget to
+  // remount — and replay its animation — even if triggered twice in a row.
+  bool _showFocusPulse = false;
+  int _focusPulseToken = 0;
+  Timer? _focusPulseTimer;
+
   @override
   void initState() {
     super.initState();
@@ -63,18 +73,19 @@ class _TodayHeroCardState extends ConsumerState<TodayHeroCard> {
     if (prev == null || prev.isPerfectDay || !next.isPerfectDay) return;
     if (_celebratedToday) return;
     _celebratedToday = true;
-    _confettiCtrl.play();
+    ConfettiGate.play(_confettiCtrl, const Duration(seconds: 4));
     PerfectDayCelebrationStore.markCelebrated(next.date);
   }
 
   @override
   void dispose() {
+    _focusPulseTimer?.cancel();
     _confettiCtrl.dispose();
     super.dispose();
   }
 
   /// Marks Today's Focus complete by adding it to the authoritative completed
-  /// list (which also drives the tab and the win flags), then celebrates.
+  /// list (which also drives the tab and the win flags), then acknowledges it.
   Future<void> _completeFocus() async {
     setState(() => _focusCompleting = true);
     try {
@@ -83,9 +94,18 @@ class _TodayHeroCardState extends ConsumerState<TodayHeroCard> {
       setState(() => _focusCompleting = false);
       // If completing the focus made the day perfect, let the single perfect-day
       // celebration (the transition listener) own that moment instead of firing
-      // a second, overlapping burst here.
+      // a second, competing acknowledgment here. Otherwise a single completed
+      // action gets a light haptic + checkmark pulse rather than full confetti.
       if (!ref.read(dailyCompletionProvider).isPerfectDay) {
-        _confettiCtrl.play();
+        HapticFeedback.mediumImpact();
+        _focusPulseTimer?.cancel();
+        setState(() {
+          _focusPulseToken++;
+          _showFocusPulse = true;
+        });
+        _focusPulseTimer = Timer(const Duration(milliseconds: 1100), () {
+          if (mounted) setState(() => _showFocusPulse = false);
+        });
       }
     } catch (e) {
       debugPrint('TodayHeroCard._completeFocus failed: $e');
@@ -112,6 +132,7 @@ class _TodayHeroCardState extends ConsumerState<TodayHeroCard> {
       alignment: Alignment.topCenter,
       children: [
         _HeroCard(data: hero).animate().fadeIn(duration: 400.ms),
+        if (_showFocusPulse) _FocusCompletePulse(key: ValueKey(_focusPulseToken)),
         ConfettiWidget(
           confettiController: _confettiCtrl,
           blastDirectionality: BlastDirectionality.explosive,
@@ -211,6 +232,38 @@ class _TodayHeroCardState extends ConsumerState<TodayHeroCard> {
         'evidenceLogged' => Icons.emoji_events_outlined,
         _ => Icons.bolt_rounded,
       };
+}
+
+/// Brief scale-in/fade-out checkmark acknowledging a completed Today's Focus
+/// action — deliberately lighter than confetti so a single checkbox tap
+/// doesn't compete with the bigger perfect-day/streak celebrations.
+class _FocusCompletePulse extends StatelessWidget {
+  const _FocusCompletePulse({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.sm),
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: const BoxDecoration(
+          color: AppColors.primary,
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.check_rounded, color: Colors.white, size: 22),
+      ),
+    )
+        .animate()
+        .scale(
+          begin: const Offset(0.4, 0.4),
+          end: const Offset(1.0, 1.0),
+          duration: 350.ms,
+          curve: Curves.elasticOut,
+        )
+        .then(delay: 400.ms)
+        .fadeOut(duration: 300.ms);
+  }
 }
 
 // ── Hero data ─────────────────────────────────────────────────────────────────

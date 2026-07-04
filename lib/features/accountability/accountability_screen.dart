@@ -315,7 +315,7 @@ class _InviteForm extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Create a free invite link and share it with anyone. They get free app access and can cheer you on — here\'s exactly what they\'ll see.',
+            'Create a free invite link and share it with anyone. They get free app access and can cheer you on. Here\'s exactly what they\'ll see.',
             style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: AppSpacing.md),
