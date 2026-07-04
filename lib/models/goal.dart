@@ -18,10 +18,6 @@ class Goal {
   final String? parentGoalId;
   final DateTime targetDate;
 
-  /// Deprecated: visualization now lives exclusively in the Future Self
-  /// Practice. Kept only for backward-compatible deserialization; never set
-  /// by any creation flow.
-  final String visualizationText;
   final String identityBecomes;
   final double progressPercent;
   final List<ActionStep> actionSteps;
@@ -37,7 +33,6 @@ class Goal {
     this.description = '',
     this.parentGoalId,
     required this.targetDate,
-    this.visualizationText = '',
     this.identityBecomes = '',
     this.progressPercent = 0.0,
     this.actionSteps = const [],
@@ -46,8 +41,20 @@ class Goal {
     required this.createdAt,
   });
 
-  bool get isLongTerm => parentGoalId == null;
   bool get isCompleted => status == 'completed';
+
+  /// Whether this goal has a milestone checklist driving its progress.
+  bool get hasSteps => actionSteps.isNotEmpty;
+
+  /// Number of completed milestones in the checklist.
+  int get completedStepCount =>
+      actionSteps.where((s) => s.isCompleted).length;
+
+  /// Honest progress (0-100): derived from the milestone checklist when one
+  /// exists, otherwise the manually-set [progressPercent] for step-less goals.
+  double get derivedProgress => hasSteps
+      ? completedStepCount / actionSteps.length * 100
+      : progressPercent;
 
   /// Whether this goal sits on a long enough horizon to benefit from an AI
   /// milestone breakdown at creation time.
@@ -62,7 +69,6 @@ class Goal {
     String? description,
     String? parentGoalId,
     DateTime? targetDate,
-    String? visualizationText,
     String? identityBecomes,
     double? progressPercent,
     List<ActionStep>? actionSteps,
@@ -78,7 +84,6 @@ class Goal {
       description: description ?? this.description,
       parentGoalId: parentGoalId ?? this.parentGoalId,
       targetDate: targetDate ?? this.targetDate,
-      visualizationText: visualizationText ?? this.visualizationText,
       identityBecomes: identityBecomes ?? this.identityBecomes,
       progressPercent: progressPercent ?? this.progressPercent,
       actionSteps: actionSteps ?? this.actionSteps,
@@ -92,7 +97,7 @@ class Goal {
     return Goal(
       id: json['id'] as String? ?? '',
       title: json['title'] as String? ?? '',
-      category: json['category'] as String? ?? 'personal',
+      category: json['category'] as String? ?? 'personal_growth',
       // Back-compat: older goals have no goalType. Infer from the hierarchy —
       // sub-goals are short-term milestones, top-level goals are long-term.
       goalType: json['goalType'] as String? ??
@@ -101,7 +106,6 @@ class Goal {
       parentGoalId: json['parentGoalId'] as String?,
       targetDate: DateTime.tryParse(json['targetDate'] as String? ?? '') ??
           DateTime.now().add(const Duration(days: 90)),
-      visualizationText: json['visualizationText'] as String? ?? '',
       identityBecomes: json['identityBecomes'] as String? ?? '',
       progressPercent: (json['progressPercent'] as num?)?.toDouble() ?? 0.0,
       actionSteps: (json['actionSteps'] as List<dynamic>?)
@@ -124,7 +128,6 @@ class Goal {
         'description': description,
         'parentGoalId': parentGoalId,
         'targetDate': targetDate.toIso8601String(),
-        'visualizationText': visualizationText,
         'identityBecomes': identityBecomes,
         'progressPercent': progressPercent,
         'actionSteps': actionSteps.map((s) => s.toJson()).toList(),

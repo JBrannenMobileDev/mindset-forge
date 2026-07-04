@@ -1,0 +1,17 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Future Self narration audio: each user can only read/write their own.
+    // Writes go through the synthesizeFutureSelfNarration Cloud Function
+    // (admin SDK bypasses these rules); this rule guards direct client access.
+    match /future_self_narration/{uid}/{fileName} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Deny everything else by default.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

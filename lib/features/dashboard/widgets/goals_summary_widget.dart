@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/goal_templates.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
@@ -14,25 +15,9 @@ class GoalsSummaryWidget extends StatelessWidget {
 
   const GoalsSummaryWidget({super.key, required this.profile});
 
-  Color _categoryColor(String category) {
-    return switch (category) {
-      'career' => AppColors.categoryCareer,
-      'health' => AppColors.categoryHealth,
-      'relationships' => AppColors.categoryRelationships,
-      'finances' => AppColors.categoryFinances,
-      _ => AppColors.categoryPersonalGrowth,
-    };
-  }
+  Color _categoryColor(String category) => goalCategoryColor(category);
 
-  IconData _categoryIcon(String category) {
-    return switch (category) {
-      'career' => Icons.work_rounded,
-      'health' => Icons.favorite_rounded,
-      'relationships' => Icons.people_rounded,
-      'finances' => Icons.attach_money_rounded,
-      _ => Icons.auto_awesome_rounded,
-    };
-  }
+  IconData _categoryIcon(String category) => goalCategoryIcon(category);
 
   @override
   Widget build(BuildContext context) {
@@ -135,7 +120,7 @@ class _GoalCard extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                '${goal.progressPercent.toStringAsFixed(0)}%',
+                '${goal.derivedProgress.toStringAsFixed(0)}%',
                 style: AppTextStyles.labelSmall.copyWith(color: color),
               ),
             ],
@@ -153,7 +138,7 @@ class _GoalCard extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(2),
             child: LinearProgressIndicator(
-              value: goal.progressPercent / 100,
+              value: goal.derivedProgress / 100,
               backgroundColor: AppColors.border,
               valueColor: AlwaysStoppedAnimation(color),
               minHeight: 4,

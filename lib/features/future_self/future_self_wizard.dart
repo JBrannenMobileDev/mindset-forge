@@ -7,8 +7,8 @@ import '../../core/constants/app_text_styles.dart';
 import '../../models/future_self_setup.dart';
 import '../../models/goal.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/claude_provider.dart';
 import '../../providers/future_self_provider.dart';
+import 'widgets/future_self_scene_editor.dart';
 
 /// 6-step setup/refine wizard for the Future Self practice. Framed as a one-time
 /// (occasionally refined) setup, NOT a daily regenerate. On finish it generates
@@ -21,7 +21,10 @@ class FutureSelfWizard extends ConsumerStatefulWidget {
 }
 
 class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
-  static const _totalSteps = 6;
+  /// First-time setup adds a final scene-focus step; refining shared config
+  /// (when scenes already exist) stops at the config steps.
+  int get _totalSteps => _isFirstTime ? 7 : 6;
+  bool _isFirstTime = true;
 
   static const _timelines = ['1 year', '3 years', '5 years', '10 years'];
   static const _emotions = [
@@ -58,10 +61,14 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
   String _voiceStyle = '';
   final _customVoiceCtrl = TextEditingController();
 
+  // First-scene builder draft (only used during first-time setup).
+  SceneDraft? _sceneDraft;
+
   @override
   void initState() {
     super.initState();
     final existing = ref.read(futureSelfProvider);
+    _isFirstTime = existing == null || existing.scenes.isEmpty;
     if (existing != null) {
       _identityCtrl.text = existing.identityAnchor;
       _timeline = existing.futureTimeline;
@@ -75,6 +82,18 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
       _amplifiers.addAll(existing.amplifiers);
       _voiceStyle = existing.voiceStyle;
       _customVoiceCtrl.text = existing.customVoice;
+    }
+
+    // Prefill the identity from the user's existing identity statement so
+    // they edit rather than write from a blank field.
+    if (_identityCtrl.text.trim().isEmpty) {
+      final identity =
+          ref.read(currentUserProfileProvider).valueOrNull?.identityStatement ??
+              '';
+      final cleaned = identity
+          .replaceFirst(RegExp(r'^\s*I am (someone who\s+)?', caseSensitive: false), '')
+          .trim();
+      if (cleaned.isNotEmpty) _identityCtrl.text = cleaned;
     }
   }
 
@@ -97,7 +116,7 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
       case 1:
         return true; // goals optional
       case 2:
-        return _snapshotCtrl.text.trim().isNotEmpty;
+        return true; // life snapshot optional
       case 3:
         return _workCtrl.text.trim().isNotEmpty;
       case 4:
@@ -106,6 +125,8 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
         return _voiceStyle.isNotEmpty &&
             (_voiceStyle != 'Custom sample' ||
                 _customVoiceCtrl.text.trim().isNotEmpty);
+      case 6:
+        return _sceneDraft?.isValid ?? false;
       default:
         return true;
     }
@@ -133,9 +154,8 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
   Future<void> _finish() async {
     setState(() => _generating = true);
     final existing = ref.read(futureSelfProvider);
-    final profile = ref.read(currentUserProfileProvider).valueOrNull;
 
-    var setup = FutureSelfSetup(
+    final setup = FutureSelfSetup(
       identityAnchor: _identityCtrl.text.trim(),
       futureTimeline: _timeline,
       achievedGoalIds: _achievedGoalIds.toList(),
@@ -148,23 +168,30 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
       amplifiers: _amplifiers,
       voiceStyle: _voiceStyle,
       customVoice: _customVoiceCtrl.text.trim(),
+      // Preserve the existing scene library on config refine.
+      scenes: existing?.scenes ?? const [],
       beatsEnabled: existing?.beatsEnabled ?? true,
       binauralHz: existing?.binauralHz ?? 7,
+      hasSeenHowTo: existing?.hasSeenHowTo ?? false,
       createdAt: existing?.createdAt ?? DateTime.now(),
     );
 
-    try {
-      if (profile != null) {
-        final script = await ref
-            .read(claudeServiceProvider)
-            .generateFutureSelfScript(setup, profile);
-        setup = setup.copyWith(generatedScript: script);
-      }
-    } catch (_) {
-      // saveSetup still proceeds; player can regenerate if script is empty.
+    final notifier = ref.read(futureSelfProvider.notifier);
+    await notifier.saveSetup(setup);
+
+    // First-time setup also generates the first scene (script + narration).
+    final draft = _sceneDraft;
+    if (_isFirstTime && draft != null && draft.isValid) {
+      await notifier.createScene(
+        title: draft.title,
+        setting: draft.setting,
+        people: draft.people,
+        beats: draft.beats,
+        sensory: draft.sensory,
+        goalIds: draft.goalIds,
+      );
     }
 
-    await ref.read(futureSelfProvider.notifier).saveSetup(setup);
     if (!mounted) return;
     Navigator.of(context).pop(true);
   }
@@ -287,6 +314,11 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
           customVoiceCtrl: _customVoiceCtrl,
           onChanged: () => setState(() {}),
         );
+      case 6:
+        return _StepScene(
+          initial: null,
+          onChanged: (d) => setState(() => _sceneDraft = d),
+        );
       default:
         return const SizedBox.shrink();
     }
@@ -318,7 +350,9 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
           Expanded(
             flex: 2,
             child: _AccentButton(
-              label: isLast ? 'Create Practice' : 'Continue',
+              label: isLast
+                  ? (_isFirstTime ? 'Create Practice' : 'Save changes')
+                  : 'Continue',
               isLoading: _generating,
               onPressed: !_canAdvance || _generating
                   ? null
@@ -368,14 +402,12 @@ class _WarmField extends StatelessWidget {
   final String hint;
   final int maxLines;
   final VoidCallback onChanged;
-  final TextCapitalization textCapitalization;
 
   const _WarmField({
     required this.controller,
     required this.hint,
     required this.onChanged,
     this.maxLines = 1,
-    this.textCapitalization = TextCapitalization.sentences,
   });
 
   @override
@@ -383,7 +415,7 @@ class _WarmField extends StatelessWidget {
     return TextField(
       controller: controller,
       maxLines: maxLines,
-      textCapitalization: textCapitalization,
+      textCapitalization: TextCapitalization.sentences,
       style: AppTextStyles.bodyMedium,
       cursorColor: AppColors.futureSelfAccent,
       onChanged: (_) => onChanged(),
@@ -685,12 +717,12 @@ class _StepSnapshot extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _WizardHeading('My ideal day looks like…',
-            'Describe a normal day in this future, morning to evening'),
+        const _WizardHeading('A little about your future life',
+            'Optional. A few words help ground your scenes. You can skip this.'),
         _WarmField(
           controller: snapshotCtrl,
-          hint: 'I wake up in a modern home, work from my laptop in the '
-              'morning, meet clients in the afternoon, train at night…',
+          hint: 'I live in a calm, modern home. My days are focused and '
+              'unhurried. I work on what matters and train most nights…',
           maxLines: 4,
           onChanged: onChanged,
         ),
@@ -710,6 +742,27 @@ class _StepSnapshot extends StatelessWidget {
           hint: 'What does it feel like? (minimal, warm, high-end…)',
           onChanged: onChanged,
         ),
+      ],
+    );
+  }
+}
+
+class _StepScene extends StatelessWidget {
+  final FutureSelfScene? initial;
+  final ValueChanged<SceneDraft> onChanged;
+
+  const _StepScene({required this.initial, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _WizardHeading(
+          'Build your first scene',
+          'A vivid moment in your future where your goals are already real. You can add more later.',
+        ),
+        VisionSceneBuilder(initial: initial, onChanged: onChanged),
       ],
     );
   }

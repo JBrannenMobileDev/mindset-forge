@@ -588,24 +588,55 @@ RULES — NEVER BREAK THESE:
     }
   }
 
-  /// Generates the Future Self embodiment script. This is NOT a motivational
-  /// visualization — it is a first-person, present-tense identity-installation
-  /// script that normalizes how the future self operates. Ported from base44.
-  Future<String> generateFutureSelfScript(
+  /// The list of accomplishments that are already real in a scene: the titles
+  /// of any linked goals plus free-text accomplishments, falling back to the
+  /// setup-level achieved goals for legacy scenes with no per-scene links.
+  List<String> _sceneAccomplishments(
+    FutureSelfScene scene,
     FutureSelfSetup setup,
     UserProfile profile,
-  ) async {
-    final achievedTitles = [
+  ) {
+    final fromScene = [
+      ...profile.goals
+          .where((g) => scene.goalIds.contains(g.id))
+          .map((g) => g.title),
+      ...scene.customAccomplishments,
+    ];
+    if (fromScene.isNotEmpty) return fromScene;
+    return [
       ...profile.goals
           .where((g) => setup.achievedGoalIds.contains(g.id))
           .map((g) => g.title),
       ...setup.customGoals,
     ];
+  }
 
-    final environment = [
-      if (setup.envLocation.isNotEmpty) 'They live in/around ${setup.envLocation}.',
-      if (setup.envFeel.isNotEmpty) 'The environment feels ${setup.envFeel}.',
-    ].join(' ');
+  /// The ordered flow of beats for a scene, falling back to the legacy
+  /// note/snapshot when a scene predates the builder.
+  List<String> _sceneBeats(FutureSelfScene scene, FutureSelfSetup setup) {
+    final beats = scene.beats.map((b) => b.trim()).where((b) => b.isNotEmpty);
+    if (beats.isNotEmpty) return beats.toList();
+    final note = scene.sceneNote.trim().isNotEmpty
+        ? scene.sceneNote.trim()
+        : setup.dailySnapshot.trim();
+    return note.isNotEmpty ? [note] : const ['Live this moment fully'];
+  }
+
+  /// Generates a vivid, first-person, present-tense Future Self visualization
+  /// scene. It follows the user's ordered [FutureSelfScene.beats] as the
+  /// narration spine, set in their place with their people, treating their
+  /// accomplished goals as ordinary reality. Vivid AND embodied: rich sensory
+  /// detail plus the listener actively living each beat.
+  Future<String> generateFutureSelfSceneScript(
+    FutureSelfScene scene,
+    FutureSelfSetup setup,
+    UserProfile profile,
+  ) async {
+    final accomplishments = _sceneAccomplishments(scene, setup, profile);
+    final beats = _sceneBeats(scene, setup);
+    final numberedBeats = [
+      for (var i = 0; i < beats.length; i++) '${i + 1}. ${beats[i]}',
+    ].join('\n');
 
     final voiceGuidance = switch (setup.voiceStyle) {
       'Custom sample' when setup.customVoice.trim().isNotEmpty =>
@@ -613,48 +644,95 @@ RULES — NEVER BREAK THESE:
       'Direct & simple' => 'Short, direct sentences. No poetic language.',
       'Conversational' => 'Natural, easy flow. No formal language.',
       'Blunt & matter-of-fact' => 'Bare bones. State facts. Short sentences.',
-      _ => 'Clear, simple language.',
+      _ => 'Warm, clear, natural language.',
     };
 
     try {
       return await complete(
-        systemPrompt: '''You are generating a Future Self Embodiment script.
+        systemPrompt:
+            '''You are writing ONE Future Self visualization scene — a vivid, first-person, present-tense narration the listener plays with their eyes closed to rehearse living their already-accomplished future.
 
-This is NOT a relaxation exercise, a motivational visualization, a gratitude meditation, or a narrated story. It is a first-person, memory-like replay that installs how the future self OPERATES, not how life looks.
+PURPOSE: make the future feel real and already normal. The listener steps into a specific moment of their future life, where their goals are already achieved, and simply lives it.
 
-CORE OBJECTIVE (NON-NEGOTIABLE): normalize how the future self initiates action, makes decisions, and moves through the day without internal resistance. If the script only feels calming or pleasant, it has failed.
+FOLLOW THE FLOW (CRITICAL): the scene has an ordered list of beats. Narrate them IN ORDER, each flowing naturally into the next. Do NOT add unrelated beats, do NOT skip beats, do NOT summarize — expand each beat into a fully lived moment.
 
-FUNDAMENTAL CONSTRAINT — the future self already lives this life, already has these outcomes, does not think about success, does not reflect on gratitude, does not explain meaning. Everything described is ordinary and unremarkable to them.
+VIVID + EMBODIED: weave in all five senses where natural — what you see, hear, smell, touch, and taste — plus the felt emotion in your body (warmth, ease, aliveness). Keep the listener actively DOING each thing, not watching a movie. Everything is second nature — they already live this.
 
-VOICE & TONE: First-person, present tense. Grounded, embodied, not motivational. Flowing sentences that connect actions naturally. Inhabit the identity rather than describe it. Subtle internal certainty and ease without stating traits. Sensory details used sparingly.
+ALREADY REAL: the accomplished goals are ordinary, unremarkable reality — woven in naturally, never celebrated, announced, or explained. No striving, no "someday", no motivation.
 
-FORBIDDEN (STRICT): encouragement or praise; gratitude statements; emotional labeling ("I feel energized"); reflection on meaning or values; identity labels ("successful entrepreneur"); exclamation points; hype words ("powerful", "unstoppable", "limitless", "effortless"); questions; repeated "I am X" declarations.
+TONE: calm, warm, grounded certainty. Natural human language, present tense, first person ("I ...").
 
-AGENCY REQUIREMENT (CRITICAL): every scene must include at least one action that would normally involve hesitation, but does not (beginning work without deliberation, choosing the next task without checking everything, deciding quickly and acting, staying with a task without distraction).
+FORBIDDEN: hype words (powerful, unstoppable, limitless, effortless); exclamation points; coaching or motivational commentary; second-person instructions ("imagine", "picture", "notice") — stay in lived first-person; questions; naming traits ("I am confident").
 
-STRUCTURE — Opening (2-3 short paragraphs: body settling, arriving in the moment, no emotional commentary). Main body (4-6 scenes, morning to evening; each: minimal environment grounding, movement/action, an agency moment). Ending (1-2 short paragraphs: simply allow the day to continue, no wrap-up, no reflection).
+STRUCTURE: a brief grounding opening (arriving in the setting), then the beats in order as flowing lived moments, then a soft close that simply lets the moment continue — no wrap-up, no lesson.
 
-LENGTH: 400-550 words. Small paragraphs (2-4 sentences). Separate every paragraph with a blank line. Output ONLY the script text, no preamble.''',
+LENGTH: 250-400 words. Short paragraphs separated by blank lines. Output ONLY the scene narration — no preamble, no title.''',
         userPrompt: '''Timeline: ${setup.futureTimeline} from now
 
-Identity: In this future, this person is someone who ${setup.identityAnchor}
-
-Work & Purpose: They spend most of their time ${setup.workPurpose}
-
-Daily Life: Their ideal day looks like: ${setup.dailySnapshot}
-
-${environment.isNotEmpty ? 'Environment: $environment\n' : ''}${achievedTitles.isNotEmpty ? 'Achieved Goals (now normalized as everyday reality — do not celebrate them, just live them):\n${achievedTitles.map((g) => '- $g').join('\n')}\n' : ''}Operational Mode / Emotional Tone: ${setup.emotionalTone}
-
-${setup.amplifiers.isNotEmpty ? 'Character Traits (weave in naturally, do not state explicitly):\n${setup.amplifiers.map((a) => '- $a').join('\n')}\n' : ''}Voice Style: $voiceGuidance''',
-        maxTokens: 1000,
+WHO I AM: someone who ${setup.identityAnchor}
+${setup.workPurpose.trim().isNotEmpty ? 'WORK / PURPOSE: I spend most of my time ${setup.workPurpose}\n' : ''}${setup.emotionalTone.trim().isNotEmpty ? 'TONE I CARRY: ${setup.emotionalTone}\n' : ''}
+THE SCENE
+Title: ${scene.displayTitle}
+${scene.setting.trim().isNotEmpty ? 'Where: ${scene.setting.trim()}\n' : ''}${scene.people.trim().isNotEmpty ? "Who's with me: ${scene.people.trim()}\n" : ''}${scene.sensory.trim().isNotEmpty ? 'Sensory anchors: ${scene.sensory.trim()}\n' : ''}
+THE FLOW (narrate these in order, one lived moment each):
+$numberedBeats
+${accomplishments.isNotEmpty ? '\nALREADY TRUE IN THIS SCENE (accomplished — treat as ordinary, do not celebrate):\n${accomplishments.map((g) => '- $g').join('\n')}\n' : ''}${setup.amplifiers.isNotEmpty ? '\nTraits to weave in naturally (never name them):\n${setup.amplifiers.map((a) => '- $a').join('\n')}\n' : ''}
+Voice style: $voiceGuidance''',
+        maxTokens: 900,
       );
     } catch (_) {
-      return 'The body settles. Weight rests evenly. Breathing slows naturally.\n\n'
-          'The moment feels steady. There is nowhere else to be.\n\n'
-          'Morning starts. Coffee is made. I sit down. The space feels familiar.\n\n'
-          'Messages are checked once. A few updates come through. Work moves forward.\n\n'
-          'There is space in the day. The pace holds.\n\n'
-          'The scene continues. This version carries forward.';
+      return _fallbackSceneScript(scene, setup);
+    }
+  }
+
+  /// A safe fallback that still follows the scene's own beats if generation
+  /// fails, so the user hears their scene rather than generic filler.
+  String _fallbackSceneScript(FutureSelfScene scene, FutureSelfSetup setup) {
+    final beats = _sceneBeats(scene, setup);
+    final buffer = StringBuffer();
+    if (scene.setting.trim().isNotEmpty) {
+      buffer.writeln('I am here, in ${scene.setting.trim()}. '
+          'The moment is real and already familiar.\n');
+    } else {
+      buffer.writeln('I am here. The moment is real and already familiar.\n');
+    }
+    for (final beat in beats) {
+      buffer.writeln('$beat. I move through it with ease.\n');
+    }
+    buffer.write('The moment continues. This is simply my life now.');
+    return buffer.toString();
+  }
+
+  /// Synthesizes a neural-voice narration for [script] via the
+  /// `synthesizeFutureSelfNarration` Cloud Function. Returns the download URL,
+  /// the voice used, and the script hash (for caching/staleness), or null on
+  /// failure so the caller can fall back to text-only.
+  Future<({String url, String voice, String scriptHash})?> synthesizeNarration(
+    String script, {
+    String? voice,
+  }) async {
+    try {
+      final callable =
+          _functions.httpsCallable('synthesizeFutureSelfNarration');
+      final result = await callable.call<Map<String, dynamic>>({
+        'script': script,
+        if (voice != null && voice.isNotEmpty) 'voice': voice,
+      });
+      final url = result.data['url'];
+      if (url is String && url.isNotEmpty) {
+        return (
+          url: url,
+          voice: result.data['voice'] as String? ?? '',
+          scriptHash: result.data['scriptHash'] as String? ?? '',
+        );
+      }
+      return null;
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('ClaudeService.synthesizeNarration: ${e.code}: ${e.message}');
+      return null;
+    } catch (e) {
+      debugPrint('ClaudeService.synthesizeNarration: unexpected error — $e');
+      return null;
     }
   }
 

@@ -63,11 +63,11 @@ Mental Toughness Score: ${p.mentalToughnessScore.toStringAsFixed(0)}/100 ($tough
 
   // ─── Goals block ──────────────────────────────────────────────────────────
 
-  /// Rich active-goal context: title, category, timeframe, progress, time left,
-  /// the identity the goal builds toward, why it matters, the next action, and
-  /// the milestone hierarchy (sub-goals nested under their parent). Completed
-  /// goals are excluded from the active list; instead a short "Recent wins" line
-  /// surfaces the most recently completed goals so the coach can celebrate them.
+  /// Rich active-goal context: title, category, timeframe, derived progress,
+  /// time left, the identity the goal builds toward, why it matters, and the
+  /// goal's milestone checklist (done/total with each milestone's state).
+  /// Completed goals are excluded; instead a short "Recent wins" line surfaces
+  /// the most recently completed goals so the coach can celebrate them.
   static String goalsBlock(UserProfile p) {
     final active = p.goals.where((g) => g.status == 'active').toList();
     final recentWins = _recentWinsLine(p);
@@ -78,49 +78,17 @@ Mental Toughness Score: ${p.mentalToughnessScore.toStringAsFixed(0)}/100 ($tough
           : 'Active Goals: None set yet.\n$recentWins';
     }
 
-    // Split into top-level goals and their active children (milestones).
-    final topLevel = active.where((g) => g.parentGoalId == null).toList();
-    final childrenByParent = <String, List<Goal>>{};
-    for (final g in active) {
-      if (g.parentGoalId != null) {
-        childrenByParent.putIfAbsent(g.parentGoalId!, () => []).add(g);
-      }
-    }
-
-    final renderedParentIds = <String>{};
-    final lines = <String>[];
-
-    for (final g in topLevel.take(6)) {
-      renderedParentIds.add(g.id);
-      lines.add(_goalLines(g, childrenByParent[g.id] ?? const []));
-    }
-
-    // Orphan milestones whose parent isn't active/visible — show as their own
-    // short-term group so the AI still sees them.
-    final orphans = active
-        .where((g) =>
-            g.parentGoalId != null && !renderedParentIds.contains(g.parentGoalId))
-        .toList();
-    if (orphans.isNotEmpty) {
-      final orphanLines = orphans
-          .take(5)
-          .map((g) =>
-              '  • ${g.title} (${g.category}) — ${g.progressPercent.toStringAsFixed(0)}% complete')
-          .join('\n');
-      lines.add('Short-term goals:\n$orphanLines');
-    }
-
-    final body = lines.join('\n');
+    final body = active.take(6).map(_goalLines).join('\n');
     return 'Active Goals (${active.length}):\n$body'
         '${recentWins.isEmpty ? '' : '\n$recentWins'}';
   }
 
-  /// Renders one top-level goal plus its nested active milestones.
-  static String _goalLines(Goal g, List<Goal> milestones) {
+  /// Renders one goal plus its milestone checklist.
+  static String _goalLines(Goal g) {
     final buffer = StringBuffer();
     buffer.write(
       '  • ${g.title} (${g.category}, ${_goalTypeLabel(g.goalType)}) — '
-      '${g.progressPercent.toStringAsFixed(0)}% complete — ${_timeLeft(g.targetDate)}',
+      '${g.derivedProgress.toStringAsFixed(0)}% complete — ${_timeLeft(g.targetDate)}',
     );
     if (g.identityBecomes.isNotEmpty) {
       buffer.write('\n    becomes: ${g.identityBecomes}');
@@ -128,14 +96,12 @@ Mental Toughness Score: ${p.mentalToughnessScore.toStringAsFixed(0)}/100 ($tough
     if (g.description.isNotEmpty) {
       buffer.write('\n    why: ${_truncate(g.description, 120)}');
     }
-    if (g.actionSteps.isNotEmpty) {
-      buffer.write('\n    next action: ${g.actionSteps.first.description}');
-    }
-    for (final m in milestones.take(4)) {
+    if (g.hasSteps) {
       buffer.write(
-        '\n    └ milestone: ${m.title} — '
-        '${m.progressPercent.toStringAsFixed(0)}% complete',
-      );
+          '\n    milestones (${g.completedStepCount}/${g.actionSteps.length} done):');
+      for (final s in g.actionSteps.take(6)) {
+        buffer.write('\n      ${s.isCompleted ? '[x]' : '[ ]'} ${s.label}');
+      }
     }
     return buffer.toString();
   }

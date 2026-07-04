@@ -7,6 +7,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/constants/goal_meta.dart';
 import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/goal_template_card.dart';
 import '../../../core/widgets/hoverable.dart';
 import '../../../models/goal.dart';
 import 'goals_shared.dart';
@@ -100,12 +101,24 @@ class _StepGoalsSelectState extends State<StepGoalsSelect> {
     });
   }
 
+  bool get _canAddCustom {
+    final title = _titleCtrl.text.trim();
+    if (title.isEmpty) return false;
+    if (isCuratedGoalCategory(_customCategory)) return true;
+    return _customCategory.trim().isNotEmpty &&
+        _customCategory != kGoalCategoryOtherSentinel;
+  }
+
   void _addCustomGoal() {
     if (_titleCtrl.text.trim().isEmpty) return;
+    final category = isCuratedGoalCategory(_customCategory)
+        ? _customCategory
+        : _customCategory.trim();
+    if (category.isEmpty || category == kGoalCategoryOtherSentinel) return;
     final goal = Goal(
       id: const Uuid().v4(),
       title: _titleCtrl.text.trim(),
-      category: _customCategory,
+      category: category,
       goalType: _customGoalType,
       description: _descCtrl.text.trim(),
       targetDate: _customTargetDate,
@@ -202,7 +215,7 @@ class _StepGoalsSelectState extends State<StepGoalsSelect> {
                   onTimeframeSelected: _selectCustomTimeframe,
                   onCancel: () => setState(() => _showCustomForm = false),
                   onAdd: _addCustomGoal,
-                  canAdd: _titleCtrl.text.trim().isNotEmpty,
+                  canAdd: _canAddCustom,
                 ),
 
               if (!_canContinue) ...[
@@ -252,7 +265,7 @@ class _TemplateGrid extends StatelessWidget {
           final t = e.value;
           final selected = selectedTemplateIds.contains(t.id);
           final committed = isCommitted(t);
-          return _TemplateCard(
+          return GoalTemplateCard(
             template: t,
             index: e.key,
             selected: selected,
@@ -260,207 +273,12 @@ class _TemplateGrid extends StatelessWidget {
             onTap: committed ? null : () => onToggle(t.id),
           );
         }),
-        _SomethingElseTile(
+        GoalSomethingElseTile(
           index: kGoalTemplates.length,
           onTap: onOpenCustom,
         ),
       ],
     );
-  }
-}
-
-class _TemplateCard extends StatelessWidget {
-  final GoalTemplate template;
-  final int index;
-  final bool selected;
-  final bool committed;
-  final VoidCallback? onTap;
-
-  const _TemplateCard({
-    required this.template,
-    required this.index,
-    required this.selected,
-    required this.committed,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = goalCategoryColor(template.category);
-    return Hoverable(
-      cursor: committed ? SystemMouseCursors.basic : SystemMouseCursors.click,
-      onTap: onTap,
-      builder: (context, hovered) => AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: committed
-              ? AppColors.surfaceElevated.withValues(alpha: 0.4)
-              : selected
-                  ? color.withValues(alpha: 0.12)
-                  : hovered
-                      ? color.withValues(alpha: 0.06)
-                      : AppColors.surfaceElevated,
-          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-          border: Border.all(
-            color: committed
-                ? AppColors.border.withValues(alpha: 0.5)
-                : selected
-                    ? color.withValues(alpha: 0.7)
-                    : hovered
-                        ? color.withValues(alpha: 0.5)
-                        : AppColors.border,
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: committed
-                        ? AppColors.textMuted.withValues(alpha: 0.12)
-                        : color.withValues(alpha: selected ? 0.25 : 0.15),
-                    borderRadius:
-                        BorderRadius.circular(AppSpacing.radiusMd),
-                  ),
-                  child: Icon(
-                    template.icon,
-                    size: 26,
-                    color: committed
-                        ? AppColors.textMuted
-                        : selected
-                            ? color
-                            : color.withValues(alpha: 0.85),
-                  ),
-                ),
-                const Spacer(),
-                if (selected)
-                  Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.check_rounded,
-                      color: Colors.white,
-                      size: 13,
-                    ),
-                  )
-                else if (committed)
-                  const Icon(Icons.check_rounded,
-                      color: AppColors.textMuted, size: 16)
-                else
-                  Text(
-                    goalHorizonLabel(template.months),
-                    style: AppTextStyles.labelSmall
-                        .copyWith(color: AppColors.textMuted),
-                  ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              template.title,
-              style: AppTextStyles.labelLarge.copyWith(
-                color: committed
-                    ? AppColors.textMuted
-                    : selected
-                        ? color
-                        : AppColors.textPrimary,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 3),
-            Text(
-              template.description,
-              style: AppTextStyles.bodySmall.copyWith(
-                color: committed
-                    ? AppColors.textDisabled
-                    : AppColors.textMuted,
-                height: 1.3,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
-    ).animate().fadeIn(
-          delay: Duration(milliseconds: index * 40),
-          duration: 300.ms,
-        );
-  }
-}
-
-class _SomethingElseTile extends StatelessWidget {
-  final int index;
-  final VoidCallback onTap;
-
-  const _SomethingElseTile({required this.index, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Hoverable(
-      onTap: onTap,
-      builder: (context, hovered) => AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceElevated,
-          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-          border: Border.fromBorderSide(
-            BorderSide(
-              color: hovered
-                  ? AppColors.textSecondary.withValues(alpha: 0.5)
-                  : AppColors.border,
-            ),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: AppColors.textMuted.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-              ),
-              child: const Icon(
-                Icons.edit_rounded,
-                size: 24,
-                color: AppColors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              AppStrings.onboardingGoalsSomethingElse,
-              style: AppTextStyles.labelLarge
-                  .copyWith(color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              AppStrings.onboardingGoalsSomethingElseHint,
-              style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.textMuted,
-                height: 1.3,
-              ),
-            ),
-          ],
-        ),
-      ),
-    ).animate().fadeIn(
-          delay: Duration(milliseconds: index * 40),
-          duration: 300.ms,
-        );
   }
 }
 
@@ -504,7 +322,7 @@ class _CustomGoalChip extends StatelessWidget {
   }
 }
 
-class _CustomGoalForm extends StatelessWidget {
+class _CustomGoalForm extends StatefulWidget {
   final TextEditingController titleCtrl;
   final TextEditingController descCtrl;
   final String category;
@@ -528,6 +346,62 @@ class _CustomGoalForm extends StatelessWidget {
   });
 
   @override
+  State<_CustomGoalForm> createState() => _CustomGoalFormState();
+}
+
+class _CustomGoalFormState extends State<_CustomGoalForm> {
+  late final TextEditingController _customCategoryCtrl;
+
+  bool get _isOtherCategory =>
+      widget.category == kGoalCategoryOtherSentinel ||
+      (!isCuratedGoalCategory(widget.category) &&
+          widget.category != kGoalCategoryOtherSentinel);
+
+  String get _dropdownValue => isCuratedGoalCategory(widget.category)
+      ? widget.category
+      : kGoalCategoryOtherSentinel;
+
+  @override
+  void initState() {
+    super.initState();
+    _customCategoryCtrl = TextEditingController(
+      text: _isOtherCategory && widget.category != kGoalCategoryOtherSentinel
+          ? widget.category
+          : '',
+    );
+    _customCategoryCtrl.addListener(_onCustomCategoryChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _CustomGoalForm oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.category != widget.category &&
+        isCuratedGoalCategory(widget.category)) {
+      _customCategoryCtrl.removeListener(_onCustomCategoryChanged);
+      _customCategoryCtrl.text = '';
+      _customCategoryCtrl.addListener(_onCustomCategoryChanged);
+    } else if (oldWidget.category != widget.category &&
+        !isCuratedGoalCategory(widget.category) &&
+        widget.category != kGoalCategoryOtherSentinel &&
+        _customCategoryCtrl.text != widget.category) {
+      _customCategoryCtrl.removeListener(_onCustomCategoryChanged);
+      _customCategoryCtrl.text = widget.category;
+      _customCategoryCtrl.addListener(_onCustomCategoryChanged);
+    }
+  }
+
+  void _onCustomCategoryChanged() {
+    widget.onCategoryChanged(_customCategoryCtrl.text.trim());
+  }
+
+  @override
+  void dispose() {
+    _customCategoryCtrl.removeListener(_onCustomCategoryChanged);
+    _customCategoryCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -536,7 +410,7 @@ class _CustomGoalForm extends StatelessWidget {
             style: AppTextStyles.headlineSmall),
         const SizedBox(height: AppSpacing.md),
         TextField(
-          controller: titleCtrl,
+          controller: widget.titleCtrl,
           autofocus: true,
           textCapitalization: TextCapitalization.words,
           style: AppTextStyles.bodyLarge,
@@ -563,7 +437,7 @@ class _CustomGoalForm extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.md),
         DropdownButtonFormField<String>(
-          initialValue: category,
+          initialValue: _dropdownValue,
           decoration: InputDecoration(
             labelText: AppStrings.onboardingGoalsCategoryLabel,
             filled: true,
@@ -577,21 +451,58 @@ class _CustomGoalForm extends StatelessWidget {
               borderSide: const BorderSide(color: AppColors.border),
             ),
           ),
-          items: kGoalCategories
-              .map(
-                (c) => DropdownMenuItem(
-                  value: c,
-                  child: Text(goalCategoryLabel(c)),
-                ),
-              )
-              .toList(),
+          items: [
+            ...kGoalCategories.map(
+              (c) => DropdownMenuItem(
+                value: c,
+                child: Text(goalCategoryLabel(c)),
+              ),
+            ),
+            DropdownMenuItem(
+              value: kGoalCategoryOtherSentinel,
+              child: Text('${AppStrings.categoryOther}...'),
+            ),
+          ],
           onChanged: (v) {
-            if (v != null) onCategoryChanged(v);
+            if (v == null) return;
+            if (v == kGoalCategoryOtherSentinel) {
+              widget.onCategoryChanged(kGoalCategoryOtherSentinel);
+            } else {
+              widget.onCategoryChanged(v);
+            }
           },
         ),
+        if (_dropdownValue == kGoalCategoryOtherSentinel) ...[
+          const SizedBox(height: AppSpacing.sm),
+          TextField(
+            controller: _customCategoryCtrl,
+            textCapitalization: TextCapitalization.words,
+            style: AppTextStyles.bodyLarge,
+            cursorColor: AppColors.primary,
+            decoration: InputDecoration(
+              hintText: AppStrings.categoryOtherHint,
+              hintStyle:
+                  AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
+              filled: true,
+              fillColor: AppColors.surfaceElevated,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                borderSide: const BorderSide(color: AppColors.primary),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: AppSpacing.md),
         TextField(
-          controller: descCtrl,
+          controller: widget.descCtrl,
           style: AppTextStyles.bodyLarge,
           cursorColor: AppColors.primary,
           maxLines: 2,
@@ -623,9 +534,9 @@ class _CustomGoalForm extends StatelessWidget {
           spacing: AppSpacing.sm,
           runSpacing: AppSpacing.sm,
           children: kGoalTypeOptions.map((opt) {
-            final selected = opt.value == goalType;
+            final selected = opt.value == widget.goalType;
             return GestureDetector(
-              onTap: () => onTimeframeSelected(opt.value),
+              onTap: () => widget.onTimeframeSelected(opt.value),
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.sm,
@@ -655,12 +566,13 @@ class _CustomGoalForm extends StatelessWidget {
         const SizedBox(height: AppSpacing.md),
         Row(
           children: [
-            AppSecondaryButton(label: 'Cancel', width: 100, onPressed: onCancel),
+            AppSecondaryButton(
+                label: 'Cancel', width: 100, onPressed: widget.onCancel),
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: AppPrimaryButton(
                 label: AppStrings.onboardingGoalsAddCustom,
-                onPressed: canAdd ? onAdd : null,
+                onPressed: widget.canAdd ? widget.onAdd : null,
                 icon: Icons.add_rounded,
               ),
             ),

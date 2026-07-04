@@ -47,6 +47,8 @@ abstract final class AppColors {
   static const Color categoryRelationships = Color(0xFFFF6B9D);
   static const Color categoryFinances = Color(0xFFFFB547);
   static const Color categoryPersonalGrowth = Color(0xFF00E5FF);
+  static const Color categorySpirituality = Color(0xFF8B7CFF);
+  static const Color categoryLearning = Color(0xFF4D9FFF);
 
   // Chart colors
   static const List<Color> chartGradient = [primary, secondary];

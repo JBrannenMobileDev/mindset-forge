@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:just_audio/just_audio.dart';
-import 'package:just_audio_background/just_audio_background.dart';
 
 /// A selectable binaural-beat frequency band.
 class BinauralBand {
@@ -140,21 +139,11 @@ class BinauralBeatController {
   }
 }
 
-/// Serves the generated WAV bytes to [just_audio] as an in-memory source. The
-/// [MediaItem] tag lets [just_audio_background] surface the session in the
-/// system media notification / lock-screen controls so playback survives the
-/// screen locking or the app being backgrounded.
+/// Serves the generated WAV bytes to [just_audio] as an in-memory source.
 class _WavStreamSource extends StreamAudioSource {
   final Uint8List _bytes;
 
-  _WavStreamSource(this._bytes)
-      : super(
-          tag: const MediaItem(
-            id: 'future-self-binaural-beats',
-            title: 'Future Self Practice',
-            artist: 'Binaural Beats',
-          ),
-        );
+  _WavStreamSource(this._bytes);
 
   @override
   Future<StreamAudioResponse> request([int? start, int? end]) async {

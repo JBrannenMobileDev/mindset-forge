@@ -227,6 +227,11 @@ abstract final class AppStrings {
       'Select at least one goal to continue.';
   static const String onboardingGoalsSomethingElse = 'Something else';
   static const String onboardingGoalsSomethingElseHint = 'Write your own goal';
+  static const String goalGalleryTitle = 'What do you want to achieve?';
+  static const String goalGallerySubtitle =
+      'Pick a starting point or write your own.';
+  static const String goalStartFromScratch = 'Start from scratch';
+  static const String goalStartFromScratchHint = 'Build a custom goal';
   static const String onboardingGoalsCustomAdded = 'YOUR CUSTOM GOALS';
   static const String onboardingGoalsCustomTitle = 'Custom Goal';
   static const String onboardingGoalsCustomTitleHint =
@@ -451,16 +456,25 @@ abstract final class AppStrings {
   static const String goalNotFound = 'This goal is no longer available.';
   static const String goalDetailDescription = 'Description';
   static const String goalDetailIdentity = 'Identity';
-  static const String goalDetailActionSteps = 'Action Steps';
-  static const String goalDetailBreakdown = 'Breakdown';
+  static const String goalDetailActionSteps = 'Milestones';
+  static const String goalDetailBreakdown = 'Suggested milestones';
   static const String goalProgressDrag = 'Drag to update';
   static const String goalMarkComplete = 'Mark as Complete';
-  static const String goalAddAsSubGoal = 'Add as Sub-Goal';
+  static const String goalAddAsSubGoal = 'Add milestone';
   static const String goalMilestoneAdded = 'Added';
   static const String goalCompletedToast =
       "Goal completed! You're unstoppable.";
-  static const String goalMilestoneSavedToast =
-      'Milestone saved as a sub-goal!';
+  static const String goalMilestoneSavedToast = 'Milestone added!';
+  static const String goalAddMilestone = 'Add milestone';
+  static const String goalAddMilestoneHint = 'e.g., Ship the first version';
+  static const String goalMilestoneDialogTitle = 'New milestone';
+  static String goalMilestoneProgress(int done, int total) =>
+      '$done of $total milestones';
+  static const String goalRegenerateBreakdown = 'Suggest more';
+  static const String goalCompletedSection = 'Completed';
+  static const String goalNorthStar = 'North Star';
+  static const String goalSetAsNorthStar = 'Set as North Star';
+  static const String goalNorthStarSetToast = 'North Star updated!';
 
   // Priority actions (Today tab)
   static const String priorityActionsAllDone =
@@ -579,82 +593,151 @@ abstract final class AppStrings {
   // Future Self practice (Subconscious / Foundation layer)
   static const String futureSelfPracticeTitle = 'Future Self Practice';
   static const String futureSelfPracticeSubtitle =
-      'Install your future identity into your subconscious.';
-  static const String futureSelfCreate = 'Create Practice';
-  static const String futureSelfStartToday = 'Start Today\'s Practice';
+      'Step into one moment as your future self. Eyes closed, guided by voice.';
+  static const String futureSelfCreate = 'Create Your Practice';
+  static const String futureSelfStartToday = 'Begin Today\'s Scene';
   static const String futureSelfPracticeAgain = 'Practice Again';
   static const String futureSelfCompletedToday = 'Completed Today';
-  static const String futureSelfRefine = 'Refine Practice';
+  static const String futureSelfRefine = 'Refine';
   static const String futureSelfRefineNote =
       'Small refinements are okay. Repetition installs identity.';
   static const String futureSelfComplete = 'Complete Practice';
   static String futureSelfCompleteSnackBar(String minutes) =>
-      'Practice complete. $minutes minutes with your future self.';
+      'Practice complete. $minutes minutes as your future self.';
   static const String futureSelfPlayerGuidance =
-      'Read slowly. Return to the same scene. Familiarity is the point.';
+      'Close your eyes and let the voice lead. Return to the same scene daily.';
   static const String futureSelfWhatTitle = 'What is Future Self Practice?';
   static const String futureSelfWhatBody =
-      'This is not visualization for motivation. It is a daily identity installation practice. You return to the same scene every day, and the power is in repetition, not novelty. When you rehearse being your future self calmly and consistently, your thoughts and choices naturally align.';
-  static const String futureSelfPrinciplesTitle = 'Key principles';
+      'You build a vivid scene of your life in the future, where your goals are already achieved and ordinary. Then, with your eyes closed, a calm voice walks you through that moment as if you are living it right now, step by step. You return to the same scene daily. The more real and detailed it feels, the more your mind treats it as your actual future, and your choices start to follow.';
+  static const String futureSelfWhatExampleTitle = 'For example';
+  static const String futureSelfWhatExample =
+      'Picture a morning in your dream home: you wake rested, meditate, make coffee, your family joins you, you make breakfast together. You are not hoping for it. You are there, living it, and it is completely normal.';
+  static const String futureSelfPrinciplesTitle = 'What makes it work';
   static const List<String> futureSelfPrinciples = [
-    'Repetition beats novelty',
-    'Stability beats variety',
-    'Identity beats goals',
-    'Calm emotion beats excitement',
+    'Specific and vivid beats vague',
+    'Already real beats someday',
+    'Living it beats watching it',
+    'Same scene daily beats novelty',
   ];
   static const String futureSelfBestTimeTitle = 'Best time';
   static const String futureSelfBestTimeBody =
-      'Morning, before your day begins. 3 to 8 minutes is enough, and consistency matters more than duration.';
+      'Morning, before your day begins. Two to four minutes is enough, and consistency matters more than duration.';
 
   // Future Self "how to practice" method (primer + guide)
   static const String futureSelfHowToTitle = 'How to practice';
   static const String futureSelfHowToIntro =
-      'A few minutes done well beats a long session done distracted. Here is how to get the most out of it.';
+      'A few minutes done well beats a long session done distracted. Put headphones on, close your eyes, and let the voice lead.';
   static const List<(String, String)> futureSelfHowToSteps = [
     (
       'Get calm first',
-      'Sit comfortably, close your eyes, and breathe slowly. Let the binaural beats pull you into a relaxed, meditative state. Around 1 to 2 minutes is plenty.'
+      'Sit comfortably, close your eyes, and breathe slowly. Let the guided breath and audio settle you. Around a minute is plenty.'
     ),
     (
-      'Load the scene',
-      'Read your scene through once, slowly, picturing each moment as you go.'
+      'Step into the scene',
+      'Keep your eyes closed and listen. The voice places you inside your future moment. Do not watch it from outside, be there, living it in first person.'
     ),
     (
-      'Replay it with your eyes closed',
-      'Walk through the day from morning to night and add everything you can. What you see, what you hear, what you touch. The more vivid the detail, the more your brain registers it as something that really happened.'
+      'Make it real with your senses',
+      'Feel the details as they come, the light, the sounds, the people around you. The more vivid and ordinary it feels, the deeper it lands.'
     ),
     (
-      'Feel it',
-      'Tie a real emotion to each scene. Calm, pride, certainty, relief. The emotion is what makes it stick, so let yourself actually feel it.'
+      'Carry it out',
+      'Before you open your eyes, take the way that future felt, and carry it into your day as though it is already yours.'
     ),
   ];
   static const String futureSelfHowToReassurance =
       'You do not need to do this perfectly. Showing up calmly each day is what creates the change.';
   static const String futureSelfHowToBegin = 'Begin Practice';
 
-  // Future Self guided session phases
-  static const String futureSelfPhaseSettleTitle = 'Settle in';
-  static const String futureSelfPhaseSettleBody =
-      'Close your eyes and breathe slowly. Let your body soften and your mind grow quiet before you begin.';
-  static const String futureSelfPhaseSettleCta = 'Begin';
-  static const String futureSelfPhaseSkip = 'Skip to scene';
-  static const String futureSelfPhaseLoadTitle = 'Load your scene';
-  static const String futureSelfPhaseLoadBody =
-      'Read this through once, slowly, and picture every detail as you go.';
-  static const String futureSelfPhaseLoadCta = 'I can see it';
-  static const String futureSelfPhaseVisualizeTitle = 'Close your eyes';
-  static const String futureSelfPhaseVisualizeBody =
-      'Replay your day from morning to night. Add color, sound, and texture, and feel the emotion in every scene.';
-  static const String futureSelfPhaseVisualizeCta = 'I am finished';
-  static const List<String> futureSelfVisualizeCues = [
-    'What do you see around you?',
-    'What can you hear?',
-    'What does it feel like in your body?',
-    'Let the emotion grow stronger.',
-  ];
-  static const String futureSelfPhaseSealTitle = 'Seal it in';
-  static const String futureSelfPhaseSealBody =
-      'Hold the strongest feeling for a few slow breaths, then carry it with you into your day.';
+  // Future Self guided session phases (audio-first: Arrive -> Embody -> Carry)
+  static const String futureSelfPhaseArriveTitle = 'Arrive';
+  static const String futureSelfPhaseArriveBody =
+      'Close your eyes and breathe slowly. Let your body soften and your mind grow quiet. The scene begins on its own.';
+  static const String futureSelfPhaseEmbodyTitle = 'Become them';
+  static const String futureSelfPhaseEmbodyBody =
+      'Eyes closed. Let the voice place you inside the moment, and move through it as your future self.';
+  static const String futureSelfPhaseCarryTitle = 'Carry it';
+  static const String futureSelfPhaseCarryBody =
+      'Hold how that felt for a few slow breaths, then bring it into your day.';
+  static const String futureSelfEyesClosedHint = 'You can close your eyes now.';
+  static const String futureSelfShowText = 'Show text';
+  static const String futureSelfHideText = 'Hide text';
+  static const String futureSelfEndSession = 'End session';
+  static const String futureSelfBeginNow = 'Begin now';
+  static const String futureSelfPreparing = 'Preparing your scene...';
+  static const String futureSelfPreparingNote =
+      'Generating your narration. First play takes a little longer.';
+
+  // Future Self scenes
+  static const String futureSelfScenesTitle = 'Your scenes';
+  static const String futureSelfScenesSubtitle =
+      'Short moments you return to. Pick one to practice today.';
+  static const String futureSelfAddScene = 'Add a scene';
+  static const String futureSelfSceneLimitReached =
+      'You can keep up to three scenes. Refine or remove one to add another.';
+  static const String futureSelfChooseSceneTitle = 'Choose today\'s scene';
+  static const String futureSelfDeleteScene = 'Remove scene';
+  static const String futureSelfDeleteSceneConfirm =
+      'Remove this scene from your practice?';
+  static const String futureSelfSceneBuilding = 'Building your scene...';
+  static const String futureSelfSceneBuildingNote =
+      'Writing your scene. Voice is generated when you first practice.';
+  static const String futureSelfCreateScene = 'Create scene';
+  static const String futureSelfRegenerateScene = 'Regenerate scene';
+  static const String futureSelfEditIdentity = 'Edit future self';
+  static const String futureSelfNewSceneTitle = 'Add a scene';
+  static const String futureSelfRefineSceneTitle = 'Refine this scene';
+  static const String futureSelfScenePractice = 'Practice';
+
+  // Vision Scene Builder
+  static const String futureSelfBuilderIntro =
+      'Build a moment in your future where your goals are already real. The more specific and vivid — what you see, hear, smell, touch, taste, and feel — the more powerful it becomes.';
+  static const String futureSelfBuilderTemplatesLabel =
+      'Start from an idea (optional)';
+  static const String futureSelfBuilderTemplatesHint =
+      'Pick one to prefill the fields below, or write your own scene from scratch.';
+  static const String futureSelfSceneTitleLabel = 'Name this scene';
+  static const String futureSelfSceneTitleHint =
+      'e.g. Morning in the life I built';
+  static const String futureSelfSceneWhereLabel = 'Where are you?';
+  static const String futureSelfSceneWhereHint =
+      'Describe the place in detail — what you see, hear, smell, and feel around you.\ne.g. sunlit kitchen, marble counters, smell of fresh coffee, warm tile under my feet';
+  static const String futureSelfSceneWhereHelper =
+      'Include sights, sounds, smells, textures, and temperature. The more specific, the more real it feels.';
+  static const String futureSelfScenePeopleLabel = "Who's with you? (optional)";
+  static const String futureSelfScenePeopleHint =
+      'Who is there and how does it feel to be with them?\ne.g. my partner beside me, easy and unhurried; kids laughing in the next room';
+  static const String futureSelfScenePeopleHelper =
+      'Describe who is present and the feeling of being together — warmth, ease, connection.';
+  static const String futureSelfSceneFlowLabel = 'The flow of the scene';
+  static const String futureSelfSceneFlowHint =
+      'One moment per line, in order. Include what you do and what you sense in each step:\nWake up rested, light on my face\nQuiet minutes of stillness\nMake coffee — rich smell, warm mug in my hands\nSomeone joins me, easy conversation\nStep into the day feeling alive';
+  static const String futureSelfSceneFlowHelper =
+      'Write each moment step by step. Weave in what you see, hear, smell, touch, taste, and feel as you move through it.';
+  static const String futureSelfSceneSensoryLabel =
+      'Overall atmosphere (optional)';
+  static const String futureSelfSceneSensoryHint =
+      'The overall mood and sensory backdrop — sight, sound, smell, touch, taste, and how your body feels.\ne.g. golden light, birds outside, smell of coffee, warm mug, deep calm in my chest';
+  static const String futureSelfSceneGoalsLabel =
+      'Goals already achieved here (optional)';
+  static const String futureSelfSceneGoalsHint =
+      'Tap the goals that are already real in this scene.';
+  static const String futureSelfBuilderNeedsTitle =
+      'Give your scene a name to continue.';
+  static const String futureSelfBuilderNeedsFlow =
+      'Add at least two moments to the flow.';
+
+  // Future Self seal / payoff moment
+  static const String futureSelfSealHeadline = 'Sealed in.';
+  static String futureSelfSealDaysEmbodied(int days) =>
+      days <= 1 ? 'Day one embodied.' : '$days days embodied.';
+  static String futureSelfSealCarryTrait(String trait) =>
+      'Carry it: move like someone who is $trait today.';
+  static const String futureSelfSealCarryGeneric =
+      'Carry the way that felt into your next action.';
+  static const String futureSelfSealLogEvidence = 'Log a piece of evidence';
+  static const String futureSelfSealTalkToFutureSelf = 'Talk to your future self';
+  static const String futureSelfSealDone = 'Done';
 
   // Affirmations
   static const String affirmations = 'Affirmations';
@@ -901,6 +984,10 @@ abstract final class AppStrings {
   static const String categoryRelationships = 'Relationships';
   static const String categoryFinances = 'Finances';
   static const String categoryPersonalGrowth = 'Personal Growth';
+  static const String categorySpirituality = 'Spirituality';
+  static const String categoryLearning = 'Learning';
+  static const String categoryOther = 'Other';
+  static const String categoryOtherHint = 'Name your own category';
 
   // Accountability partner invite prompts
   static const String invitePromptCta = 'Invite a Partner';

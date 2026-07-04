@@ -2,23 +2,32 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/audio/binaural_beat_controller.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/constants/app_text_styles.dart';
+import '../../models/evidence_entry.dart';
+import '../../models/future_self_setup.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/claude_provider.dart';
+import '../../providers/daily_completion_provider.dart';
 import '../../providers/future_self_provider.dart';
 
-/// The four guided phases of a session.
-enum _FsPhase { settle, load, visualize, seal }
+/// The audio-first, hands-free phases of a session. Seal is the post-completion
+/// payoff, not an audio phase.
+enum _FsPhase { arrive, embody, carry, seal }
 
-/// The guided Future Self session. Walks the user through the effective method:
-/// settle into a calm state, load the scene, replay it eyes-closed with vivid
-/// detail and emotion, then seal it in. Records the completion at the end.
+/// The guided Future Self session for a single scene. Audio-first and
+/// eyes-closed: the user arrives with a guided breath, a neural voice narrates
+/// the scene while they embody it, then they carry the feeling into their day.
+/// Phases auto-advance; no tapping is required to progress.
 class FutureSelfPlayerScreen extends ConsumerStatefulWidget {
-  const FutureSelfPlayerScreen({super.key});
+  final String sceneId;
+
+  const FutureSelfPlayerScreen({super.key, required this.sceneId});
 
   @override
   ConsumerState<FutureSelfPlayerScreen> createState() =>
@@ -27,78 +36,160 @@ class FutureSelfPlayerScreen extends ConsumerStatefulWidget {
 
 class _FutureSelfPlayerScreenState
     extends ConsumerState<FutureSelfPlayerScreen> {
+  static const _bedVolume = 0.3;
+  static const _bedDuckedVolume = 0.06;
+  static const _arriveSeconds = 32;
+  static const _carrySeconds = 16;
+
   late final BinauralBeatController _beats;
+  final AudioPlayer _narration = AudioPlayer();
   final DateTime _start = DateTime.now();
 
-  _FsPhase _phase = _FsPhase.settle;
-  List<String> _paragraphs = [];
-  bool _loadingScript = false;
+  _FsPhase _phase = _FsPhase.arrive;
+  FutureSelfScene? _scene;
+  bool _preparing = true;
   bool _beatsEnabled = true;
-  bool _completing = false;
+  bool _hasAudio = false;
+  bool _showText = false;
+  bool _carryStarted = false;
 
-  Timer? _visualizeTimer;
-  DateTime? _visualizeStart;
-  int _visualizeSeconds = 0;
+  int _arriveRemaining = _arriveSeconds;
+  Timer? _arriveTimer;
+  Timer? _carryTimer;
+  Timer? _fallbackTimer;
+  StreamSubscription<ProcessingState>? _narrationSub;
+
+  int _daysEmbodied = 1;
 
   @override
   void initState() {
     super.initState();
     final setup = ref.read(futureSelfProvider);
     _beatsEnabled = setup?.beatsEnabled ?? true;
-    _beats = BinauralBeatController(hz: setup?.binauralHz ?? 7);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _init());
+    _beats = BinauralBeatController(hz: setup?.binauralHz ?? 7, volume: _bedVolume);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _prepare());
   }
 
   @override
   void dispose() {
-    _visualizeTimer?.cancel();
+    _arriveTimer?.cancel();
+    _carryTimer?.cancel();
+    _fallbackTimer?.cancel();
+    _narrationSub?.cancel();
+    _narration.dispose();
     _beats.dispose();
     super.dispose();
   }
 
-  Future<void> _init() async {
-    await _loadScript();
-    if (_beatsEnabled && mounted) await _beats.play();
-  }
-
-  Future<void> _loadScript() async {
-    final setup = ref.read(futureSelfProvider);
-    if (setup == null) return;
-
-    if (setup.hasPractice) {
-      _setParagraphs(setup.generatedScript!);
-      return;
-    }
-
-    // No stored script yet, generate once and persist it.
-    setState(() => _loadingScript = true);
+  Future<void> _prepare() async {
     try {
-      final profile = ref.read(currentUserProfileProvider).valueOrNull;
-      if (profile != null) {
-        final script = await ref
-            .read(claudeServiceProvider)
-            .generateFutureSelfScript(setup, profile);
-        if (!mounted) return;
-        _setParagraphs(script);
-        await ref.read(futureSelfProvider.notifier).attachScript(script);
+      // Start the calming bed immediately while the scene loads.
+      if (_beatsEnabled) {
+        unawaited(_beats.play());
+      }
+
+      var scene = ref.read(futureSelfProvider)?.scenes.firstWhere(
+            (s) => s.id == widget.sceneId,
+            orElse: () => throw StateError('scene not found'),
+          );
+
+      // Lazily generate the script/narration if this scene was saved without it.
+      if (scene != null && (!scene.hasScript || !scene.hasNarration)) {
+        scene = await ref
+            .read(futureSelfProvider.notifier)
+            .ensureSceneReady(widget.sceneId)
+            .timeout(const Duration(seconds: 90));
+      }
+
+      _scene = scene;
+      _hasAudio = scene?.hasNarration ?? false;
+
+      if (_hasAudio) {
+        try {
+          await _narration
+              .setAudioSource(
+                LockCachingAudioSource(Uri.parse(scene!.narrationUrl!)),
+              )
+              .timeout(const Duration(seconds: 30));
+        } catch (_) {
+          _hasAudio = false;
+        }
       }
     } catch (_) {
-      // leave empty; user can refine
-    } finally {
-      if (mounted) setState(() => _loadingScript = false);
+      // Fall through — text-only practice is still usable.
+      _hasAudio = false;
+    }
+    if (!mounted) return;
+    setState(() => _preparing = false);
+    _startArriveCountdown();
+  }
+
+  void _startArriveCountdown() {
+    _arriveTimer?.cancel();
+    _arriveRemaining = _arriveSeconds;
+    _arriveTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return;
+      setState(() => _arriveRemaining--);
+      if (_arriveRemaining <= 0) {
+        t.cancel();
+        _startEmbody();
+      }
+    });
+  }
+
+  Future<void> _startEmbody() async {
+    if (_phase != _FsPhase.arrive) return;
+    _arriveTimer?.cancel();
+    // Duck the bed so the voice sits on top of it.
+    await _beats.setVolume(_bedDuckedVolume);
+    if (!mounted) return;
+    setState(() => _phase = _FsPhase.embody);
+
+    if (_hasAudio) {
+      _narrationSub = _narration.processingStateStream.listen((state) {
+        if (state == ProcessingState.completed) _startCarry();
+      });
+      unawaited(_narration.play());
+    } else {
+      // Text fallback: pace by the script length, then move on.
+      final words = _scene?.script?.split(RegExp(r'\s+')).length ?? 120;
+      final seconds = (words / 2.2).clamp(45, 240).round();
+      _showText = true;
+      _fallbackTimer = Timer(Duration(seconds: seconds), _startCarry);
     }
   }
 
-  void _setParagraphs(String script) {
+  Future<void> _startCarry() async {
+    if (_carryStarted) return;
+    _carryStarted = true;
+    _narrationSub?.cancel();
+    _fallbackTimer?.cancel();
+    await _beats.setVolume(_bedVolume);
+    if (!mounted) return;
+    setState(() => _phase = _FsPhase.carry);
+    _carryTimer = Timer(const Duration(seconds: _carrySeconds), _complete);
+  }
+
+  Future<void> _complete() async {
+    _carryTimer?.cancel();
+    await _narration.pause();
+    await _beats.pause();
+
+    final seconds = DateTime.now().difference(_start).inSeconds;
+    final profile = ref.read(currentUserProfileProvider).valueOrNull;
+    final dates = profile == null
+        ? <String>{}
+        : profile.futureSelfCompletions
+            .where((c) => c.completed)
+            .map((c) => c.date)
+            .toSet();
+    dates.add('today');
+
+    await ref.read(futureSelfProvider.notifier).recordCompletion(seconds);
+    if (!mounted) return;
     setState(() {
-      _paragraphs = script
-          .split(RegExp(r'\n\s*\n'))
-          .map((p) => p.trim())
-          .where((p) => p.isNotEmpty)
-          .toList();
-      if (_paragraphs.isEmpty && script.trim().isNotEmpty) {
-        _paragraphs = [script.trim()];
-      }
+      _daysEmbodied = dates.length;
+      _phase = _FsPhase.seal;
     });
   }
 
@@ -111,43 +202,6 @@ class _FutureSelfPlayerScreenState
     }
   }
 
-  void _goTo(_FsPhase phase) {
-    if (phase == _FsPhase.visualize) {
-      _visualizeStart = DateTime.now();
-      _visualizeSeconds = 0;
-      _visualizeTimer?.cancel();
-      _visualizeTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (!mounted) return;
-        setState(() {
-          _visualizeSeconds =
-              DateTime.now().difference(_visualizeStart!).inSeconds;
-        });
-      });
-    } else {
-      _visualizeTimer?.cancel();
-    }
-    setState(() => _phase = phase);
-  }
-
-  Future<void> _complete() async {
-    setState(() => _completing = true);
-    _visualizeTimer?.cancel();
-    await _beats.pause();
-    final seconds = DateTime.now().difference(_start).inSeconds;
-    await ref.read(futureSelfProvider.notifier).recordCompletion(seconds);
-    if (!mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    Navigator.of(context).pop();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          AppStrings.futureSelfCompleteSnackBar(
-              (seconds / 60).toStringAsFixed(1)),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -156,103 +210,123 @@ class _FutureSelfPlayerScreenState
         backgroundColor: AppColors.futureSelfBackground,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.close_rounded,
-              color: AppColors.futureSelfAccent),
+          icon: const Icon(Icons.close_rounded, color: AppColors.futureSelfAccent),
+          tooltip: AppStrings.futureSelfEndSession,
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
-          AppStrings.futureSelf,
+          _scene?.displayTitle ?? AppStrings.futureSelf,
           style: AppTextStyles.headlineSmall
               .copyWith(color: AppColors.futureSelfAccent),
         ),
         actions: [
-          IconButton(
-            tooltip: 'Binaural beats',
-            icon: Icon(
-              _beatsEnabled
-                  ? Icons.volume_up_rounded
-                  : Icons.volume_off_rounded,
-              color: AppColors.futureSelfAccent,
+          if (_phase == _FsPhase.embody && (_scene?.hasScript ?? false))
+            IconButton(
+              tooltip: _showText
+                  ? AppStrings.futureSelfHideText
+                  : AppStrings.futureSelfShowText,
+              icon: Icon(
+                _showText
+                    ? Icons.subtitles_off_rounded
+                    : Icons.subtitles_rounded,
+                color: AppColors.futureSelfAccent,
+              ),
+              onPressed: () => setState(() => _showText = !_showText),
             ),
-            onPressed: () => _toggleBeats(!_beatsEnabled),
-          ),
         ],
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: AppSpacing.sm),
-            _PhaseProgress(phase: _phase),
-            Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 350),
-                child: _buildPhase(),
+        child: _preparing
+            ? const _PreparingView()
+            : Column(
+                children: [
+                  const SizedBox(height: AppSpacing.sm),
+                  if (_phase != _FsPhase.seal) _PhaseProgress(phase: _phase),
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 350),
+                      child: _buildPhase(),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            _buildCta(),
-          ],
-        ),
       ),
     );
   }
 
   Widget _buildPhase() {
     switch (_phase) {
-      case _FsPhase.settle:
-        return _SettlePhase(
-          key: const ValueKey('settle'),
+      case _FsPhase.arrive:
+        return _ArrivePhase(
+          key: const ValueKey('arrive'),
+          remaining: _arriveRemaining,
           beatsEnabled: _beatsEnabled,
-          beats: _beats,
           onToggleBeats: _toggleBeats,
+          onBeginNow: _startEmbody,
         );
-      case _FsPhase.load:
-        return _LoadPhase(
-          key: const ValueKey('load'),
-          loading: _loadingScript,
-          paragraphs: _paragraphs,
+      case _FsPhase.embody:
+        return _EmbodyPhase(
+          key: const ValueKey('embody'),
+          player: _narration,
+          hasAudio: _hasAudio,
+          showText: _showText,
+          script: _scene?.script ?? '',
         );
-      case _FsPhase.visualize:
-        return _VisualizePhase(
-          key: const ValueKey('visualize'),
-          seconds: _visualizeSeconds,
+      case _FsPhase.carry:
+        return _CarryPhase(
+          key: const ValueKey('carry'),
+          trait: ref.read(embodimentTraitTodayProvider),
+          onDone: _complete,
         );
       case _FsPhase.seal:
-        return const _SealPhase(key: ValueKey('seal'));
+        return _SealPhase(
+          key: const ValueKey('seal'),
+          daysEmbodied: _daysEmbodied,
+          trait: ref.read(embodimentTraitTodayProvider),
+          onLogEvidence: _openEvidenceSheet,
+          onTalkToFutureSelf: () {
+            Navigator.of(context).pop();
+            context.push('/chat', extra: {'initialMode': 'future_self'});
+          },
+          onDone: () => Navigator.of(context).pop(),
+        );
     }
   }
 
-  Widget _buildCta() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.screenPaddingH,
-          AppSpacing.sm, AppSpacing.screenPaddingH, AppSpacing.lg),
+  Future<void> _openEvidenceSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.futureSelfSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXl)),
+      ),
+      builder: (_) => const _EvidenceSheet(),
+    );
+  }
+}
+
+// ─── Preparing ────────────────────────────────────────────────────────────────
+
+class _PreparingView extends StatelessWidget {
+  const _PreparingView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          switch (_phase) {
-            _FsPhase.settle => _AccentButton(
-                label: AppStrings.futureSelfPhaseSettleCta,
-                onPressed: () => _goTo(_FsPhase.load),
-              ),
-            _FsPhase.load => _AccentButton(
-                label: AppStrings.futureSelfPhaseLoadCta,
-                onPressed: () => _goTo(_FsPhase.visualize),
-              ),
-            _FsPhase.visualize => _AccentButton(
-                label: AppStrings.futureSelfPhaseVisualizeCta,
-                onPressed: () => _goTo(_FsPhase.seal),
-              ),
-            _FsPhase.seal => _AccentButton(
-                label: AppStrings.futureSelfComplete,
-                isLoading: _completing,
-                onPressed: _completing ? null : _complete,
-              ),
-          },
-          if (_phase == _FsPhase.settle)
-            TextButton(
-              onPressed: () => _goTo(_FsPhase.load),
-              child: Text(AppStrings.futureSelfPhaseSkip,
-                  style: AppTextStyles.button
-                      .copyWith(color: AppColors.textSecondary)),
-            ),
+          const _BreathingOrb(size: 120),
+          const SizedBox(height: AppSpacing.xl),
+          Text(AppStrings.futureSelfPreparing,
+              style: AppTextStyles.bodyMedium
+                  .copyWith(color: AppColors.textSecondary)),
+          const SizedBox(height: AppSpacing.xs),
+          Text(AppStrings.futureSelfPreparingNote,
+              style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted),
+              textAlign: TextAlign.center),
         ],
       ),
     );
@@ -268,10 +342,12 @@ class _PhaseProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final index = _FsPhase.values.indexOf(phase);
+    // Three user-facing steps; seal isn't shown.
+    const steps = [_FsPhase.arrive, _FsPhase.embody, _FsPhase.carry];
+    final index = steps.indexOf(phase);
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(_FsPhase.values.length, (i) {
+      children: List.generate(steps.length, (i) {
         final active = i <= index;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 250),
@@ -290,18 +366,20 @@ class _PhaseProgress extends StatelessWidget {
   }
 }
 
-// ─── Phases ─────────────────────────────────────────────────────────────────
+// ─── Arrive ─────────────────────────────────────────────────────────────────
 
-class _SettlePhase extends StatelessWidget {
+class _ArrivePhase extends StatelessWidget {
+  final int remaining;
   final bool beatsEnabled;
-  final BinauralBeatController beats;
   final ValueChanged<bool> onToggleBeats;
+  final VoidCallback onBeginNow;
 
-  const _SettlePhase({
+  const _ArrivePhase({
     super.key,
+    required this.remaining,
     required this.beatsEnabled,
-    required this.beats,
     required this.onToggleBeats,
+    required this.onBeginNow,
   });
 
   @override
@@ -313,20 +391,30 @@ class _SettlePhase extends StatelessWidget {
         children: [
           const _BreathingOrb(),
           const SizedBox(height: AppSpacing.xl),
-          Text(AppStrings.futureSelfPhaseSettleTitle,
+          Text(AppStrings.futureSelfPhaseArriveTitle,
               style: AppTextStyles.headlineMedium
                   .copyWith(color: AppColors.futureSelfAccent),
               textAlign: TextAlign.center),
           const SizedBox(height: AppSpacing.sm),
-          Text(AppStrings.futureSelfPhaseSettleBody,
+          Text(AppStrings.futureSelfPhaseArriveBody,
               style: AppTextStyles.bodyMedium
                   .copyWith(color: AppColors.textSecondary, height: 1.6),
               textAlign: TextAlign.center),
+          const SizedBox(height: AppSpacing.lg),
+          Text(
+            AppStrings.futureSelfEyesClosedHint,
+            style: AppTextStyles.bodySmall
+                .copyWith(color: AppColors.textMuted, fontStyle: FontStyle.italic),
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: AppSpacing.xl),
-          _BeatsPanel(
-            enabled: beatsEnabled,
-            controller: beats,
-            onToggle: onToggleBeats,
+          _BeatsToggle(enabled: beatsEnabled, onToggle: onToggleBeats),
+          const SizedBox(height: AppSpacing.xl),
+          TextButton(
+            onPressed: onBeginNow,
+            child: Text('${AppStrings.futureSelfBeginNow}  ·  ${remaining}s',
+                style: AppTextStyles.button
+                    .copyWith(color: AppColors.futureSelfAccent)),
           ),
         ],
       ),
@@ -334,111 +422,140 @@ class _SettlePhase extends StatelessWidget {
   }
 }
 
-class _LoadPhase extends StatelessWidget {
-  final bool loading;
-  final List<String> paragraphs;
+// ─── Embody ─────────────────────────────────────────────────────────────────
 
-  const _LoadPhase({super.key, required this.loading, required this.paragraphs});
+class _EmbodyPhase extends StatelessWidget {
+  final AudioPlayer player;
+  final bool hasAudio;
+  final bool showText;
+  final String script;
+
+  const _EmbodyPhase({
+    super.key,
+    required this.player,
+    required this.hasAudio,
+    required this.showText,
+    required this.script,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.screenPaddingH,
-          AppSpacing.lg, AppSpacing.screenPaddingH, AppSpacing.xl),
+          AppSpacing.lg, AppSpacing.screenPaddingH, AppSpacing.lg),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(AppStrings.futureSelfPhaseLoadTitle,
-              style: AppTextStyles.headlineMedium
-                  .copyWith(color: AppColors.futureSelfAccent),
-              textAlign: TextAlign.center),
-          const SizedBox(height: AppSpacing.sm),
-          Text(AppStrings.futureSelfPhaseLoadBody,
-              style: AppTextStyles.bodySmall.copyWith(
-                  color: AppColors.textSecondary, fontStyle: FontStyle.italic),
-              textAlign: TextAlign.center),
-          const SizedBox(height: AppSpacing.xl),
-          if (loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: AppSpacing.xxl),
-              child: Center(
-                child: CircularProgressIndicator(
-                    color: AppColors.futureSelfAccent),
-              ),
-            )
-          else
-            ...paragraphs.map(
-              (p) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+          if (showText)
+            Expanded(
+              child: SingleChildScrollView(
                 child: Text(
-                  p,
+                  script,
                   style: AppTextStyles.bodyLarge
                       .copyWith(height: 1.9, color: AppColors.textPrimary),
                   textAlign: TextAlign.center,
                 ),
               ),
-            ),
+            )
+          else ...[
+            const Spacer(),
+            _ProgressOrb(player: player, hasAudio: hasAudio),
+            const SizedBox(height: AppSpacing.xl),
+            Text(AppStrings.futureSelfPhaseEmbodyTitle,
+                style: AppTextStyles.headlineMedium
+                    .copyWith(color: AppColors.futureSelfAccent),
+                textAlign: TextAlign.center),
+            const SizedBox(height: AppSpacing.sm),
+            Text(AppStrings.futureSelfPhaseEmbodyBody,
+                style: AppTextStyles.bodyMedium
+                    .copyWith(color: AppColors.textSecondary, height: 1.6),
+                textAlign: TextAlign.center),
+            const Spacer(),
+          ],
+          if (hasAudio) _NarrationControls(player: player),
         ],
       ),
     );
   }
 }
 
-class _VisualizePhase extends StatelessWidget {
-  final int seconds;
+/// Breathing orb wrapped in a progress ring driven by narration position.
+class _ProgressOrb extends StatelessWidget {
+  final AudioPlayer player;
+  final bool hasAudio;
 
-  const _VisualizePhase({super.key, required this.seconds});
-
-  String get _elapsed {
-    final m = (seconds ~/ 60).toString();
-    final s = (seconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
+  const _ProgressOrb({required this.player, required this.hasAudio});
 
   @override
   Widget build(BuildContext context) {
-    const cues = AppStrings.futureSelfVisualizeCues;
-    final cue = cues[(seconds ~/ 6) % cues.length];
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.screenPaddingH,
-          AppSpacing.xl, AppSpacing.screenPaddingH, AppSpacing.xl),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const _BreathingOrb(size: 130),
-          const SizedBox(height: AppSpacing.xl),
-          Text(AppStrings.futureSelfPhaseVisualizeTitle,
-              style: AppTextStyles.headlineMedium
-                  .copyWith(color: AppColors.futureSelfAccent),
-              textAlign: TextAlign.center),
-          const SizedBox(height: AppSpacing.sm),
-          Text(AppStrings.futureSelfPhaseVisualizeBody,
-              style: AppTextStyles.bodyMedium
-                  .copyWith(color: AppColors.textSecondary, height: 1.6),
-              textAlign: TextAlign.center),
-          const SizedBox(height: AppSpacing.xl),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 500),
-            child: Text(
-              cue,
-              key: ValueKey(cue),
-              style: AppTextStyles.bodyLarge
-                  .copyWith(color: AppColors.futureSelfAccent),
-              textAlign: TextAlign.center,
-            ),
+    if (!hasAudio) return const _BreathingOrb(size: 150);
+    return StreamBuilder<Duration>(
+      stream: player.positionStream,
+      builder: (context, snap) {
+        final pos = snap.data ?? Duration.zero;
+        final total = player.duration ?? Duration.zero;
+        final progress = total.inMilliseconds == 0
+            ? 0.0
+            : (pos.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
+        return SizedBox(
+          width: 168,
+          height: 168,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 168,
+                height: 168,
+                child: CircularProgressIndicator(
+                  value: progress,
+                  strokeWidth: 3,
+                  backgroundColor: AppColors.futureSelfSurface,
+                  valueColor: const AlwaysStoppedAnimation(
+                      AppColors.futureSelfAccent),
+                ),
+              ),
+              const _BreathingOrb(size: 130),
+            ],
           ),
-          const SizedBox(height: AppSpacing.lg),
-          Text(_elapsed,
-              style: AppTextStyles.labelSmall),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
-class _SealPhase extends StatelessWidget {
-  const _SealPhase({super.key});
+class _NarrationControls extends StatelessWidget {
+  final AudioPlayer player;
+
+  const _NarrationControls({required this.player});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<PlayerState>(
+      stream: player.playerStateStream,
+      builder: (context, snap) {
+        final playing = snap.data?.playing ?? true;
+        return IconButton(
+          iconSize: 44,
+          icon: Icon(
+            playing
+                ? Icons.pause_circle_filled_rounded
+                : Icons.play_circle_fill_rounded,
+            color: AppColors.futureSelfAccent,
+          ),
+          onPressed: () => playing ? player.pause() : player.play(),
+        );
+      },
+    );
+  }
+}
+
+// ─── Carry ────────────────────────────────────────────────────────────────────
+
+class _CarryPhase extends StatelessWidget {
+  final String? trait;
+  final VoidCallback onDone;
+
+  const _CarryPhase({super.key, required this.trait, required this.onDone});
 
   @override
   Widget build(BuildContext context) {
@@ -447,17 +564,311 @@ class _SealPhase extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const _BreathingOrb(size: 110),
+          const _BreathingOrb(size: 120),
           const SizedBox(height: AppSpacing.xl),
-          Text(AppStrings.futureSelfPhaseSealTitle,
+          Text(AppStrings.futureSelfPhaseCarryTitle,
               style: AppTextStyles.headlineMedium
                   .copyWith(color: AppColors.futureSelfAccent),
               textAlign: TextAlign.center),
           const SizedBox(height: AppSpacing.sm),
-          Text(AppStrings.futureSelfPhaseSealBody,
+          Text(AppStrings.futureSelfPhaseCarryBody,
               style: AppTextStyles.bodyMedium
                   .copyWith(color: AppColors.textSecondary, height: 1.6),
               textAlign: TextAlign.center),
+          const SizedBox(height: AppSpacing.xl),
+          TextButton(
+            onPressed: onDone,
+            child: Text(AppStrings.futureSelfSealDone,
+                style: AppTextStyles.button
+                    .copyWith(color: AppColors.futureSelfAccent)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Seal (payoff) ─────────────────────────────────────────────────────────────
+
+class _SealPhase extends StatelessWidget {
+  final int daysEmbodied;
+  final String? trait;
+  final VoidCallback onLogEvidence;
+  final VoidCallback onTalkToFutureSelf;
+  final VoidCallback onDone;
+
+  const _SealPhase({
+    super.key,
+    required this.daysEmbodied,
+    required this.trait,
+    required this.onLogEvidence,
+    required this.onTalkToFutureSelf,
+    required this.onDone,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.screenPaddingH,
+          AppSpacing.xl, AppSpacing.screenPaddingH, AppSpacing.xl),
+      child: Column(
+        children: [
+          Container(
+            width: 84,
+            height: 84,
+            decoration: const BoxDecoration(
+              gradient: RadialGradient(
+                  colors: [AppColors.futureSelfAccent, AppColors.warning]),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                    color: AppColors.futureSelfGlow,
+                    blurRadius: 32,
+                    spreadRadius: 6),
+              ],
+            ),
+            child: const Icon(Icons.check_rounded, color: Colors.white, size: 40),
+          ).animate().scale(
+              duration: 500.ms, curve: Curves.elasticOut, begin: const Offset(0.6, 0.6)),
+          const SizedBox(height: AppSpacing.lg),
+          Text(AppStrings.futureSelfSealHeadline,
+              style: AppTextStyles.headlineMedium, textAlign: TextAlign.center),
+          const SizedBox(height: AppSpacing.xs),
+          Text(AppStrings.futureSelfSealDaysEmbodied(daysEmbodied),
+              style: AppTextStyles.bodyMedium
+                  .copyWith(color: AppColors.futureSelfAccent),
+              textAlign: TextAlign.center),
+          const SizedBox(height: AppSpacing.lg),
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: BoxDecoration(
+              color: AppColors.futureSelfSurface,
+              borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+              border: Border.all(
+                  color: AppColors.futureSelfAccent.withValues(alpha: 0.2)),
+            ),
+            child: Text(
+              trait != null && trait!.isNotEmpty
+                  ? AppStrings.futureSelfSealCarryTrait(trait!)
+                  : AppStrings.futureSelfSealCarryGeneric,
+              style: AppTextStyles.bodyLarge
+                  .copyWith(color: AppColors.textPrimary, height: 1.5),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          _SealButton(
+            icon: Icons.auto_awesome_rounded,
+            label: AppStrings.futureSelfSealLogEvidence,
+            filled: true,
+            onTap: onLogEvidence,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          _SealButton(
+            icon: Icons.forum_rounded,
+            label: AppStrings.futureSelfSealTalkToFutureSelf,
+            filled: false,
+            onTap: onTalkToFutureSelf,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          TextButton(
+            onPressed: onDone,
+            child: Text(AppStrings.futureSelfSealDone,
+                style: AppTextStyles.button
+                    .copyWith(color: AppColors.textSecondary)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SealButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool filled;
+  final VoidCallback onTap;
+
+  const _SealButton({
+    required this.icon,
+    required this.label,
+    required this.filled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: AppSpacing.buttonHeight,
+      child: filled
+          ? ElevatedButton.icon(
+              onPressed: onTap,
+              icon: Icon(icon, size: AppSpacing.iconMd),
+              label: Text(label,
+                  style: AppTextStyles.button.copyWith(color: Colors.black)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.futureSelfAccent,
+                foregroundColor: Colors.black,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                ),
+              ),
+            )
+          : OutlinedButton.icon(
+              onPressed: onTap,
+              icon: Icon(icon, size: AppSpacing.iconMd),
+              label: Text(label, style: AppTextStyles.button),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.textPrimary,
+                side: const BorderSide(color: AppColors.border),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+// ─── Evidence sheet ─────────────────────────────────────────────────────────────
+
+/// Compact evidence entry reused from the dashboard flow, offered right after a
+/// session so the user can capture proof of the identity they just rehearsed.
+class _EvidenceSheet extends ConsumerStatefulWidget {
+  const _EvidenceSheet();
+
+  @override
+  ConsumerState<_EvidenceSheet> createState() => _EvidenceSheetState();
+}
+
+class _EvidenceSheetState extends ConsumerState<_EvidenceSheet> {
+  final _controller = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    setState(() => _saving = true);
+    try {
+      final uid = ref.read(authStateProvider).valueOrNull?.uid;
+      final profile = ref.read(currentUserProfileProvider).valueOrNull;
+      if (uid == null || profile == null) return;
+      final updated = [
+        ...profile.evidenceLog,
+        EvidenceEntry(
+          id: const Uuid().v4(),
+          content: text,
+          createdAt: DateTime.now(),
+        ),
+      ];
+      await ref.read(firestoreServiceProvider).updateUserField(uid, {
+        'evidenceLog': updated.map((e) => e.toJson()).toList(),
+      });
+      if (!mounted) return;
+      await ref
+          .read(dailyCompletionProvider.notifier)
+          .toggle('evidenceLogged', true);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(AppStrings.errorGeneric)),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: AppSpacing.lg,
+        right: AppSpacing.lg,
+        top: AppSpacing.lg,
+        bottom: MediaQuery.of(context).viewInsets.bottom + AppSpacing.lg,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Text(AppStrings.evidenceLog,
+              style: AppTextStyles.headlineSmall
+                  .copyWith(color: AppColors.futureSelfAccent)),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _controller,
+            maxLines: 3,
+            autofocus: true,
+            style: AppTextStyles.bodyMedium,
+            cursorColor: AppColors.futureSelfAccent,
+            decoration: InputDecoration(
+              hintText: AppStrings.evidenceHint,
+              hintStyle:
+                  AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
+              filled: true,
+              fillColor: AppColors.futureSelfBackground,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                borderSide: const BorderSide(
+                    color: AppColors.futureSelfAccent, width: 1.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          SizedBox(
+            width: double.infinity,
+            height: AppSpacing.buttonHeight,
+            child: ElevatedButton(
+              onPressed: _saving ? null : _save,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.futureSelfAccent,
+                foregroundColor: Colors.black,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                ),
+              ),
+              child: _saving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.black),
+                    )
+                  : Text(AppStrings.save,
+                      style:
+                          AppTextStyles.button.copyWith(color: Colors.black)),
+            ),
+          ),
         ],
       ),
     );
@@ -497,180 +908,51 @@ class _BreathingOrb extends StatelessWidget {
   }
 }
 
-// ─── Accent button ────────────────────────────────────────────────────────────
+// ─── Binaural toggle (simple on/off) ────────────────────────────────────────────
 
-class _AccentButton extends StatelessWidget {
-  final String label;
-  final bool isLoading;
-  final VoidCallback? onPressed;
-
-  const _AccentButton({
-    required this.label,
-    required this.onPressed,
-    this.isLoading = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: AppSpacing.buttonHeight,
-      child: ElevatedButton(
-        onPressed: isLoading ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.futureSelfAccent,
-          foregroundColor: Colors.black,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-          ),
-        ),
-        child: isLoading
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.black),
-              )
-            : Text(label,
-                style: AppTextStyles.button.copyWith(color: Colors.black)),
-      ),
-    );
-  }
-}
-
-// ─── Binaural beats panel ─────────────────────────────────────────────────────
-
-/// Binaural beats panel: enable toggle, frequency band selector, volume slider.
-class _BeatsPanel extends StatefulWidget {
+class _BeatsToggle extends StatelessWidget {
   final bool enabled;
-  final BinauralBeatController controller;
   final ValueChanged<bool> onToggle;
 
-  const _BeatsPanel({
-    required this.enabled,
-    required this.controller,
-    required this.onToggle,
-  });
+  const _BeatsToggle({required this.enabled, required this.onToggle});
 
-  @override
-  State<_BeatsPanel> createState() => _BeatsPanelState();
-}
-
-class _BeatsPanelState extends State<_BeatsPanel> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
       decoration: BoxDecoration(
         color: AppColors.futureSelfSurface,
         borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-        border: Border.all(
-            color: AppColors.futureSelfAccent.withValues(alpha: 0.2)),
+        border:
+            Border.all(color: AppColors.futureSelfAccent.withValues(alpha: 0.2)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(
-                widget.enabled
-                    ? Icons.graphic_eq_rounded
-                    : Icons.volume_off_rounded,
-                color: AppColors.futureSelfAccent,
-                size: 20,
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Binaural Beats',
-                        style: AppTextStyles.labelLarge
-                            .copyWith(color: AppColors.futureSelfAccent)),
-                    Text('Supports focus and absorption',
-                        style: AppTextStyles.bodySmall
-                            .copyWith(color: AppColors.textMuted)),
-                  ],
-                ),
-              ),
-              Switch(
-                value: widget.enabled,
-                activeThumbColor: AppColors.futureSelfAccent,
-                onChanged: widget.onToggle,
-              ),
-            ],
+          Icon(
+            enabled ? Icons.graphic_eq_rounded : Icons.volume_off_rounded,
+            color: AppColors.futureSelfAccent,
+            size: 20,
           ),
-          if (widget.enabled) ...[
-            const SizedBox(height: AppSpacing.md),
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
-              children: BinauralBeatController.bands.map((b) {
-                final selected = b.hz == widget.controller.hz;
-                return GestureDetector(
-                  onTap: () async {
-                    await widget.controller.setFrequency(b.hz);
-                    if (mounted) setState(() {});
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? AppColors.futureSelfAccent.withValues(alpha: 0.15)
-                          : AppColors.futureSelfBackground,
-                      border: Border.all(
-                        color: selected
-                            ? AppColors.futureSelfAccent
-                            : AppColors.border,
-                      ),
-                      borderRadius:
-                          BorderRadius.circular(AppSpacing.radiusSm),
-                    ),
-                    child: Text(
-                      b.name,
-                      style: AppTextStyles.labelSmall.copyWith(
-                        color: selected
-                            ? AppColors.futureSelfAccent
-                            : AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Row(
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.volume_down_rounded,
-                    color: AppColors.textMuted, size: 18),
-                Expanded(
-                  child: SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      activeTrackColor: AppColors.futureSelfAccent,
-                      inactiveTrackColor: AppColors.border,
-                      thumbColor: AppColors.futureSelfAccent,
-                    ),
-                    child: Slider(
-                      value: widget.controller.volume,
-                      onChanged: (v) async {
-                        await widget.controller.setVolume(v);
-                        if (mounted) setState(() {});
-                      },
-                    ),
-                  ),
-                ),
-                const Icon(Icons.volume_up_rounded,
-                    color: AppColors.textMuted, size: 18),
+                Text('Binaural beats',
+                    style: AppTextStyles.labelLarge
+                        .copyWith(color: AppColors.futureSelfAccent)),
+                Text('Calming audio bed · headphones recommended',
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: AppColors.textMuted)),
               ],
             ),
-            Center(
-              child: Text('🎧 Headphones required for the effect',
-                  style: AppTextStyles.bodySmall
-                      .copyWith(color: AppColors.textMuted)),
-            ),
-          ],
+          ),
+          Switch(
+            value: enabled,
+            activeThumbColor: AppColors.futureSelfAccent,
+            onChanged: onToggle,
+          ),
         ],
       ),
     );

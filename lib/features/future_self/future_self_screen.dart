@@ -11,10 +11,12 @@ import '../../providers/future_self_provider.dart';
 import 'future_self_wizard.dart';
 import 'future_self_player_screen.dart';
 import 'widgets/future_self_how_to.dart';
+import 'widgets/future_self_scene_editor.dart';
 
 /// Future Self Practice detail screen, the visualization half of the
 /// Subconscious (Foundation) layer. Explains the practice, shows today's
-/// status, and routes to the setup wizard and the guided player.
+/// status, and routes to the setup wizard, the scene library, and the guided
+/// player.
 class FutureSelfScreen extends ConsumerWidget {
   const FutureSelfScreen({super.key});
 
@@ -24,7 +26,32 @@ class FutureSelfScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _openPlayer(BuildContext context, WidgetRef ref) async {
+  /// Picks a scene to practice: opens the chosen one directly when there's a
+  /// single scene, otherwise lets the user choose today's scene.
+  Future<void> _startPractice(BuildContext context, WidgetRef ref) async {
+    final setup = ref.read(futureSelfProvider);
+    if (setup == null || setup.scenes.isEmpty) return;
+
+    String? sceneId;
+    if (setup.scenes.length == 1) {
+      sceneId = setup.scenes.first.id;
+    } else {
+      sceneId = await showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: AppColors.futureSelfSurface,
+        shape: const RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXl)),
+        ),
+        builder: (_) => _SceneChooserSheet(scenes: setup.scenes),
+      );
+    }
+    if (sceneId == null || !context.mounted) return;
+    await _openPlayer(context, ref, sceneId);
+  }
+
+  Future<void> _openPlayer(
+      BuildContext context, WidgetRef ref, String sceneId) async {
     final setup = ref.read(futureSelfProvider);
     // Show the one-time "how to practice" primer before the first session.
     if (setup != null && !setup.hasSeenHowTo) {
@@ -36,7 +63,22 @@ class FutureSelfScreen extends ConsumerWidget {
     }
     if (!context.mounted) return;
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const FutureSelfPlayerScreen()),
+      MaterialPageRoute(
+          builder: (_) => FutureSelfPlayerScreen(sceneId: sceneId)),
+    );
+  }
+
+  Future<void> _openSceneEditor(BuildContext context,
+      {FutureSelfScene? scene}) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.futureSelfSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXl)),
+      ),
+      builder: (_) => _SceneEditorSheet(scene: scene),
     );
   }
 
@@ -78,7 +120,7 @@ class FutureSelfScreen extends ConsumerWidget {
             if (hasPractice) ...[
               _TodayStatus(
                 completed: completedToday,
-                onStart: () => _openPlayer(context, ref),
+                onStart: () => _startPractice(context, ref),
               ),
               const SizedBox(height: AppSpacing.md),
               _ActionButton(
@@ -87,17 +129,24 @@ class FutureSelfScreen extends ConsumerWidget {
                     : AppStrings.futureSelfStartToday,
                 icon: Icons.play_arrow_rounded,
                 filled: true,
-                onTap: () => _openPlayer(context, ref),
+                onTap: () => _startPractice(context, ref),
               ),
-              const SizedBox(height: AppSpacing.sm),
+              const SizedBox(height: AppSpacing.lg),
+              _ScenesSection(
+                setup: setup!,
+                onPractice: (id) => _openPlayer(context, ref, id),
+                onAdd: () => _openSceneEditor(context),
+                onRefine: (scene) => _openSceneEditor(context, scene: scene),
+                onDelete: (id) =>
+                    ref.read(futureSelfProvider.notifier).deleteScene(id),
+              ),
+              const SizedBox(height: AppSpacing.md),
               _ActionButton(
-                label: AppStrings.futureSelfRefine,
+                label: AppStrings.futureSelfEditIdentity,
                 icon: Icons.tune_rounded,
                 filled: false,
                 onTap: () => _openWizard(context),
               ),
-              const SizedBox(height: AppSpacing.lg),
-              _PracticeSummary(setup: setup!),
             ] else ...[
               _ActionButton(
                 label: AppStrings.futureSelfCreate,
@@ -106,7 +155,19 @@ class FutureSelfScreen extends ConsumerWidget {
                 onTap: () => _openWizard(context),
               ),
             ],
-            const SizedBox(height: AppSpacing.xl),
+            const SizedBox(height: AppSpacing.md),
+            Center(
+              child: TextButton.icon(
+                onPressed: () => context.push('/chat',
+                    extra: {'initialMode': 'future_self'}),
+                icon: const Icon(Icons.forum_rounded,
+                    color: AppColors.futureSelfAccent, size: AppSpacing.iconMd),
+                label: Text(AppStrings.futureSelfSealTalkToFutureSelf,
+                    style: AppTextStyles.button
+                        .copyWith(color: AppColors.futureSelfAccent)),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
             const _HowToSection(),
             const SizedBox(height: AppSpacing.md),
             const _AboutSection(),
@@ -271,10 +332,22 @@ class _TodayStatus extends StatelessWidget {
   }
 }
 
-class _PracticeSummary extends StatelessWidget {
+/// The scene library: the small set of moments the user returns to. Lists each
+/// scene with practice / refine / remove actions and an add-scene affordance.
+class _ScenesSection extends StatelessWidget {
   final FutureSelfSetup setup;
+  final ValueChanged<String> onPractice;
+  final VoidCallback onAdd;
+  final ValueChanged<FutureSelfScene> onRefine;
+  final ValueChanged<String> onDelete;
 
-  const _PracticeSummary({required this.setup});
+  const _ScenesSection({
+    required this.setup,
+    required this.onPractice,
+    required this.onAdd,
+    required this.onRefine,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -288,36 +361,359 @@ class _PracticeSummary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(AppStrings.futureSelfPracticeSection,
+          Text(AppStrings.futureSelfScenesTitle,
               style: AppTextStyles.headlineSmall
                   .copyWith(color: AppColors.futureSelfAccent)),
-          const SizedBox(height: AppSpacing.md),
-          _row(AppStrings.futureSelfTimelineLabel,
-              '${setup.futureTimeline} from now'),
-          if (setup.identityAnchor.isNotEmpty)
-            _row(AppStrings.futureSelfIdentityLabel,
-                'I am someone who ${setup.identityAnchor}'),
-          if (setup.emotionalTone.isNotEmpty)
-            _row(AppStrings.futureSelfToneLabel, setup.emotionalTone),
-          const SizedBox(height: AppSpacing.sm),
-          Text(AppStrings.futureSelfRefineNote,
+          const SizedBox(height: AppSpacing.xs),
+          Text(AppStrings.futureSelfScenesSubtitle,
               style: AppTextStyles.bodySmall
-                  .copyWith(color: AppColors.textMuted, fontStyle: FontStyle.italic)),
+                  .copyWith(color: AppColors.textSecondary)),
+          const SizedBox(height: AppSpacing.md),
+          ...setup.scenes.map((s) => _SceneTile(
+                scene: s,
+                onPractice: () => onPractice(s.id),
+                onRefine: () => onRefine(s),
+                onDelete: () => _confirmDelete(context, s),
+              )),
+          const SizedBox(height: AppSpacing.xs),
+          if (setup.canAddScene)
+            TextButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add_rounded,
+                  color: AppColors.futureSelfAccent, size: AppSpacing.iconMd),
+              label: Text(AppStrings.futureSelfAddScene,
+                  style: AppTextStyles.button
+                      .copyWith(color: AppColors.futureSelfAccent)),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
+              child: Text(AppStrings.futureSelfSceneLimitReached,
+                  style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textMuted,
+                      fontStyle: FontStyle.italic)),
+            ),
         ],
       ),
     );
   }
 
-  Widget _row(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Future<void> _confirmDelete(
+      BuildContext context, FutureSelfScene scene) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierColor: AppColors.scrim,
+      builder: (_) => Dialog(
+        backgroundColor: AppColors.futureSelfSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
+          side: BorderSide(
+              color: AppColors.futureSelfAccent.withValues(alpha: 0.25)),
+        ),
+        insetPadding:
+            const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(AppStrings.futureSelfDeleteScene,
+                  style: AppTextStyles.headlineSmall),
+              const SizedBox(height: AppSpacing.sm),
+              Text(AppStrings.futureSelfDeleteSceneConfirm,
+                  style: AppTextStyles.bodyMedium
+                      .copyWith(color: AppColors.textSecondary),
+                  textAlign: TextAlign.center),
+              const SizedBox(height: AppSpacing.lg),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: Text(AppStrings.cancel,
+                          style: AppTextStyles.button
+                              .copyWith(color: AppColors.textSecondary)),
+                    ),
+                  ),
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: Text(AppStrings.futureSelfDeleteScene,
+                          style: AppTextStyles.button
+                              .copyWith(color: AppColors.error)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed == true) onDelete(scene.id);
+  }
+}
+
+class _SceneTile extends StatelessWidget {
+  final FutureSelfScene scene;
+  final VoidCallback onPractice;
+  final VoidCallback onRefine;
+  final VoidCallback onDelete;
+
+  const _SceneTile({
+    required this.scene,
+    required this.onPractice,
+    required this.onRefine,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.futureSelfBackground,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
         children: [
-          Text(label, style: AppTextStyles.labelSmall),
-          const SizedBox(height: 2),
-          Text(value, style: AppTextStyles.bodyMedium),
+          Container(
+            width: 4,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.futureSelfAccent,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(scene.displayTitle, style: AppTextStyles.labelLarge),
+                if (scene.setting.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(scene.setting,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodySmall
+                          .copyWith(color: AppColors.textMuted)),
+                ],
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: AppStrings.futureSelfRefine,
+            icon: const Icon(Icons.refresh_rounded,
+                color: AppColors.textSecondary, size: 20),
+            onPressed: onRefine,
+          ),
+          IconButton(
+            tooltip: AppStrings.futureSelfDeleteScene,
+            icon: const Icon(Icons.delete_outline_rounded,
+                color: AppColors.textMuted, size: 20),
+            onPressed: onDelete,
+          ),
+          IconButton(
+            tooltip: AppStrings.futureSelfScenePractice,
+            icon: const Icon(Icons.play_circle_fill_rounded,
+                color: AppColors.futureSelfAccent, size: 30),
+            onPressed: onPractice,
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Bottom sheet to choose which scene to practice when the library has more
+/// than one, pre-highlighting the one that fits the current time of day.
+class _SceneChooserSheet extends StatelessWidget {
+  final List<FutureSelfScene> scenes;
+
+  const _SceneChooserSheet({required this.scenes});
+
+  @override
+  Widget build(BuildContext context) {
+    final suggested = defaultSceneForNow(scenes);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(AppStrings.futureSelfChooseSceneTitle,
+                style: AppTextStyles.headlineSmall
+                    .copyWith(color: AppColors.futureSelfAccent)),
+            const SizedBox(height: AppSpacing.md),
+            ...scenes.map((s) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.play_circle_outline_rounded,
+                    color: s.id == suggested?.id
+                        ? AppColors.futureSelfAccent
+                        : AppColors.textSecondary,
+                  ),
+                  title: Text(s.displayTitle, style: AppTextStyles.labelLarge),
+                  subtitle: s.setting.isNotEmpty
+                      ? Text(s.setting,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.bodySmall
+                              .copyWith(color: AppColors.textMuted))
+                      : null,
+                  onTap: () => Navigator.of(context).pop(s.id),
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet for adding a new scene or refining an existing one. Owns the
+/// generation lifecycle so the hub stays declarative.
+class _SceneEditorSheet extends ConsumerStatefulWidget {
+  final FutureSelfScene? scene;
+
+  const _SceneEditorSheet({this.scene});
+
+  @override
+  ConsumerState<_SceneEditorSheet> createState() => _SceneEditorSheetState();
+}
+
+class _SceneEditorSheetState extends ConsumerState<_SceneEditorSheet> {
+  SceneDraft? _draft;
+  bool _busy = false;
+
+  bool get _isRefine => widget.scene != null;
+
+  Future<void> _submit() async {
+    final draft = _draft;
+    if (draft == null || !draft.isValid) return;
+    setState(() => _busy = true);
+    final notifier = ref.read(futureSelfProvider.notifier);
+    if (_isRefine) {
+      await notifier.refineScene(
+        widget.scene!.id,
+        title: draft.title,
+        setting: draft.setting,
+        people: draft.people,
+        beats: draft.beats,
+        sensory: draft.sensory,
+        goalIds: draft.goalIds,
+      );
+    } else {
+      await notifier.createScene(
+        title: draft.title,
+        setting: draft.setting,
+        people: draft.people,
+        beats: draft.beats,
+        sensory: draft.sensory,
+        goalIds: draft.goalIds,
+      );
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: AppSpacing.lg,
+        right: AppSpacing.lg,
+        top: AppSpacing.lg,
+        bottom: MediaQuery.of(context).viewInsets.bottom + AppSpacing.lg,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            if (_busy)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+                child: Column(
+                  children: [
+                    const CircularProgressIndicator(
+                        color: AppColors.futureSelfAccent),
+                    const SizedBox(height: AppSpacing.lg),
+                    Text(AppStrings.futureSelfSceneBuilding,
+                        style: AppTextStyles.headlineSmall,
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(AppStrings.futureSelfSceneBuildingNote,
+                        style: AppTextStyles.bodySmall
+                            .copyWith(color: AppColors.textSecondary),
+                        textAlign: TextAlign.center),
+                  ],
+                ),
+              )
+            else ...[
+              Text(
+                  _isRefine
+                      ? AppStrings.futureSelfRefineSceneTitle
+                      : AppStrings.futureSelfNewSceneTitle,
+                  style: AppTextStyles.headlineSmall
+                      .copyWith(color: AppColors.futureSelfAccent)),
+              const SizedBox(height: AppSpacing.lg),
+              VisionSceneBuilder(
+                initial: widget.scene,
+                onChanged: (d) => setState(() => _draft = d),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              SizedBox(
+                width: double.infinity,
+                height: AppSpacing.buttonHeight,
+                child: ElevatedButton(
+                  onPressed: (_draft?.isValid ?? false) ? _submit : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.futureSelfAccent,
+                    foregroundColor: Colors.black,
+                    disabledBackgroundColor:
+                        AppColors.futureSelfAccent.withValues(alpha: 0.4),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                    ),
+                  ),
+                  child: Text(
+                    _isRefine
+                        ? AppStrings.futureSelfRegenerateScene
+                        : AppStrings.futureSelfCreateScene,
+                    style: AppTextStyles.button.copyWith(color: Colors.black),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -354,6 +750,26 @@ class _AboutSection extends StatelessWidget {
           Text(AppStrings.futureSelfWhatBody,
               style: AppTextStyles.bodyMedium.copyWith(
                   color: AppColors.textSecondary, height: 1.6)),
+          const SizedBox(height: AppSpacing.md),
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: AppColors.futureSelfAccent.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(AppStrings.futureSelfWhatExampleTitle,
+                    style: AppTextStyles.labelSmall
+                        .copyWith(color: AppColors.futureSelfAccent)),
+                const SizedBox(height: AppSpacing.xs),
+                Text(AppStrings.futureSelfWhatExample,
+                    style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textSecondary, height: 1.5)),
+              ],
+            ),
+          ),
           const SizedBox(height: AppSpacing.lg),
           Text(AppStrings.futureSelfPrinciplesTitle,
               style: AppTextStyles.labelLarge

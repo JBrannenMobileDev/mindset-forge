@@ -8,6 +8,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
+import '../../models/action_step.dart';
 import '../../models/affirmation.dart';
 import '../../models/goal.dart';
 import '../../models/habit.dart';
@@ -85,24 +86,23 @@ class _GoalSetupSheetState extends ConsumerState<_GoalSetupSheet> {
   }
 
   Future<void> _addMilestone(int idx, Map<String, dynamic> milestone) async {
-    final title = milestone['title'] as String? ?? '';
+    final title = (milestone['title'] as String? ?? '').trim();
     if (title.isEmpty) return;
 
-    final targetWeeks = (milestone['targetWeeks'] as num?)?.toInt() ?? 4;
+    final targetWeeks = (milestone['targetWeeks'] as num?)?.toInt();
 
-    final subGoal = Goal(
+    final step = ActionStep(
       id: const Uuid().v4(),
       title: title,
       description: milestone['description'] as String? ?? '',
-      category: widget.goal.category,
-      goalType: kGoalTypeShortTerm,
-      parentGoalId: widget.goal.id,
-      targetDate: DateTime.now().add(Duration(days: targetWeeks * 7)),
-      createdAt: DateTime.now(),
+      whyImportant: milestone['whyImportant'] as String? ?? '',
+      targetDate: targetWeeks != null
+          ? DateTime.now().add(Duration(days: targetWeeks * 7))
+          : null,
     );
 
     try {
-      await ref.read(goalsProvider.notifier).addGoal(subGoal);
+      await ref.read(goalsProvider.notifier).addStep(widget.goal.id, step);
       if (mounted) setState(() => _savedMilestones.add(idx));
     } catch (_) {
       _showError();

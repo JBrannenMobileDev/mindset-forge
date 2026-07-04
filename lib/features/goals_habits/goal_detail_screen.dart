@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
+import '../../core/constants/goal_templates.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
@@ -12,6 +13,8 @@ import '../../core/services/confetti_gate.dart';
 import '../../core/utils/app_date_utils.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
+import '../../core/widgets/app_text_field.dart';
+import '../../models/action_step.dart';
 import '../../models/goal.dart';
 import '../../providers/goals_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -55,35 +58,60 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
     }
   }
 
-  Future<void> _saveMilestoneAsGoal(
+  /// True when the goal already has a milestone whose label matches [title],
+  /// so re-adding an AI suggestion never silently duplicates a step.
+  bool _milestoneExists(Goal goal, String title) {
+    final t = title.trim().toLowerCase();
+    return goal.actionSteps.any((s) => s.label.trim().toLowerCase() == t);
+  }
+
+  Future<void> _addMilestoneFromBreakdown(
     int idx,
     Map<String, dynamic> milestone,
     Goal goal,
   ) async {
-    final title = milestone['title'] as String? ?? '';
+    final title = (milestone['title'] as String? ?? '').trim();
     if (title.isEmpty) return;
 
-    final targetWeeks = (milestone['targetWeeks'] as num?)?.toInt() ?? 4;
-
-    final newGoal = Goal(
+    final targetWeeks = (milestone['targetWeeks'] as num?)?.toInt();
+    final step = ActionStep(
       id: const Uuid().v4(),
       title: title,
       description: milestone['description'] as String? ?? '',
-      category: goal.category,
-      goalType: kGoalTypeShortTerm,
-      targetDate: DateTime.now().add(Duration(days: targetWeeks * 7)),
-      parentGoalId: goal.id,
-      createdAt: DateTime.now(),
+      whyImportant: milestone['whyImportant'] as String? ?? '',
+      targetDate: targetWeeks != null
+          ? DateTime.now().add(Duration(days: targetWeeks * 7))
+          : null,
     );
 
     try {
-      await ref.read(goalsProvider.notifier).addGoal(newGoal);
+      await ref.read(goalsProvider.notifier).addStep(goal.id, step);
       if (mounted) {
         setState(() => _savedMilestones.add(idx));
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text(AppStrings.goalMilestoneSavedToast)),
         );
       }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(AppStrings.errorGeneric)),
+        );
+      }
+    }
+  }
+
+  Future<void> _addManualMilestone(Goal goal) async {
+    final title = await showDialog<String>(
+      context: context,
+      builder: (_) => const _AddMilestoneDialog(),
+    );
+    if (title == null || title.trim().isEmpty) return;
+    try {
+      await ref.read(goalsProvider.notifier).addStep(
+            goal.id,
+            ActionStep(id: const Uuid().v4(), title: title.trim()),
+          );
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -103,7 +131,19 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
           .read(claudeServiceProvider)
           .generateGoalBreakdown(goal, profile);
       if (!mounted) return;
-      setState(() => _breakdown = breakdown);
+      // Pre-mark any suggestion that's already in the checklist so it can't be
+      // added twice.
+      final preSaved = <int>{};
+      for (var i = 0; i < breakdown.length; i++) {
+        final title = breakdown[i]['title'] as String? ?? '';
+        if (_milestoneExists(goal, title)) preSaved.add(i);
+      }
+      setState(() {
+        _breakdown = breakdown;
+        _savedMilestones
+          ..clear()
+          ..addAll(preSaved);
+      });
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -120,6 +160,9 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
     final goals = ref.watch(goalsProvider);
     final matches = goals.where((g) => g.id == widget.goalId);
     final goal = matches.isEmpty ? null : matches.first;
+    final primaryGoalId =
+        ref.watch(currentUserProfileProvider).valueOrNull?.primaryGoalId ?? '';
+    final isNorthStar = goal != null && goal.id == primaryGoalId;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -130,10 +173,37 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () => context.pop(),
         ),
-        title: Text(AppStrings.goalDetailTitle, style: AppTextStyles.headlineMedium),
+        title:
+            Text(AppStrings.goalDetailTitle, style: AppTextStyles.headlineMedium),
         actions: goal == null
             ? null
             : [
+                if (goal.status == 'active')
+                  IconButton(
+                    tooltip: AppStrings.goalSetAsNorthStar,
+                    icon: Icon(
+                      isNorthStar
+                          ? Icons.star_rounded
+                          : Icons.star_outline_rounded,
+                      color: isNorthStar
+                          ? AppColors.primary
+                          : AppColors.textMuted,
+                    ),
+                    onPressed: isNorthStar
+                        ? null
+                        : () async {
+                            await ref
+                                .read(goalsProvider.notifier)
+                                .setPrimaryGoal(goal.id);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content:
+                                        Text(AppStrings.goalNorthStarSetToast)),
+                              );
+                            }
+                          },
+                  ),
                 IconButton(
                   icon: const Icon(Icons.edit_rounded),
                   onPressed: () =>
@@ -196,59 +266,40 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
                         ),
                         const SizedBox(height: AppSpacing.lg),
                       ],
-                      if (goal.actionSteps.isNotEmpty) ...[
-                        Text(AppStrings.goalDetailActionSteps,
-                            style: AppTextStyles.labelLarge),
-                        const SizedBox(height: AppSpacing.sm),
-                        ...goal.actionSteps.map(
-                          (step) => GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => ref
-                                .read(goalsProvider.notifier)
-                                .toggleActionStep(goal.id, step.id),
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.only(bottom: AppSpacing.sm),
-                              child: Row(
-                                children: [
-                                  AnimatedSwitcher(
-                                    duration:
-                                        const Duration(milliseconds: 200),
-                                    child: Icon(
-                                      step.isCompleted
-                                          ? Icons.check_circle_rounded
-                                          : Icons.circle_outlined,
-                                      key: ValueKey(step.isCompleted),
-                                      color: step.isCompleted
-                                          ? AppColors.primary
-                                          : AppColors.textMuted,
-                                      size: 20,
-                                    ),
-                                  ),
-                                  const SizedBox(width: AppSpacing.sm),
-                                  Expanded(
-                                    child: Text(
-                                      step.description,
-                                      style:
-                                          AppTextStyles.bodyMedium.copyWith(
-                                        decoration: step.isCompleted
-                                            ? TextDecoration.lineThrough
-                                            : null,
-                                        color: step.isCompleted
-                                            ? AppColors.textMuted
-                                            : AppColors.textPrimary,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+
+                      // Milestone checklist — the honest progress driver.
+                      Row(
+                        children: [
+                          Text(AppStrings.goalDetailActionSteps,
+                              style: AppTextStyles.labelLarge),
+                          const Spacer(),
+                          if (goal.status == 'active')
+                            AppTextButton(
+                              label: AppStrings.goalAddMilestone,
+                              onPressed: () => _addManualMilestone(goal),
                             ),
-                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      ...goal.actionSteps.map(
+                        (step) => _MilestoneTile(
+                          step: step,
+                          onToggle: () => ref
+                              .read(goalsProvider.notifier)
+                              .toggleActionStep(goal.id, step.id),
+                          onRemove: goal.status == 'active'
+                              ? () => ref
+                                  .read(goalsProvider.notifier)
+                                  .removeStep(goal.id, step.id)
+                              : null,
                         ),
-                        const SizedBox(height: AppSpacing.lg),
-                      ],
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+
                       AppSecondaryButton(
-                        label: AppStrings.breakdownWithAI,
+                        label: goal.hasSteps
+                            ? AppStrings.goalRegenerateBreakdown
+                            : AppStrings.breakdownWithAI,
                         isLoading: _isGeneratingBreakdown,
                         onPressed: () => _generateBreakdown(goal),
                         icon: Icons.auto_awesome_rounded,
@@ -340,7 +391,7 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
                                             : AppColors.primary,
                                         onPressed: isSaved
                                             ? null
-                                            : () => _saveMilestoneAsGoal(
+                                            : () => _addMilestoneFromBreakdown(
                                                 e.key, e.value, goal),
                                       ),
                                     ),
@@ -382,20 +433,150 @@ class _GoalDetailScreenState extends ConsumerState<GoalDetailScreen> {
   }
 }
 
+/// A single milestone row: tap the circle/label to toggle completion; optional
+/// trailing delete for active goals.
+class _MilestoneTile extends StatelessWidget {
+  final ActionStep step;
+  final VoidCallback onToggle;
+  final VoidCallback? onRemove;
+
+  const _MilestoneTile({
+    required this.step,
+    required this.onToggle,
+    this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onToggle,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: Icon(
+                step.isCompleted
+                    ? Icons.check_circle_rounded
+                    : Icons.circle_outlined,
+                key: ValueKey(step.isCompleted),
+                color:
+                    step.isCompleted ? AppColors.primary : AppColors.textMuted,
+                size: 20,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onToggle,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    step.label,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      decoration: step.isCompleted
+                          ? TextDecoration.lineThrough
+                          : null,
+                      color: step.isCompleted
+                          ? AppColors.textMuted
+                          : AppColors.textPrimary,
+                    ),
+                  ),
+                  if (step.description.isNotEmpty && !step.isCompleted)
+                    Text(
+                      step.description,
+                      style: AppTextStyles.bodySmall
+                          .copyWith(color: AppColors.textSecondary),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          if (onRemove != null)
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onRemove,
+              child: const Padding(
+                padding: EdgeInsets.only(left: AppSpacing.sm),
+                child: Icon(Icons.close_rounded,
+                    size: 16, color: AppColors.textMuted),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddMilestoneDialog extends StatefulWidget {
+  const _AddMilestoneDialog();
+
+  @override
+  State<_AddMilestoneDialog> createState() => _AddMilestoneDialogState();
+}
+
+class _AddMilestoneDialogState extends State<_AddMilestoneDialog> {
+  final _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _submit() => Navigator.pop(context, _ctrl.text.trim());
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
+        side: BorderSide(color: AppColors.primary.withValues(alpha: 0.25)),
+      ),
+      insetPadding:
+          const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(AppStrings.goalMilestoneDialogTitle,
+                style: AppTextStyles.headlineSmall),
+            const SizedBox(height: AppSpacing.md),
+            AppTextField(
+              controller: _ctrl,
+              hint: AppStrings.goalAddMilestoneHint,
+              autofocus: true,
+              textCapitalization: TextCapitalization.sentences,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            AppPrimaryButton(
+              label: AppStrings.add,
+              onPressed: _submit,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _GoalHeader extends StatelessWidget {
   final Goal goal;
 
   const _GoalHeader({required this.goal});
 
-  Color get _color {
-    return switch (goal.category) {
-      'career' => AppColors.categoryCareer,
-      'health' => AppColors.categoryHealth,
-      'relationships' => AppColors.categoryRelationships,
-      'finances' => AppColors.categoryFinances,
-      _ => AppColors.categoryPersonalGrowth,
-    };
-  }
+  Color get _color => goalCategoryColor(goal.category);
 
   @override
   Widget build(BuildContext context) {
@@ -417,14 +598,62 @@ class _GoalHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.xs),
-        _ProgressSlider(goal: goal, color: _color),
+        // Milestone-backed goals show honest derived progress; step-less goals
+        // keep the manual slider as the only sensible input.
+        if (goal.hasSteps)
+          _DerivedProgress(goal: goal, color: _color)
+        else
+          _ProgressSlider(goal: goal, color: _color),
       ],
     );
   }
 }
 
-/// Draggable progress control. Updates optimistically on release rather than on
-/// every drag tick to avoid spamming Firestore.
+/// Read-only progress for goals whose progress comes from the milestone
+/// checklist. Shows the percentage and an "X of Y milestones" caption.
+class _DerivedProgress extends StatelessWidget {
+  final Goal goal;
+  final Color color;
+
+  const _DerivedProgress({required this.goal, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = goal.derivedProgress;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              '${pct.toStringAsFixed(0)}%',
+              style: AppTextStyles.headlineSmall.copyWith(color: color),
+            ),
+            const Spacer(),
+            Text(
+              AppStrings.goalMilestoneProgress(
+                  goal.completedStepCount, goal.actionSteps.length),
+              style: AppTextStyles.labelSmall,
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: pct / 100,
+            backgroundColor: AppColors.border,
+            valueColor: AlwaysStoppedAnimation(color),
+            minHeight: 8,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Draggable progress control for step-less goals. Updates optimistically on
+/// release rather than on every drag tick to avoid spamming Firestore.
 class _ProgressSlider extends ConsumerStatefulWidget {
   final Goal goal;
   final Color color;

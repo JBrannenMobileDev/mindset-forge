@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/constants/goal_templates.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
@@ -42,7 +43,10 @@ class GoalsTab extends ConsumerWidget {
         if (profile == null) {
           return ActionsTabSkeleton(layoutContext: layoutContext);
         }
-        return _GoalsContent(layoutContext: layoutContext);
+        return _GoalsContent(
+          layoutContext: layoutContext,
+          primaryGoalId: profile.primaryGoalId,
+        );
       },
     );
   }
@@ -55,18 +59,22 @@ class GoalsTab extends ConsumerWidget {
 
 class _GoalsContent extends ConsumerWidget {
   final ActionsLayoutContext layoutContext;
+  final String primaryGoalId;
 
-  const _GoalsContent({required this.layoutContext});
+  const _GoalsContent({
+    required this.layoutContext,
+    required this.primaryGoalId,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final goals = ref.watch(goalsProvider);
-    final longTerm =
-        goals.where((g) => g.isLongTerm && g.status == 'active').toList();
-    final shortTerm =
-        goals.where((g) => !g.isLongTerm && g.status == 'active').toList();
+    final active = goals.where((g) => g.status == 'active').toList();
+    final completed = goals.where((g) => g.status == 'completed').toList()
+      ..sort((a, b) => (b.completedAt ?? b.createdAt)
+          .compareTo(a.completedAt ?? a.createdAt));
 
-    if (longTerm.isEmpty && shortTerm.isEmpty) {
+    if (active.isEmpty && completed.isEmpty) {
       return GoalsTab._wrapIfDesktop(
         layoutContext,
         EmptyState(
@@ -79,6 +87,11 @@ class _GoalsContent extends ConsumerWidget {
       );
     }
 
+    // Pin the North Star to the top, keeping the rest in creation order.
+    final northStar = active.where((g) => g.id == primaryGoalId).toList();
+    final rest = active.where((g) => g.id != primaryGoalId).toList();
+    final orderedActive = [...northStar, ...rest];
+
     final padding = actionsTabPadding(layoutContext);
     final shrinkWrap = actionsTabShrinkWrap(layoutContext);
 
@@ -87,14 +100,13 @@ class _GoalsContent extends ConsumerWidget {
       physics: actionsTabScrollPhysics(layoutContext),
       padding: padding,
       children: [
-        if (longTerm.isNotEmpty) ...[
-          const SectionHeader(title: AppStrings.goalLongTerm),
-          const SizedBox(height: AppSpacing.md),
-          ...longTerm.asMap().entries.map(
+        if (orderedActive.isNotEmpty) ...[
+          ...orderedActive.asMap().entries.map(
                 (e) => Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.md),
                   child: _GoalCard(
                     goal: e.value,
+                    isNorthStar: e.value.id == primaryGoalId,
                     onTap: () => context.push('/actions/goal/${e.value.id}'),
                   ).animate().fadeIn(
                         delay: Duration(milliseconds: e.key * 60),
@@ -103,70 +115,74 @@ class _GoalsContent extends ConsumerWidget {
                 ),
               ),
         ],
-        if (shortTerm.isNotEmpty) ...[
+        if (completed.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.md),
-          const SectionHeader(title: AppStrings.goalShortTerm),
+          SectionHeader(
+              title: '${AppStrings.goalCompletedSection} (${completed.length})'),
           const SizedBox(height: AppSpacing.md),
-          ...shortTerm.asMap().entries.map(
-                (e) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                  child: _GoalCard(
-                    goal: e.value,
-                    onTap: () => context.push('/actions/goal/${e.value.id}'),
-                  ).animate().fadeIn(
-                        delay: Duration(milliseconds: e.key * 60),
-                        duration: 400.ms,
-                      ),
-                ),
+          ...completed.map(
+            (g) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: _CompletedGoalTile(
+                goal: g,
+                onTap: () => context.push('/actions/goal/${g.id}'),
               ),
+            ),
+          ),
         ],
       ],
     );
   }
 }
 
+
 class _GoalCard extends StatelessWidget {
   final Goal goal;
+  final bool isNorthStar;
   final VoidCallback onTap;
 
-  const _GoalCard({required this.goal, required this.onTap});
-
-  Color get _color {
-    return switch (goal.category) {
-      'career' => AppColors.categoryCareer,
-      'health' => AppColors.categoryHealth,
-      'relationships' => AppColors.categoryRelationships,
-      'finances' => AppColors.categoryFinances,
-      _ => AppColors.categoryPersonalGrowth,
-    };
-  }
-
-  IconData get _icon {
-    return switch (goal.category) {
-      'career' => Icons.work_rounded,
-      'health' => Icons.favorite_rounded,
-      'relationships' => Icons.people_rounded,
-      'finances' => Icons.attach_money_rounded,
-      _ => Icons.auto_awesome_rounded,
-    };
-  }
+  const _GoalCard({
+    required this.goal,
+    required this.isNorthStar,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final color = goalCategoryColor(goal.category);
+    final progress = goal.derivedProgress;
+
     return AppCard(
       onTap: onTap,
+      borderColor: isNorthStar ? AppColors.primary.withValues(alpha: 0.5) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (isNorthStar) ...[
+            Row(
+              children: [
+                const Icon(Icons.star_rounded,
+                    color: AppColors.primary, size: 14),
+                const SizedBox(width: 4),
+                Text(
+                  AppStrings.goalNorthStar.toUpperCase(),
+                  style: AppTextStyles.overline
+                      .copyWith(color: AppColors.primary),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
           Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(AppSpacing.sm),
                 decoration: BoxDecoration(
-                  color: _color.withValues(alpha: 0.15),
+                  color: color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
                 ),
-                child: Icon(_icon, color: _color, size: AppSpacing.iconMd),
+                child: Icon(goalCategoryIcon(goal.category),
+                    color: color, size: AppSpacing.iconMd),
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
@@ -176,7 +192,7 @@ class _GoalCard extends StatelessWidget {
                     Text(goal.title, style: AppTextStyles.labelLarge),
                     Text(
                       goal.category.replaceAll('_', ' ').toUpperCase(),
-                      style: AppTextStyles.overline.copyWith(color: _color),
+                      style: AppTextStyles.overline.copyWith(color: color),
                     ),
                   ],
                 ),
@@ -187,12 +203,12 @@ class _GoalCard extends StatelessWidget {
                   vertical: AppSpacing.xs,
                 ),
                 decoration: BoxDecoration(
-                  color: _color.withValues(alpha: 0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
                 ),
                 child: Text(
-                  '${goal.progressPercent.toStringAsFixed(0)}%',
-                  style: AppTextStyles.labelSmall.copyWith(color: _color),
+                  '${progress.toStringAsFixed(0)}%',
+                  style: AppTextStyles.labelSmall.copyWith(color: color),
                 ),
               ),
             ],
@@ -211,9 +227,9 @@ class _GoalCard extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: goal.progressPercent / 100,
+              value: progress / 100,
               backgroundColor: AppColors.border,
-              valueColor: AlwaysStoppedAnimation(_color),
+              valueColor: AlwaysStoppedAnimation(color),
               minHeight: 5,
             ),
           ),
@@ -222,7 +238,10 @@ class _GoalCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '${AppStrings.goalTargetPrefix} ${AppDateUtils.formatDate(goal.targetDate)}',
+                goal.hasSteps
+                    ? AppStrings.goalMilestoneProgress(
+                        goal.completedStepCount, goal.actionSteps.length)
+                    : '${AppStrings.goalTargetPrefix} ${AppDateUtils.formatDate(goal.targetDate)}',
                 style: AppTextStyles.labelSmall,
               ),
               const Icon(
@@ -232,6 +251,47 @@ class _GoalCard extends StatelessWidget {
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Compact tile for a finished goal — kept visible as proof of progress rather
+/// than vanishing on completion.
+class _CompletedGoalTile extends StatelessWidget {
+  final Goal goal;
+  final VoidCallback onTap;
+
+  const _CompletedGoalTile({required this.goal, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = goalCategoryColor(goal.category);
+    return AppCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm + 2,
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle_rounded, color: color, size: 20),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              goal.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.bodyMedium
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+          ),
+          if (goal.completedAt != null)
+            Text(
+              AppDateUtils.formatDate(goal.completedAt!),
+              style: AppTextStyles.labelSmall,
+            ),
         ],
       ),
     );

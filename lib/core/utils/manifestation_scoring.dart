@@ -177,7 +177,9 @@ abstract final class ManifestationScoring {
     final contributions = <double>[];
     for (final g in p.goals) {
       if (g.status == 'active') {
-        contributions.add(g.progressPercent);
+        // Derived from the milestone checklist when present, so Results tracks
+        // real completion rather than a self-reported slider.
+        contributions.add(g.derivedProgress);
       } else if (g.status == 'completed') {
         final creditDays = _completedGoalCreditDays(g.goalType);
         final completedAt = g.completedAt;

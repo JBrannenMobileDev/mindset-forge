@@ -239,6 +239,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               return ChatScreen(
                 journalContext: extra?['journalContext'] as String?,
                 journalPrompt: extra?['journalPrompt'] as String?,
+                initialMode: extra?['initialMode'] as String?,
               );
             },
           ),

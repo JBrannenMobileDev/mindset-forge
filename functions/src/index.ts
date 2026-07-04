@@ -5,9 +5,19 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onRequest } from 'firebase-functions/v2/https';
 import Anthropic from '@anthropic-ai/sdk';
 import { defineSecret } from 'firebase-functions/params';
-import { timingSafeEqual } from 'crypto';
+import { TextToSpeechClient } from '@google-cloud/text-to-speech';
+import { timingSafeEqual, randomUUID, createHash } from 'crypto';
 
 admin.initializeApp();
+
+// Google Cloud Text-to-Speech client. Auth is picked up from the function's
+// default service account (same GCP project), so no key material is needed.
+const ttsClient = new TextToSpeechClient();
+
+// Default neural voice for Future Self narration. Chirp 3: HD voices sound
+// natural and warm for the calm, embodied script while costing ~5x less than
+// Studio voices ($30 vs $160 per 1M characters).
+const DEFAULT_NARRATION_VOICE = 'en-US-Chirp3-HD-Aoede';
 
 // Bound autoscaling so a traffic spike can't exhaust the regional Cloud Run CPU
 // quota. The project's us-central1 CpuAllocPerProjectRegion quota is 20 vCPU, and
@@ -549,6 +559,96 @@ export const callClaudeConversation = onCall(
     } catch (err) {
       console.error('Claude conversation error:', sanitizeForLog(err));
       throw new HttpsError('internal', 'Failed to get AI response. Please try again.');
+    }
+  },
+);
+
+// ─── Future Self narration (TTS) ───────────────────────────────────────────
+
+/**
+ * synthesizeFutureSelfNarration — auth-gated callable that turns a Future Self
+ * scene script into a cached neural-voice narration.
+ *
+ * Synthesizes [script] with Google Cloud TTS, uploads the mp3 to the default
+ * Storage bucket at `future_self_narration/{uid}/{scriptHash}.mp3` with a stable
+ * download token, and returns a non-expiring download URL. Called once per scene
+ * at create/refine time (not daily), so cost stays bounded; the client caches
+ * the audio locally for offline daily replay.
+ *
+ * Input:  { script: string, voice?: string, scriptHash?: string }
+ * Output: { url: string, voice: string, scriptHash: string }
+ */
+export const synthesizeFutureSelfNarration = onCall(
+  { invoker: 'public', maxInstances: 10, memory: '512MiB', timeoutSeconds: 120 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Must be authenticated.');
+    }
+
+    const { script, voice, scriptHash } = request.data as {
+      script?: string;
+      voice?: string;
+      scriptHash?: string;
+    };
+
+    if (!script || typeof script !== 'string' || script.trim().length === 0) {
+      throw new HttpsError('invalid-argument', 'script is required.');
+    }
+    // Google Cloud TTS caps a single request at 5000 bytes; a scene is far
+    // shorter, but guard so an oversized payload fails clearly rather than at
+    // the API layer.
+    if (Buffer.byteLength(script, 'utf8') > 4800) {
+      throw new HttpsError('invalid-argument', 'script is too long to narrate.');
+    }
+
+    // Bound abuse the same way as the Claude callables.
+    await enforceDailyAiLimit(request.auth.uid);
+
+    const voiceName =
+      typeof voice === 'string' && voice.trim().length > 0
+        ? voice.trim()
+        : DEFAULT_NARRATION_VOICE;
+    const hash =
+      typeof scriptHash === 'string' && scriptHash.trim().length > 0
+        ? scriptHash.trim()
+        : createHash('sha1').update(script).digest('hex');
+
+    try {
+      const [response] = await ttsClient.synthesizeSpeech({
+        input: { text: script },
+        voice: { languageCode: 'en-US', name: voiceName },
+        audioConfig: {
+          audioEncoding: 'MP3',
+          // Slightly slower than default for a calm, meditative pace.
+          speakingRate: 0.88,
+        },
+      });
+
+      const audio = response.audioContent;
+      if (!audio) {
+        throw new Error('TTS returned no audio content');
+      }
+
+      const bucket = admin.storage().bucket();
+      const filePath = `future_self_narration/${request.auth.uid}/${hash}.mp3`;
+      const token = randomUUID();
+      await bucket.file(filePath).save(Buffer.from(audio as Uint8Array), {
+        resumable: false,
+        contentType: 'audio/mpeg',
+        metadata: {
+          contentType: 'audio/mpeg',
+          metadata: { firebaseStorageDownloadTokens: token },
+        },
+      });
+
+      const url =
+        `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
+        `${encodeURIComponent(filePath)}?alt=media&token=${token}`;
+
+      return { url, voice: voiceName, scriptHash: hash };
+    } catch (err) {
+      console.error('Future Self narration error:', sanitizeForLog(err));
+      throw new HttpsError('internal', 'Failed to synthesize narration.');
     }
   },
 );
@@ -1322,6 +1422,16 @@ export const deleteUserAccount = onCall({ invoker: 'public' }, async (request) =
   batch.delete(db.collection('users').doc(uid));
 
   await batch.commit();
+
+  // Delete the user's Future Self narration audio (best-effort).
+  try {
+    await admin
+      .storage()
+      .bucket()
+      .deleteFiles({ prefix: `future_self_narration/${uid}/` });
+  } catch (err) {
+    console.error('deleteUserAccount: storage cleanup failed:', err);
+  }
 
   // Delete Firebase Auth user
   await admin.auth().deleteUser(uid);

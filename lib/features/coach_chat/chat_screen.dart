@@ -32,7 +32,15 @@ class ChatScreen extends ConsumerStatefulWidget {
   final String? journalContext;
   final String? journalPrompt;
 
-  const ChatScreen({super.key, this.journalContext, this.journalPrompt});
+  /// Optional mode to open on ('coach' or 'future_self'). Defaults to coach.
+  final String? initialMode;
+
+  const ChatScreen({
+    super.key,
+    this.journalContext,
+    this.journalPrompt,
+    this.initialMode,
+  });
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -48,7 +56,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialMode == _futureSelfMode ? 1 : 0,
+    );
   }
 
   /// One-time, non-dismissible coach disclaimer. Shown the first time a user

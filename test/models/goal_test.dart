@@ -9,28 +9,31 @@ void main() {
 
     // ── Computed getters ──────────────────────────────────────────────────────
 
-    group('isLongTerm', () {
-      test('true when parentGoalId is null', () {
-        final goal = Goal(
-          id: '1',
-          title: 'Title',
-          category: 'career',
-          targetDate: target,
-          createdAt: now,
-        );
-        expect(goal.isLongTerm, isTrue);
+    group('derivedProgress', () {
+      Goal goalWithSteps(List<ActionStep> steps, {double manual = 0.0}) => Goal(
+            id: '1',
+            title: 'T',
+            category: 'career',
+            targetDate: target,
+            createdAt: now,
+            progressPercent: manual,
+            actionSteps: steps,
+          );
+
+      test('falls back to manual progressPercent when there are no steps', () {
+        expect(goalWithSteps(const [], manual: 42.0).derivedProgress, 42.0);
       });
 
-      test('false when parentGoalId is set', () {
-        final goal = Goal(
-          id: '2',
-          title: 'Sub-goal',
-          category: 'career',
-          parentGoalId: 'parent-1',
-          targetDate: target,
-          createdAt: now,
-        );
-        expect(goal.isLongTerm, isFalse);
+      test('derives from completed/total steps when steps exist', () {
+        final goal = goalWithSteps(const [
+          ActionStep(id: 's1', title: 'A', isCompleted: true),
+          ActionStep(id: 's2', title: 'B', isCompleted: true),
+          ActionStep(id: 's3', title: 'C'),
+          ActionStep(id: 's4', title: 'D'),
+        ], manual: 0.0);
+        expect(goal.derivedProgress, closeTo(50.0, 0.001));
+        expect(goal.completedStepCount, 2);
+        expect(goal.hasSteps, isTrue);
       });
     });
 
@@ -189,7 +192,7 @@ void main() {
 
       test('missing fields get safe defaults', () {
         final goal = Goal.fromJson({'id': '1', 'title': 'Minimal'});
-        expect(goal.category, 'personal');
+        expect(goal.category, 'personal_growth');
         expect(goal.status, 'active');
         expect(goal.progressPercent, 0.0);
         expect(goal.actionSteps, isEmpty);

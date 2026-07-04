@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mindsetforge/models/goal.dart';
 import 'package:mindsetforge/models/action_step.dart';
+import 'package:mindsetforge/models/user_profile.dart';
 import 'package:mindsetforge/providers/auth_provider.dart';
 import 'package:mindsetforge/providers/goals_provider.dart';
 
@@ -284,48 +285,115 @@ void main() {
       expect(updated.isCompleted, isTrue);
     });
 
-    // ── computed getters ──────────────────────────────────────────────────────
+    // ── milestone checklist CRUD ────────────────────────────────────────────
 
-    group('longTermGoals / shortTermGoals', () {
-      test('longTermGoals: active goals with no parentGoalId', () async {
-        final container = _makeContainer();
-        addTearDown(container.dispose);
-
-        final notifier = container.read(goalsProvider.notifier);
-        await notifier.addGoal(_makeGoal(id: 'lt', parentGoalId: null));
-        await notifier.addGoal(_makeGoal(id: 'st', parentGoalId: 'lt'));
-        await notifier.addGoal(
-            _makeGoal(id: 'done', parentGoalId: null, status: 'completed'));
-
-        final ids = notifier.longTermGoals.map((g) => g.id);
-        expect(ids, contains('lt'));
-        expect(ids, isNot(contains('st')));
-        expect(ids, isNot(contains('done')));
-      });
-
-      test('shortTermGoals: active goals with parentGoalId set', () async {
-        final container = _makeContainer();
-        addTearDown(container.dispose);
-
-        final notifier = container.read(goalsProvider.notifier);
-        await notifier.addGoal(_makeGoal(id: 'lt', parentGoalId: null));
-        await notifier.addGoal(_makeGoal(id: 'st', parentGoalId: 'lt'));
-
-        final ids = notifier.shortTermGoals.map((g) => g.id);
-        expect(ids, contains('st'));
-        expect(ids, isNot(contains('lt')));
-      });
-
-      test('empty when all goals are completed', () async {
+    group('milestone steps', () {
+      test('addStep appends a milestone and recomputes progress', () async {
         final container = _makeContainer();
         addTearDown(container.dispose);
 
         final notifier = container.read(goalsProvider.notifier);
         await notifier.addGoal(_makeGoal(id: 'g1'));
-        await notifier.completeGoal('g1');
+        await notifier.addStep(
+            'g1', const ActionStep(id: 's1', title: 'First milestone'));
 
-        expect(notifier.longTermGoals, isEmpty);
-        expect(notifier.shortTermGoals, isEmpty);
+        final goal = container.read(goalsProvider).first;
+        expect(goal.actionSteps.length, 1);
+        expect(goal.actionSteps.first.order, 0);
+        expect(goal.progressPercent, closeTo(0.0, 0.01));
+
+        await notifier.toggleActionStep('g1', 's1');
+        expect(container.read(goalsProvider).first.progressPercent,
+            closeTo(100.0, 0.01));
+      });
+
+      test('removeStep drops a milestone and re-normalizes order', () async {
+        final container = _makeContainer();
+        addTearDown(container.dispose);
+
+        final notifier = container.read(goalsProvider.notifier);
+        await notifier.addGoal(_makeGoal(
+          id: 'g1',
+          actionSteps: const [
+            ActionStep(id: 's1', title: 'A', order: 0),
+            ActionStep(id: 's2', title: 'B', order: 1),
+            ActionStep(id: 's3', title: 'C', order: 2),
+          ],
+        ));
+
+        await notifier.removeStep('g1', 's2');
+        final steps = container.read(goalsProvider).first.actionSteps;
+        expect(steps.map((s) => s.id), ['s1', 's3']);
+        expect(steps.map((s) => s.order), [0, 1]);
+      });
+
+      test('reorderSteps moves a milestone and re-normalizes order', () async {
+        final container = _makeContainer();
+        addTearDown(container.dispose);
+
+        final notifier = container.read(goalsProvider.notifier);
+        await notifier.addGoal(_makeGoal(
+          id: 'g1',
+          actionSteps: const [
+            ActionStep(id: 's1', title: 'A', order: 0),
+            ActionStep(id: 's2', title: 'B', order: 1),
+            ActionStep(id: 's3', title: 'C', order: 2),
+          ],
+        ));
+
+        await notifier.reorderSteps('g1', 0, 3); // move A to the end
+        final steps = container.read(goalsProvider).first.actionSteps;
+        expect(steps.map((s) => s.id), ['s2', 's3', 's1']);
+        expect(steps.map((s) => s.order), [0, 1, 2]);
+      });
+    });
+
+    // ── child-goal → checklist migration ──────────────────────────────────────
+
+    group('child-goal migration', () {
+      test('folds child goals into the parent checklist and drops children',
+          () async {
+        final profile = UserProfile.create(
+          uid: 'u1',
+          email: 'a@b.com',
+          displayName: 'Test',
+        ).copyWith(goals: [
+          _makeGoal(id: 'parent', title: 'Parent'),
+          _makeGoal(id: 'child1', title: 'Milestone 1', parentGoalId: 'parent'),
+          _makeGoal(
+            id: 'child2',
+            title: 'Milestone 2',
+            parentGoalId: 'parent',
+            status: 'completed',
+          ),
+        ]);
+
+        final container = ProviderContainer(
+          overrides: [
+            firestoreServiceProvider.overrideWithValue(MockFirestoreService()),
+            authStateProvider.overrideWith((ref) => Stream.value(FakeUser('u1'))),
+            currentUserProfileProvider
+                .overrideWith((ref) => Stream.value(profile)),
+          ],
+        );
+        addTearDown(container.dispose);
+        await container.read(authStateProvider.future);
+        await container.read(currentUserProfileProvider.future);
+        // Let the migration's optimistic state update settle.
+        await Future<void>.delayed(Duration.zero);
+
+        final goals = container.read(goalsProvider);
+        expect(goals.length, 1, reason: 'children folded away');
+        final parent = goals.first;
+        expect(parent.id, 'parent');
+        expect(parent.actionSteps.map((s) => s.title),
+            containsAll(['Milestone 1', 'Milestone 2']));
+        // One of two milestones completed => 50%.
+        expect(parent.progressPercent, closeTo(50.0, 0.01));
+        expect(
+          parent.actionSteps.firstWhere((s) => s.title == 'Milestone 2').isCompleted,
+          isTrue,
+        );
       });
     });
 
