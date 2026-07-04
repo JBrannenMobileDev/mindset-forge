@@ -355,6 +355,7 @@ class _HabitCard extends StatelessWidget {
     final isActive = habit.state == 'active';
 
     return AppCard(
+      onTap: onOpenDetail,
       child: Row(
         children: [
           HabitCompletionCheckbox(
@@ -373,69 +374,45 @@ class _HabitCard extends StatelessWidget {
                     color: isActive ? AppColors.textPrimary : AppColors.textMuted,
                   ),
                 ),
-                if (habit.trigger.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.bolt_rounded,
-                            color: AppColors.textMuted, size: 12),
-                        const SizedBox(width: 2),
-                        Expanded(
-                          child: Text(
-                            '${AppStrings.habitWhenPrefix} ${habit.trigger}',
-                            style: AppTextStyles.bodySmall
-                                .copyWith(color: AppColors.textSecondary),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (habit.identityReinforces.isNotEmpty)
-                  Text(
-                    habit.identityReinforces,
-                    style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.primary, fontStyle: FontStyle.italic),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
                 const SizedBox(height: 2),
                 Row(
                   children: [
-                    const Icon(Icons.local_fire_department_rounded, color: AppColors.warning, size: 12),
+                    const Icon(Icons.local_fire_department_rounded,
+                        color: AppColors.warning, size: 12),
                     const SizedBox(width: 2),
                     Text(
                       '${habit.currentStreak} ${AppStrings.streakDays}',
-                      style: AppTextStyles.labelSmall.copyWith(color: AppColors.warning),
+                      style: AppTextStyles.labelSmall
+                          .copyWith(color: AppColors.warning),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isActive ? AppColors.secondaryContainer : AppColors.surfaceHighest,
-                        borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
-                      ),
-                      child: Text(
-                        habit.frequency,
-                        style: AppTextStyles.labelSmall.copyWith(
-                          color: isActive ? AppColors.secondary : AppColors.textMuted,
+                    if (habit.frequency == 'weekly') ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isActive
+                              ? AppColors.secondaryContainer
+                              : AppColors.surfaceHighest,
+                          borderRadius:
+                              BorderRadius.circular(AppSpacing.radiusFull),
+                        ),
+                        child: Text(
+                          habit.frequency,
+                          style: AppTextStyles.labelSmall.copyWith(
+                            color: isActive
+                                ? AppColors.secondary
+                                : AppColors.textMuted,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ],
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
-            onPressed: onOpenDetail,
-            tooltip: AppStrings.habitDetailTitle,
           ),
           if (dragIndex != null)
             MouseRegion(

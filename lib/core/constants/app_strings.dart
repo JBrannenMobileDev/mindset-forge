@@ -717,23 +717,23 @@ abstract final class AppStrings {
   // Mindset
   static const String mindset = 'Mindset';
   static const String blueprint = 'Blueprint';
-  static const String blueprintNewSnapshot = 'New Snapshot';
-  static const String blueprintSaveSnapshot = 'Save Snapshot';
-  static const String blueprintSnapshotSaved = 'Blueprint snapshot saved.';
-  static const String blueprintSnapshotTitle = 'Rate yourself today';
-  static const String blueprintSnapshotSubtitle =
-      'Your original baseline stays unchanged. This snapshot tracks your growth over time.';
-  static const String blueprintSnapshotCta = 'New Snapshot';
-  static const String blueprintSnapshotPrompt =
-      'Take your first snapshot to track growth against your baseline.';
   static const String blueprintChartCurrent = 'Current';
   static const String blueprintChartBaseline = 'Baseline';
-  static String blueprintLastSnapshot(String when) => 'Last snapshot: $when';
-  static const String blueprintPastSnapshots = 'Past Snapshots';
+  static String blueprintCalibrating(int day) =>
+      'Calibrating your blueprint (day $day of 10)';
+  static const String blueprintCalibratingDetail =
+      'Your scores stay as you rated them until day 10, then update automatically from your activity.';
+  static String blueprintLastUpdated(String when) => 'Last updated $when';
+  static const String blueprintNextUpdateSunday = 'Next update Sunday';
+  static const String blueprintPastSnapshots = 'History';
   static const String blueprintGrowthTitle = 'Blueprint Growth';
   static String blueprintGrowthSinceBaseline(String trait, String delta) =>
       '$delta $trait since baseline';
-  static const String blueprintTakeSnapshot = 'Take New Snapshot';
+  static const String blueprintGrowthCalibrating =
+      'Your blueprint is calibrating from your daily actions. Check back after day 10.';
+  static const String blueprintGrowthAutoUpdate =
+      'Your blueprint updates automatically each Sunday based on your actions.';
+  static const String blueprintWeeklyUpdateTitle = 'Latest update';
   static const String alignment = 'Alignment';
   static const String progress = 'Progress';
   static const String limitingBeliefs = 'Limiting Beliefs';

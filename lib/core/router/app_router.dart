@@ -20,7 +20,6 @@ import '../../features/mindset/mindset_screen.dart';
 import '../../features/mindset/blueprint_screen.dart';
 import '../../features/mindset/affirmations_screen.dart';
 import '../../features/mindset/blueprint_setup_screen.dart';
-import '../../features/mindset/blueprint_snapshot_screen.dart';
 import '../../features/future_self/future_self_screen.dart';
 import '../../features/progress/progress_screen.dart';
 import '../../features/settings/settings_screen.dart';
@@ -292,10 +291,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/blueprint-setup',
         builder: (_, __) => const BlueprintSetupScreen(),
-      ),
-      GoRoute(
-        path: '/blueprint-snapshot',
-        builder: (_, __) => const BlueprintSnapshotScreen(),
       ),
       GoRoute(
         path: '/future-self',

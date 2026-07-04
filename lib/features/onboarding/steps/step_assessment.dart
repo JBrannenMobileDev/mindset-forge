@@ -14,7 +14,6 @@ class StepAssessment extends StatefulWidget {
   final List<String> initialBeliefs;
   final void Function(MindsetBlueprint blueprint, List<String> beliefs) onNext;
   final VoidCallback onBack;
-  final bool traitsOnly;
 
   const StepAssessment({
     super.key,
@@ -22,7 +21,6 @@ class StepAssessment extends StatefulWidget {
     required this.initialBeliefs,
     required this.onNext,
     required this.onBack,
-    this.traitsOnly = false,
   });
 
   @override
@@ -138,7 +136,7 @@ class _StepAssessmentState extends State<StepAssessment> {
       setState(() => _beliefs = _beliefs.where((b) => b != belief).toList());
 
   void _tryNext() {
-    if (!widget.traitsOnly && _beliefs.isEmpty) {
+    if (_beliefs.isEmpty) {
       setState(() => _errorText = 'Add at least one limiting belief to continue.');
       return;
     }
@@ -170,16 +168,12 @@ class _StepAssessmentState extends State<StepAssessment> {
               children: [
                 // ── Trait sliders ──────────────────────────────────────────
                 Text(
-                  widget.traitsOnly
-                      ? AppStrings.blueprintSnapshotTitle
-                      : AppStrings.onboardingAssessmentTitle,
+                  AppStrings.onboardingAssessmentTitle,
                   style: AppTextStyles.headlineLarge,
                 ).animate().fadeIn(duration: 400.ms),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  widget.traitsOnly
-                      ? AppStrings.blueprintSnapshotSubtitle
-                      : AppStrings.onboardingAssessmentSubtitle,
+                  AppStrings.onboardingAssessmentSubtitle,
                   style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
                 ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
                 const SizedBox(height: AppSpacing.xl),
@@ -244,7 +238,6 @@ class _StepAssessmentState extends State<StepAssessment> {
                   );
                 }),
 
-                if (!widget.traitsOnly) ...[
                 const SizedBox(height: AppSpacing.xl),
                 Divider(color: AppColors.border),
                 const SizedBox(height: AppSpacing.xl),
@@ -354,8 +347,6 @@ class _StepAssessmentState extends State<StepAssessment> {
                   ),
                 ],
 
-                ],
-
                 const SizedBox(height: AppSpacing.xxl),
               ],
             ),
@@ -381,13 +372,9 @@ class _StepAssessmentState extends State<StepAssessment> {
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: AppPrimaryButton(
-                      label: widget.traitsOnly
-                          ? AppStrings.blueprintSaveSnapshot
-                          : AppStrings.onboardingNext,
+                      label: AppStrings.onboardingNext,
                       onPressed: _tryNext,
-                      icon: widget.traitsOnly
-                          ? Icons.check_rounded
-                          : Icons.arrow_forward_rounded,
+                      icon: Icons.arrow_forward_rounded,
                     ),
                   ),
                 ],

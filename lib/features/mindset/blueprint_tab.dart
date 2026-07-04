@@ -8,6 +8,7 @@ import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/utils/app_date_utils.dart';
+import '../../core/utils/blueprint_scoring.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/section_header.dart';
@@ -25,7 +26,9 @@ class BlueprintTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final blueprint = profile.mindsetBlueprint;
     final baseline = profile.originalMindsetBaseline;
-    final hasSnapshot = profile.mindsetBlueprintSnapshotAt != null;
+    final isCalibrating = BlueprintScoring.isCalibrating(profile);
+    final calibrationDay = BlueprintScoring.calibrationDay(profile);
+    final latestRationale = _latestWeeklyRationale(profile);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -41,8 +44,8 @@ class BlueprintTab extends ConsumerWidget {
           _BlueprintSetupCta(),
           const SizedBox(height: AppSpacing.md),
         ],
-        if (profile.blueprintCompleted && !hasSnapshot) ...[
-          _SnapshotPromptCard(),
+        if (isCalibrating) ...[
+          _CalibrationBanner(day: calibrationDay),
           const SizedBox(height: AppSpacing.md),
         ],
         AppCard(
@@ -60,28 +63,24 @@ class BlueprintTab extends ConsumerWidget {
             ],
           ),
         ).animate().fadeIn(duration: 400.ms),
-        if (hasSnapshot) ...[
+        if (profile.blueprintCompleted && !isCalibrating) ...[
           const SizedBox(height: AppSpacing.sm),
           Text(
-            AppStrings.blueprintLastSnapshot(
-              AppDateUtils.formatRelative(
-                DateTime.parse(profile.mindsetBlueprintSnapshotAt!),
-              ),
-            ),
+            BlueprintScoring.updateStatusLine(profile),
             style: AppTextStyles.bodySmall.copyWith(
               color: AppColors.textSecondary,
             ),
           ),
         ],
         const SizedBox(height: AppSpacing.md),
-        _TraitList(blueprint: blueprint, baseline: baseline),
-        if (profile.blueprintCompleted) ...[
-          const SizedBox(height: AppSpacing.lg),
-          AppPrimaryButton(
-            label: AppStrings.blueprintSnapshotCta,
-            onPressed: () => context.push('/blueprint-snapshot'),
-            icon: Icons.camera_alt_rounded,
-          ),
+        _TraitList(
+          blueprint: blueprint,
+          baseline: baseline,
+          rationale: latestRationale,
+        ),
+        if (latestRationale.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.md),
+          _WeeklyRationaleCard(rationale: latestRationale),
         ],
         if (profile.blueprintSnapshotHistory.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
@@ -136,6 +135,15 @@ class BlueprintTab extends ConsumerWidget {
         _FearsSection(profile: profile),
       ],
     );
+  }
+
+  static Map<String, String> _latestWeeklyRationale(UserProfile profile) {
+    for (final snapshot in profile.blueprintSnapshotHistory) {
+      if (snapshot.source == 'weekly_ai' && snapshot.rationale.isNotEmpty) {
+        return snapshot.rationale;
+      }
+    }
+    return const {};
   }
 
   void _showPastSnapshotSheet(
@@ -274,7 +282,11 @@ class BlueprintTab extends ConsumerWidget {
   }
 }
 
-class _SnapshotPromptCard extends StatelessWidget {
+class _CalibrationBanner extends StatelessWidget {
+  final int day;
+
+  const _CalibrationBanner({required this.day});
+
   @override
   Widget build(BuildContext context) {
     return AppCard(
@@ -289,18 +301,70 @@ class _SnapshotPromptCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
             ),
             child: const Icon(
-              Icons.trending_up_rounded,
+              Icons.tune_rounded,
               color: AppColors.secondary,
               size: 18,
             ),
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
-            child: Text(
-              AppStrings.blueprintSnapshotPrompt,
-              style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.textSecondary,
-                height: 1.5,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  AppStrings.blueprintCalibrating(day),
+                  style: AppTextStyles.labelLarge,
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  AppStrings.blueprintCalibratingDetail,
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.textSecondary,
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 400.ms);
+  }
+}
+
+class _WeeklyRationaleCard extends StatelessWidget {
+  final Map<String, String> rationale;
+
+  const _WeeklyRationaleCard({required this.rationale});
+
+  static const _traitLabels = {
+    'confidence': AppStrings.traitConfidence,
+    'discipline': AppStrings.traitDiscipline,
+    'abundanceThinking': AppStrings.traitAbundance,
+    'resilience': AppStrings.traitResilience,
+    'decisiveness': AppStrings.traitDecisiveness,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            AppStrings.blueprintWeeklyUpdateTitle,
+            style: AppTextStyles.labelLarge,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          ...rationale.entries.map(
+            (e) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+              child: Text(
+                '${_traitLabels[e.key] ?? e.key}: ${e.value}',
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                  height: 1.5,
+                ),
               ),
             ),
           ),
@@ -507,70 +571,100 @@ class _BlueprintRadarChart extends StatelessWidget {
 class _TraitList extends StatelessWidget {
   final MindsetBlueprint blueprint;
   final MindsetBlueprint baseline;
+  final Map<String, String> rationale;
 
-  const _TraitList({required this.blueprint, required this.baseline});
+  const _TraitList({
+    required this.blueprint,
+    required this.baseline,
+    this.rationale = const {},
+  });
+
+  static const _traitKeys = [
+    ('confidence', AppStrings.traitConfidence),
+    ('discipline', AppStrings.traitDiscipline),
+    ('abundanceThinking', AppStrings.traitAbundance),
+    ('resilience', AppStrings.traitResilience),
+    ('decisiveness', AppStrings.traitDecisiveness),
+  ];
+
+  double _traitValue(MindsetBlueprint b, String key) => switch (key) {
+        'confidence' => b.confidence,
+        'discipline' => b.discipline,
+        'abundanceThinking' => b.abundanceThinking,
+        'resilience' => b.resilience,
+        'decisiveness' => b.decisiveness,
+        _ => 5.0,
+      };
 
   @override
   Widget build(BuildContext context) {
-    final traits = [
-      (AppStrings.traitConfidence, blueprint.confidence, baseline.confidence),
-      (AppStrings.traitDiscipline, blueprint.discipline, baseline.discipline),
-      (
-        AppStrings.traitAbundance,
-        blueprint.abundanceThinking,
-        baseline.abundanceThinking,
-      ),
-      (AppStrings.traitResilience, blueprint.resilience, baseline.resilience),
-      (
-        AppStrings.traitDecisiveness,
-        blueprint.decisiveness,
-        baseline.decisiveness,
-      ),
-    ];
+    final traits = _traitKeys.map((t) {
+      final current = _traitValue(blueprint, t.$1);
+      final base = _traitValue(baseline, t.$1);
+      return (t.$2, current, base, rationale[t.$1]);
+    }).toList();
 
     return Column(
       children: traits.map((t) {
         final delta = t.$2 - t.$3;
         return Padding(
           padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: 100,
-                child: Text(
-                  t.$1,
-                  style: AppTextStyles.bodySmall
-                      .copyWith(color: AppColors.textSecondary),
-                ),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 100,
+                    child: Text(
+                      t.$1,
+                      style: AppTextStyles.bodySmall
+                          .copyWith(color: AppColors.textSecondary),
+                    ),
+                  ),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: t.$2 / 10,
+                        backgroundColor: AppColors.border,
+                        valueColor:
+                            const AlwaysStoppedAnimation(AppColors.primary),
+                        minHeight: 6,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(
+                    t.$2.toStringAsFixed(0),
+                    style: AppTextStyles.labelMedium
+                        .copyWith(color: AppColors.primary),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  if (delta != 0)
+                    Text(
+                      delta > 0
+                          ? '+${delta.toStringAsFixed(0)}'
+                          : delta.toStringAsFixed(0),
+                      style: AppTextStyles.labelSmall.copyWith(
+                        color: delta > 0 ? AppColors.success : AppColors.error,
+                      ),
+                    ),
+                ],
               ),
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: t.$2 / 10,
-                    backgroundColor: AppColors.border,
-                    valueColor:
-                        const AlwaysStoppedAnimation(AppColors.primary),
-                    minHeight: 6,
+              if (t.$4 != null && t.$4!.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Padding(
+                  padding: const EdgeInsets.only(left: 100),
+                  child: Text(
+                    t.$4!,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textMuted,
+                      height: 1.4,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Text(
-                t.$2.toStringAsFixed(0),
-                style: AppTextStyles.labelMedium
-                    .copyWith(color: AppColors.primary),
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              if (delta != 0)
-                Text(
-                  delta > 0
-                      ? '+${delta.toStringAsFixed(0)}'
-                      : delta.toStringAsFixed(0),
-                  style: AppTextStyles.labelSmall.copyWith(
-                    color: delta > 0 ? AppColors.success : AppColors.error,
-                  ),
-                ),
+              ],
             ],
           ),
         );

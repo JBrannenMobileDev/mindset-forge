@@ -458,6 +458,11 @@ class _MindsetForgeAppState extends ConsumerState<MindsetForgeApp>
               profile,
               uid,
             );
+            migrateBlueprintCalibrationStart(
+              ref.read(firestoreServiceProvider),
+              profile,
+              uid,
+            );
           }
         }
       });

@@ -26,6 +26,27 @@ final currentUserProfileProvider = StreamProvider<UserProfile?>(
   },
 );
 
+/// One-time silent migration: existing blueprint users get a fresh calibration
+/// window anchored to rollout day.
+Future<void> migrateBlueprintCalibrationStart(
+  FirestoreService firestore,
+  UserProfile profile,
+  String uid,
+) async {
+  if (!profile.blueprintCompleted) return;
+  if (profile.blueprintCalibrationStartedAt != null &&
+      profile.blueprintCalibrationStartedAt!.isNotEmpty) {
+    return;
+  }
+  try {
+    await firestore.updateUserField(uid, {
+      'blueprintCalibrationStartedAt': DateTime.now().toIso8601String(),
+    });
+  } catch (e) {
+    debugPrint('migrateBlueprintCalibrationStart failed: $e');
+  }
+}
+
 /// One-time silent migration: legacy completed users stored [onboardingStep] 5
 /// under the old 5-step flow. Bump to 6 so Firestore matches the new schema.
 Future<void> migrateLegacyOnboardingStep(

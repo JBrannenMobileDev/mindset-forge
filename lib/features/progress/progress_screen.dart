@@ -13,6 +13,7 @@ import '../../core/widgets/shimmer_widget.dart';
 import '../../core/widgets/weekly_insight_card.dart';
 import '../../core/utils/app_date_utils.dart';
 import '../../core/utils/manifestation_scoring.dart';
+import '../../core/utils/blueprint_scoring.dart';
 import '../../models/user_profile.dart';
 import '../../models/weekly_insight.dart';
 import '../../providers/auth_provider.dart';
@@ -601,6 +602,7 @@ class _BlueprintGrowthSection extends StatelessWidget {
     final baseline = profile.originalMindsetBaseline;
     final (trait, delta) = blueprintLargestShift(current, baseline);
     final hasShift = delta != '+0.0' && delta != '0.0' && delta != '-0.0';
+    final isCalibrating = BlueprintScoring.isCalibrating(profile);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -611,14 +613,22 @@ class _BlueprintGrowthSection extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (hasShift)
+              if (isCalibrating)
+                Text(
+                  AppStrings.blueprintGrowthCalibrating,
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.textSecondary,
+                    height: 1.5,
+                  ),
+                )
+              else if (hasShift)
                 Text(
                   AppStrings.blueprintGrowthSinceBaseline(trait, delta),
                   style: AppTextStyles.bodyMedium.copyWith(height: 1.5),
                 )
               else
                 Text(
-                  AppStrings.blueprintSnapshotPrompt,
+                  AppStrings.blueprintGrowthAutoUpdate,
                   style: AppTextStyles.bodyMedium.copyWith(
                     color: AppColors.textSecondary,
                     height: 1.5,
@@ -626,9 +636,9 @@ class _BlueprintGrowthSection extends StatelessWidget {
                 ),
               const SizedBox(height: AppSpacing.md),
               AppSecondaryButton(
-                label: AppStrings.blueprintTakeSnapshot,
-                onPressed: () => context.push('/blueprint-snapshot'),
-                icon: Icons.camera_alt_rounded,
+                label: AppStrings.blueprint,
+                onPressed: () => context.push('/blueprint'),
+                icon: Icons.architecture_rounded,
               ),
             ],
           ),

@@ -96,6 +96,8 @@ class _BlueprintSetupScreenState extends ConsumerState<BlueprintSetupScreen> {
       mentalToughnessScore: _toughness,
       fearsDrift: fears,
       blueprintCompleted: true,
+      blueprintCalibrationStartedAt:
+          isFirstCompletion ? now : profile.blueprintCalibrationStartedAt,
       mindsetBlueprintSnapshotAt:
           isFirstCompletion ? now : profile.mindsetBlueprintSnapshotAt,
     );

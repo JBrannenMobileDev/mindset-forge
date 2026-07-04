@@ -229,6 +229,11 @@ class _SessionSection extends StatelessWidget {
     final doneCount = requiredItems
         .where((w) => getCompletionField(completion, w.field))
         .length;
+    final bonusDoneCount = bonusItems
+        .where((w) => getCompletionField(completion, w.field))
+        .length;
+    final displayTotal = requiredItems.length + bonusItems.length;
+    final displayDone = doneCount + bonusDoneCount;
     final allDone = doneCount == requiredItems.length;
     // Teaser: inactive session with no progress yet
     final isTeaser = !isActive && doneCount == 0;
@@ -274,16 +279,27 @@ class _SessionSection extends StatelessWidget {
                   // Progress dots
                   Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: requiredItems
-                        .map((w) => _ProgressDot(
-                              filled: getCompletionField(completion, w.field),
-                              color: dotColor,
-                            ))
-                        .toList(),
+                    children: [
+                      ...requiredItems.map(
+                        (w) => _ProgressDot(
+                          filled: getCompletionField(completion, w.field),
+                          color: dotColor,
+                        ),
+                      ),
+                      ...bonusItems.map(
+                        (w) => _ProgressDot(
+                          filled: getCompletionField(completion, w.field),
+                          color: !isActive
+                              ? AppColors.textMuted
+                              : AppColors.warning,
+                          isBonus: true,
+                        ),
+                      ),
+                    ],
                   ),
                   const Spacer(),
                   Text(
-                    '$doneCount/${requiredItems.length}',
+                    '$displayDone/$displayTotal',
                     style: AppTextStyles.labelSmall
                         .copyWith(color: AppColors.textMuted),
                   ),
@@ -360,8 +376,13 @@ class _SessionSection extends StatelessWidget {
 class _ProgressDot extends StatelessWidget {
   final bool filled;
   final Color color;
+  final bool isBonus;
 
-  const _ProgressDot({required this.filled, required this.color});
+  const _ProgressDot({
+    required this.filled,
+    required this.color,
+    this.isBonus = false,
+  });
 
   @override
   Widget build(BuildContext context) {

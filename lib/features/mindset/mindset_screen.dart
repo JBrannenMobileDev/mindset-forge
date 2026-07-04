@@ -6,6 +6,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
+import '../../core/utils/blueprint_scoring.dart';
 import '../../core/utils/manifestation_scoring.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/empty_state.dart';
@@ -127,6 +128,16 @@ class _HubBody extends ConsumerWidget {
             _IdentityRow(statement: profile.identityStatement)
                 .animate()
                 .fadeIn(delay: 160.ms, duration: 350.ms),
+            if (profile.blueprintCompleted) ...[
+              const SizedBox(height: AppSpacing.sm),
+              _PracticeRow(
+                onTap: () => context.push('/blueprint'),
+                icon: Icons.architecture_rounded,
+                iconColor: AppColors.primary,
+                title: AppStrings.blueprint,
+                subtitle: _blueprintStatus(profile),
+              ).animate().fadeIn(delay: 180.ms, duration: 350.ms),
+            ],
             const SizedBox(height: AppSpacing.sectionGap),
             _ProgressEntryRow(
               profile: profile,
@@ -211,6 +222,16 @@ class _DesktopHub extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.sectionGap),
             _IdentityRow(statement: profile.identityStatement),
+            if (profile.blueprintCompleted) ...[
+              const SizedBox(height: AppSpacing.sm),
+              _PracticeRow(
+                onTap: () => context.push('/blueprint'),
+                icon: Icons.architecture_rounded,
+                iconColor: AppColors.primary,
+                title: AppStrings.blueprint,
+                subtitle: _blueprintStatus(profile),
+              ),
+            ],
             const SizedBox(height: AppSpacing.sectionGap),
             _ProgressEntryRow(
               profile: profile,
@@ -238,6 +259,15 @@ String _futureSelfStatus({
   if (!hasPractice) return AppStrings.futureSelfVisualizePrompt;
   if (completedToday) return AppStrings.futureSelfCompletedTodayCard;
   return AppStrings.futureSelfReturnToScene;
+}
+
+String _blueprintStatus(UserProfile profile) {
+  if (BlueprintScoring.isCalibrating(profile)) {
+    return AppStrings.blueprintCalibrating(
+      BlueprintScoring.calibrationDay(profile),
+    );
+  }
+  return BlueprintScoring.updateStatusLine(profile);
 }
 
 // ─── Practice hero ────────────────────────────────────────────────────────────

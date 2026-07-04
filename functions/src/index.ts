@@ -218,9 +218,10 @@ This is how a trusted friend who happens to be a brilliant coach talks. Use it o
 - Match length to the moment. Default to brief; only go longer when the moment genuinely calls for depth.
 - Quick check-ins, simple or factual questions, acknowledgements, banter, or a clear yes/no: 1 to 2 sentences (roughly 15 to 40 words). Do not pad.
 - Normal coaching (a real question, a decision, light stuck-ness): 40 to 110 words.
-- Reserve 110 to 160 words only for genuine depth: an emotional moment, a meaningful reframe, or a complex situation that needs unpacking.
+- Reserve 110 to 160 words only for genuine depth: an emotional moment, a meaningful reframe, or a complex situation that needs unpacking. Even in REFLECTIVE_INQUIRY or emotional moments, stay within this band.
 - Read the user's energy and message length as the signal: a short message usually wants a short reply.
-- HARD LIMIT: the "response" text must never exceed 200 words under any circumstances. If you feel the urge to write more, cut it, brevity is part of good coaching.
+- HARD LIMIT: the "response" text must never exceed 200 words under any circumstances, including reflective or emotionally deep turns. If you feel the urge to write more, cut it, brevity is part of good coaching.
+- Keep memory_updates terse regardless of how long the visible response runs. Never let memory_updates grow to compensate for a longer reply.
 - When you are coaching, end with EITHER one real question OR one specific next step, never both. For a quick acknowledgement or simple answer, you do not need either; just respond naturally.
 
 # SOUND HUMAN (anti-AI rules)
@@ -371,7 +372,7 @@ async function callAnthropicConversation(
   messages: ConversationTurn[],
   maxTokens: number,
   apiKey: string,
-): Promise<string> {
+): Promise<{ text: string; truncated: boolean }> {
   const client = new Anthropic({ apiKey });
   try {
     const message = await withAnthropicRetry(() => client.messages.create({
@@ -400,9 +401,8 @@ async function callAnthropicConversation(
     }));
     const block = message.content[0];
     if (block.type !== 'text') throw new Error('Unexpected response type from Claude');
-    // Telemetry: a max_tokens stop means the JSON (and possibly the response
-    // itself) was cut off. Surface it in logs so recurrence is observable.
-    if (message.stop_reason === 'max_tokens') {
+    const truncated = message.stop_reason === 'max_tokens';
+    if (truncated) {
       console.warn(
         `coach reply hit max_tokens (maxTokens=${maxTokens}); output may be truncated`,
       );
@@ -411,7 +411,7 @@ async function callAnthropicConversation(
     // brace back to hand downstream a complete JSON object.
     let text = '{' + block.text;
     text = text.replace(/\s*—\s*/g, ', ').replace(/\s*--\s*/g, ', ');
-    return text;
+    return { text, truncated };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`Anthropic request failed: ${sanitizeForLog(msg)}`);
@@ -496,7 +496,7 @@ export const callClaude = onCall(
  * callClaudeConversation — auth-gated multi-turn Claude callable for the coach.
  * Sends a real messages array so the model sees authentic dialogue turns.
  * Input:  { systemPrompt?: string, messages: {role,content}[], maxTokens?: number }
- * Output: { content: string }
+ * Output: { content: string, truncated: boolean }
  */
 export const callClaudeConversation = onCall(
   // enforceAppCheck stays false until the App Check-enabled app build has fully
@@ -539,13 +539,13 @@ export const callClaudeConversation = onCall(
     await enforceDailyAiLimit(request.auth.uid);
 
     try {
-      const content = await callAnthropicConversation(
+      const { text, truncated } = await callAnthropicConversation(
         systemPrompt,
         clean,
         maxTokens,
         anthropicKey.value().trim(),
       );
-      return { content };
+      return { content: text, truncated };
     } catch (err) {
       console.error('Claude conversation error:', sanitizeForLog(err));
       throw new HttpsError('internal', 'Failed to get AI response. Please try again.');
@@ -1028,12 +1028,15 @@ type CompletionDoc = {
   habitsCompleted?: boolean;
   dayPlanned?: boolean;
   focusCompleted?: boolean;
+  priorityActionsCompleted?: boolean;
   affirmationsMorning?: boolean;
   affirmationsEvening?: boolean;
   futureSelfCompleted?: boolean;
   journalCompleted?: boolean;
   chatCompleted?: boolean;
   identityRead?: boolean;
+  gratitudeLogged?: boolean;
+  evidenceLogged?: boolean;
 };
 
 // Mirrors DailyCompletion.isPerfectDay / completedCount on the client (9 wins,
@@ -1515,17 +1518,17 @@ function buildWeeklyInsightUserPrompt(profile: {
   displayName?: string;
   identityStatement?: string;
   limitingBeliefs?: string[];
-  goals?: Array<{ title: string; status: string; progressPercent?: number }>;
+  goals?: Array<{ title?: string; status?: string; progressPercent?: number }>;
   habits?: Array<{ name?: string; state?: string }>;
   dailyCompletions?: CompletionDoc[];
   recentJournalSummaries?: Array<{ date?: string; mood?: string; snippet?: string }>;
   mindsetBlueprintSummary?: string;
-  deepDive?: { modules?: Record<string, { insight?: string }> };
+  deepDive?: DeepDiveDoc;
 }): string {
   const activeGoals = (profile.goals ?? [])
     .filter(g => g.status === 'active')
     .slice(0, 6)
-    .map(g => `  • ${g.title} (${(g.progressPercent ?? 0).toFixed(0)}%)`)
+    .map(g => `  • ${g.title ?? 'Goal'} (${(g.progressPercent ?? 0).toFixed(0)}%)`)
     .join('\n');
 
   const activeHabits = (profile.habits ?? [])
@@ -1542,14 +1545,10 @@ function buildWeeklyInsightUserPrompt(profile: {
     .map(j => `  • ${j.date ?? ''}: mood=${j.mood ?? 'okay'} — ${(j.snippet ?? '').slice(0, 80)}`)
     .join('\n');
 
-  const deepDiveInsights = profile.deepDive?.modules
-    ? Object.values(profile.deepDive.modules)
-        .map(m => m.insight?.trim())
-        .filter((t): t is string => !!t && t.length > 0)
-        .slice(-3)
-        .map(t => `  • ${t.slice(0, 120)}`)
-        .join('\n')
-    : '';
+  const deepDiveInsights = deepDiveModuleInsights(profile.deepDive)
+    .slice(-3)
+    .map(({ insight }) => `  • ${insight.slice(0, 120)}`)
+    .join('\n');
 
   const summaryLine = profile.mindsetBlueprintSummary
     ? `\nMindset Blueprint Summary: "${profile.mindsetBlueprintSummary}"`
@@ -1575,6 +1574,539 @@ Deep Dive Insights:
 ${deepDiveInsights || '  • None yet'}`;
 }
 
+// ─── Blueprint behavioral scoring + weekly AI recalibration ────────────────
+
+const BLUEPRINT_CALIBRATION_WINDOW_DAYS = 10;
+const BLUEPRINT_SNAPSHOT_HISTORY_MAX = 12;
+const BLUEPRINT_HABIT_DAY_THRESHOLD = 0.7;
+const BLUEPRINT_MAX_DELTA = 1.0;
+
+type MindsetBlueprintDoc = {
+  confidence?: number;
+  discipline?: number;
+  abundanceThinking?: number;
+  resilience?: number;
+  decisiveness?: number;
+};
+
+type BlueprintSnapshotDoc = {
+  blueprint: MindsetBlueprintDoc;
+  createdAt: string;
+  source: string;
+  rationale?: Record<string, string>;
+};
+
+type HabitDoc = {
+  state?: string;
+  frequency?: string;
+  completionHistory?: string[];
+};
+
+type GoalDoc = {
+  title?: string;
+  status?: string;
+  progressPercent?: number;
+  actionSteps?: Array<{ isCompleted?: boolean }>;
+};
+
+type EvidenceEntryDoc = {
+  content?: string;
+  createdAt?: string;
+};
+
+type BeliefPatternDoc = {
+  belief?: string;
+  reframe?: string;
+  identifiedAt?: string;
+};
+
+// Mirrors `kDeepDiveModuleIds` in lib/models/deep_dive.dart. Firestore stores
+// each module's { insight, completedAt } flattened directly under `deepDive`
+// (not nested under a `modules` key) — see deep_dive_provider.dart's
+// `deepDive.$moduleId.insight` update paths.
+const DEEP_DIVE_MODULE_IDS = [
+  'mindset_patterns',
+  'motivation_style',
+  'fear_inventory',
+  'identity_assessment',
+  'social_influence',
+] as const;
+
+type DeepDiveModuleDoc = { insight?: string; completedAt?: string };
+type DeepDiveDoc = Partial<Record<typeof DEEP_DIVE_MODULE_IDS[number], DeepDiveModuleDoc>>;
+
+function deepDiveModuleInsights(deepDive?: DeepDiveDoc): Array<{ id: string; insight: string }> {
+  if (!deepDive) return [];
+  const out: Array<{ id: string; insight: string }> = [];
+  for (const id of DEEP_DIVE_MODULE_IDS) {
+    const insight = deepDive[id]?.insight?.trim();
+    if (insight) out.push({ id, insight });
+  }
+  return out;
+}
+
+function blueprintGraceAnchor(now = new Date()): Date {
+  const adjusted = now.getHours() < 4
+    ? new Date(now.getTime() - 86400000)
+    : now;
+  return new Date(adjusted.getFullYear(), adjusted.getMonth(), adjusted.getDate());
+}
+
+function daysSinceBlueprintCalibrationStart(startIso?: string, now = new Date()): number {
+  if (!startIso) return 0;
+  const start = new Date(startIso);
+  if (Number.isNaN(start.getTime())) return 0;
+  const anchor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const today = blueprintGraceAnchor(now);
+  const diff = Math.floor((today.getTime() - anchor.getTime()) / 86400000);
+  return diff < 0 ? 0 : diff;
+}
+
+function blueprintEffectiveWindow(startIso?: string): number {
+  const available = daysSinceBlueprintCalibrationStart(startIso) + 1;
+  if (available < 1) return 1;
+  return available > BLUEPRINT_CALIBRATION_WINDOW_DAYS
+    ? BLUEPRINT_CALIBRATION_WINDOW_DAYS
+    : available;
+}
+
+function recentBlueprintDateStrings(count: number, now = new Date()): string[] {
+  const base = blueprintGraceAnchor(now);
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(base.getTime() - i * 86400000);
+    const m = (d.getMonth() + 1).toString().padStart(2, '0');
+    const day = d.getDate().toString().padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${day}`;
+  });
+}
+
+function pctToBlueprintTrait(pct: number): number {
+  const clamped = Math.max(0, Math.min(100, pct));
+  return Math.max(1, Math.min(10, 1 + (clamped / 100) * 9));
+}
+
+function hasHabitCompletionInPeriod(habit: HabitDoc, date: Date): boolean {
+  const history = habit.completionHistory ?? [];
+  if (history.length === 0) return false;
+  if (habit.frequency === 'weekly') {
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const weekStart = new Date(d);
+    weekStart.setDate(d.getDate() - (d.getDay() === 0 ? 6 : d.getDay() - 1));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    return history.some((raw) => {
+      const t = new Date(raw);
+      if (Number.isNaN(t.getTime())) return false;
+      const td = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+      return td >= weekStart && td <= weekEnd;
+    });
+  }
+  return history.some((raw) => {
+    const t = new Date(raw);
+    if (Number.isNaN(t.getTime())) return false;
+    return t.getFullYear() === date.getFullYear()
+      && t.getMonth() === date.getMonth()
+      && t.getDate() === date.getDate();
+  });
+}
+
+function computeBlueprintBehavioralEstimate(profile: {
+  habits?: HabitDoc[];
+  goals?: GoalDoc[];
+  dailyCompletions?: CompletionDoc[];
+  identityStatement?: string;
+  blueprintCalibrationStartedAt?: string;
+}, now = new Date()): MindsetBlueprintDoc {
+  const window = blueprintEffectiveWindow(profile.blueprintCalibrationStartedAt);
+  const dates = recentBlueprintDateStrings(window, now);
+  const byDate = new Map<string, CompletionDoc>();
+  for (const c of profile.dailyCompletions ?? []) {
+    if (c.date) byDate.set(c.date, c);
+  }
+
+  const activeHabits = (profile.habits ?? []).filter((h) => h.state === 'active');
+  let habitCredit = 0;
+  let priorityDays = 0;
+  if (activeHabits.length > 0) {
+    for (const date of dates) {
+      const parts = date.split('-');
+      const dayDate = new Date(
+        parseInt(parts[0], 10),
+        parseInt(parts[1], 10) - 1,
+        parseInt(parts[2], 10),
+      );
+      const completed = activeHabits
+        .filter((h) => hasHabitCompletionInPeriod(h, dayDate)).length;
+      const fraction = completed / activeHabits.length;
+      habitCredit += fraction >= BLUEPRINT_HABIT_DAY_THRESHOLD ? 1 : fraction;
+    }
+  }
+  for (const date of dates) {
+    if (byDate.get(date)?.priorityActionsCompleted) priorityDays++;
+  }
+  const habitPct = dates.length === 0 ? 0 : (habitCredit / dates.length) * 100;
+  const priorityPct = window <= 0 ? 0 : (priorityDays / window) * 100;
+  const discipline = pctToBlueprintTrait(habitPct * 0.7 + priorityPct * 0.3);
+
+  const qualifying = dates
+    .filter((d) => {
+      const c = byDate.get(d);
+      return c != null && completedCount(c) >= STREAK_THRESHOLD;
+    })
+    .sort();
+  let breaks = 0;
+  let recoveries = 0;
+  for (let i = 1; i < qualifying.length; i++) {
+    const prevParts = qualifying[i - 1].split('-');
+    const currParts = qualifying[i].split('-');
+    const prev = new Date(
+      parseInt(prevParts[0], 10),
+      parseInt(prevParts[1], 10) - 1,
+      parseInt(prevParts[2], 10),
+    );
+    const curr = new Date(
+      parseInt(currParts[0], 10),
+      parseInt(currParts[1], 10) - 1,
+      parseInt(currParts[2], 10),
+    );
+    const gap = Math.round((curr.getTime() - prev.getTime()) / 86400000);
+    if (gap > 1) {
+      breaks++;
+      if (gap <= 3) recoveries++;
+    }
+  }
+  const streak = computeStreak(profile.dailyCompletions ?? []);
+  const recoveryRate = breaks === 0 ? 1 : recoveries / breaks;
+  const consistency = qualifying.length / Math.max(window, 1);
+  const streakBonus = Math.min(streak / window, 1);
+  const resiliencePct = recoveryRate * 45 + consistency * 35 + streakBonus * 20;
+  const resilience = pctToBlueprintTrait(resiliencePct);
+
+  let totalSteps = 0;
+  let completedSteps = 0;
+  let focusDays = 0;
+  let planDays = 0;
+  for (const g of (profile.goals ?? []).filter((goal) => goal.status === 'active')) {
+    for (const step of g.actionSteps ?? []) {
+      totalSteps++;
+      if (step.isCompleted) completedSteps++;
+    }
+  }
+  for (const date of dates) {
+    const c = byDate.get(date);
+    if (!c) continue;
+    if (c.focusCompleted) focusDays++;
+    if (c.dayPlanned) planDays++;
+  }
+  const stepPct = totalSteps === 0 ? 50 : (completedSteps / totalSteps) * 100;
+  const focusPct = window <= 0 ? 0 : (focusDays / window) * 100;
+  const planPct = window <= 0 ? 0 : (planDays / window) * 100;
+  const decisiveness = pctToBlueprintTrait(stepPct * 0.5 + focusPct * 0.3 + planPct * 0.2);
+
+  let chatDays = 0;
+  let journalDays = 0;
+  let identityDays = 0;
+  let evidenceDays = 0;
+  for (const date of dates) {
+    const c = byDate.get(date);
+    if (!c) continue;
+    if (c.chatCompleted) chatDays++;
+    if (c.journalCompleted) journalDays++;
+    if (c.identityRead) identityDays++;
+    if (c.evidenceLogged) evidenceDays++;
+  }
+  const breadth = [
+    chatDays > 0,
+    journalDays > 0,
+    identityDays > 0,
+    evidenceDays > 0,
+    (profile.identityStatement ?? '').length > 0,
+  ].filter(Boolean).length;
+  const engagementPct = window <= 0
+    ? 0
+    : ((chatDays + journalDays + identityDays + evidenceDays) / (window * 4)) * 100;
+  const breadthPct = (breadth / 5) * 100;
+  const confidence = pctToBlueprintTrait(engagementPct * 0.6 + breadthPct * 0.4);
+
+  const activeGoals = (profile.goals ?? []).filter((g) => g.status === 'active');
+  const goalProgress = activeGoals.length === 0
+    ? 0
+    : activeGoals.reduce((sum, g) => sum + (g.progressPercent ?? 0), 0) / activeGoals.length;
+  let gratitudeDays = 0;
+  for (const date of dates) {
+    if (byDate.get(date)?.gratitudeLogged) gratitudeDays++;
+  }
+  const goalSettingBonus = (Math.min(activeGoals.length, 5) / 5) * 100;
+  const gratitudePct = window <= 0 ? 0 : (gratitudeDays / window) * 100;
+  const abundanceThinking = pctToBlueprintTrait(
+    goalProgress * 0.45 + goalSettingBonus * 0.25 + gratitudePct * 0.30,
+  );
+
+  return {
+    confidence,
+    discipline,
+    abundanceThinking,
+    resilience,
+    decisiveness,
+  };
+}
+
+function normalizeBlueprintDoc(raw?: MindsetBlueprintDoc): MindsetBlueprintDoc {
+  return {
+    confidence: raw?.confidence ?? 5,
+    discipline: raw?.discipline ?? 5,
+    abundanceThinking: raw?.abundanceThinking ?? 5,
+    resilience: raw?.resilience ?? 5,
+    decisiveness: raw?.decisiveness ?? 5,
+  };
+}
+
+function clampBlueprintTrait(value: number): number {
+  return Math.max(1, Math.min(10, value));
+}
+
+function buildBlueprintRecalcUserPrompt(profile: {
+  displayName?: string;
+  mindsetBlueprint?: MindsetBlueprintDoc;
+  limitingBeliefs?: string[];
+  goals?: GoalDoc[];
+  habits?: HabitDoc[];
+  dailyCompletions?: CompletionDoc[];
+  recentJournalSummaries?: Array<{ date?: string; mood?: string; snippet?: string }>;
+  coachMemory?: { longTermSummary?: string; recurringPatterns?: string[] };
+  identityStatement?: string;
+  blueprintCalibrationStartedAt?: string;
+  evidenceLog?: EvidenceEntryDoc[];
+  beliefPatternHistory?: BeliefPatternDoc[];
+  deepDive?: DeepDiveDoc;
+}): string {
+  const current = normalizeBlueprintDoc(profile.mindsetBlueprint);
+  const behavioral = computeBlueprintBehavioralEstimate(profile);
+  const journalLines = (profile.recentJournalSummaries ?? [])
+    .slice(-5)
+    .map((j) => `  • ${j.date ?? ''}: mood=${j.mood ?? 'okay'} — ${(j.snippet ?? '').slice(0, 80)}`)
+    .join('\n');
+  const patterns = (profile.coachMemory?.recurringPatterns ?? [])
+    .slice(-3)
+    .map((p) => `  • ${p.slice(0, 120)}`)
+    .join('\n');
+
+  const evidenceLines = (profile.evidenceLog ?? [])
+    .slice(-5)
+    .map((e) => `  • ${(e.content ?? '').slice(0, 140)}`)
+    .join('\n');
+
+  const activeLimitingBeliefs = profile.limitingBeliefs ?? [];
+  const beliefLines = (profile.beliefPatternHistory ?? [])
+    .slice(-5)
+    .map((b) => {
+      const belief = b.belief ?? '';
+      const stillActive = activeLimitingBeliefs.some(
+        (lb) => lb.trim().toLowerCase() === belief.trim().toLowerCase(),
+      );
+      const status = stillActive ? 'still listed as a limiting belief' : 'resolved';
+      return `  • "${belief}" → "${b.reframe ?? ''}" (${status})`;
+    })
+    .join('\n');
+
+  const deepDiveLines = deepDiveModuleInsights(profile.deepDive)
+    .map(({ id, insight }) => `  • [${id}] ${insight.slice(0, 160)}`)
+    .join('\n');
+
+  return `USER CONTEXT:
+Name: ${profile.displayName ?? 'User'}
+Identity: "${profile.identityStatement ?? ''}"
+Limiting Beliefs: ${(profile.limitingBeliefs ?? []).join('; ') || 'None identified'}
+
+Current Mindset Blueprint (1–10):
+  Confidence: ${current.confidence?.toFixed(1)}
+  Discipline: ${current.discipline?.toFixed(1)}
+  Abundance Thinking: ${current.abundanceThinking?.toFixed(1)}
+  Resilience: ${current.resilience?.toFixed(1)}
+  Decisiveness: ${current.decisiveness?.toFixed(1)}
+
+Behavioral proxy estimates (1–10, from app activity):
+  Confidence: ${behavioral.confidence?.toFixed(1)}
+  Discipline: ${behavioral.discipline?.toFixed(1)}
+  Abundance Thinking: ${behavioral.abundanceThinking?.toFixed(1)}
+  Resilience: ${behavioral.resilience?.toFixed(1)}
+  Decisiveness: ${behavioral.decisiveness?.toFixed(1)}
+
+Recent Journal Mood:
+${journalLines || '  • No recent entries'}
+
+Evidence Log (self-authored proof of growth — strongest signal for Confidence):
+${evidenceLines || '  • No entries yet'}
+
+Belief Reframes (limiting beliefs the coach has helped reframe — strong signal for Confidence and Abundance Thinking):
+${beliefLines || '  • None yet'}
+
+Deep Dive Module Insights (strong signal for Resilience, Confidence, and Abundance Thinking):
+${deepDiveLines || '  • None yet'}
+
+Coach Memory Patterns:
+${patterns || '  • None yet'}
+${profile.coachMemory?.longTermSummary
+    ? `\nLong-term summary: ${profile.coachMemory.longTermSummary.slice(0, 200)}`
+    : ''}`;
+}
+
+function parseBlueprintRecalcResponse(text: string): {
+  deltas: MindsetBlueprintDoc;
+  rationale: Record<string, string>;
+} | null {
+  try {
+    const jsonStr = text.includes('{')
+      ? text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1)
+      : text;
+    const data = JSON.parse(jsonStr) as Record<string, unknown>;
+    const rawDeltas = (data.deltas ?? data) as Record<string, unknown>;
+    const rawRationale = (data.rationale ?? {}) as Record<string, unknown>;
+    const keys = [
+      'confidence',
+      'discipline',
+      'abundanceThinking',
+      'resilience',
+      'decisiveness',
+    ] as const;
+    const deltas: MindsetBlueprintDoc = {};
+    const rationale: Record<string, string> = {};
+    for (const key of keys) {
+      const delta = Number(rawDeltas[key] ?? 0);
+      if (!Number.isFinite(delta)) continue;
+      deltas[key] = Math.max(-BLUEPRINT_MAX_DELTA, Math.min(BLUEPRINT_MAX_DELTA, delta));
+      const reason = String(rawRationale[key] ?? '').trim();
+      if (reason) rationale[key] = reason;
+    }
+    return { deltas, rationale };
+  } catch {
+    return null;
+  }
+}
+
+function applyBlueprintDeltas(
+  current: MindsetBlueprintDoc,
+  deltas: MindsetBlueprintDoc,
+): MindsetBlueprintDoc {
+  const base = normalizeBlueprintDoc(current);
+  return {
+    confidence: clampBlueprintTrait((base.confidence ?? 5) + (deltas.confidence ?? 0)),
+    discipline: clampBlueprintTrait((base.discipline ?? 5) + (deltas.discipline ?? 0)),
+    abundanceThinking: clampBlueprintTrait(
+      (base.abundanceThinking ?? 5) + (deltas.abundanceThinking ?? 0),
+    ),
+    resilience: clampBlueprintTrait((base.resilience ?? 5) + (deltas.resilience ?? 0)),
+    decisiveness: clampBlueprintTrait((base.decisiveness ?? 5) + (deltas.decisiveness ?? 0)),
+  };
+}
+
+function rotateBlueprintSnapshotHistory(
+  current: MindsetBlueprintDoc,
+  history: BlueprintSnapshotDoc[],
+  createdAt: string,
+  rationale: Record<string, string>,
+): BlueprintSnapshotDoc[] {
+  const archived: BlueprintSnapshotDoc = {
+    blueprint: current,
+    createdAt,
+    source: 'weekly_ai',
+    rationale,
+  };
+  return [archived, ...history].slice(0, BLUEPRINT_SNAPSHOT_HISTORY_MAX);
+}
+
+function blueprintRecalcWeekKey(lastRecalculatedAt?: string, tz?: string): string | null {
+  if (!lastRecalculatedAt) return null;
+  const parsed = new Date(lastRecalculatedAt);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return getLocalTimeInfo(parsed, tz).dateKey;
+}
+
+async function maybeRecalculateBlueprint(
+  userDoc: admin.firestore.QueryDocumentSnapshot,
+  profile: {
+    displayName?: string;
+    identityStatement?: string;
+    limitingBeliefs?: string[];
+    goals?: GoalDoc[];
+    habits?: HabitDoc[];
+    dailyCompletions?: CompletionDoc[];
+    recentJournalSummaries?: Array<{ date?: string; mood?: string; snippet?: string }>;
+    coachMemory?: { longTermSummary?: string; recurringPatterns?: string[] };
+    mindsetBlueprint?: MindsetBlueprintDoc;
+    blueprintCompleted?: boolean;
+    blueprintCalibrationStartedAt?: string;
+    blueprintLastRecalculatedAt?: string;
+    blueprintSnapshotHistory?: BlueprintSnapshotDoc[];
+    evidenceLog?: EvidenceEntryDoc[];
+    beliefPatternHistory?: BeliefPatternDoc[];
+    deepDive?: DeepDiveDoc;
+    timezone?: string;
+  },
+  weekEnding: string,
+  apiKey: string,
+  now: Date,
+): Promise<void> {
+  if (!profile.blueprintCompleted) return;
+  if (!profile.blueprintCalibrationStartedAt) return;
+  if (
+    daysSinceBlueprintCalibrationStart(profile.blueprintCalibrationStartedAt, now)
+    < BLUEPRINT_CALIBRATION_WINDOW_DAYS - 1
+  ) {
+    return;
+  }
+  if (
+    countActiveDaysPastWeek(profile.dailyCompletions ?? [], profile.timezone)
+    < WEEKLY_INSIGHT_ACTIVE_DAY_THRESHOLD
+  ) {
+    return;
+  }
+  if (blueprintRecalcWeekKey(profile.blueprintLastRecalculatedAt, profile.timezone) === weekEnding) {
+    return;
+  }
+
+  const current = normalizeBlueprintDoc(profile.mindsetBlueprint);
+  const userPrompt = buildBlueprintRecalcUserPrompt(profile);
+  const response = await callAnthropicInternal(
+    'You are a mindset coach refining a user\'s Mindset Blueprint trait scores (1–10). '
+      + 'Return ONLY valid JSON with two keys: '
+      + '"deltas" (object with confidence, discipline, abundanceThinking, resilience, decisiveness — each a small number from -1.0 to +1.0) '
+      + 'and "rationale" (object with the same keys, one short sentence per trait that changed, explaining why). '
+      + 'Use behavioral proxies and qualitative journal/coach context. Be conservative — most weeks change 0–2 traits by ≤0.5. '
+      + 'Never move a trait more than ±1.0 in one week. '
+      + 'Evidence log entries and belief reframes are the strongest available signals for Confidence, Abundance Thinking, and Resilience — '
+      + 'weigh them heavily for those three traits, since behavioral activity data is weak there. '
+      + 'If there is not enough behavioral or journal evidence to justify a change for a trait, return a delta of 0 for it rather than guessing. '
+      + 'No other text.',
+    userPrompt,
+    350,
+    apiKey,
+  );
+
+  const parsed = parseBlueprintRecalcResponse(response);
+  if (!parsed) {
+    console.error(`Failed to parse blueprint recalc for user ${userDoc.id}`);
+    return;
+  }
+
+  const updated = applyBlueprintDeltas(current, parsed.deltas);
+  const nowIso = now.toISOString();
+  const history = rotateBlueprintSnapshotHistory(
+    current,
+    profile.blueprintSnapshotHistory ?? [],
+    profile.blueprintLastRecalculatedAt ?? nowIso,
+    parsed.rationale,
+  );
+
+  await userDoc.ref.update({
+    mindsetBlueprint: updated,
+    blueprintLastRecalculatedAt: nowIso,
+    blueprintSnapshotHistory: history,
+  });
+
+  console.log(`Blueprint recalculated for user: ${userDoc.id}`);
+}
+
 export const weeklyInsightDelivery = onSchedule(
   { schedule: '0 * * * *', secrets: [anthropicKey], timeoutSeconds: 540 },
   async () => {
@@ -1590,12 +2122,20 @@ export const weeklyInsightDelivery = onSchedule(
         displayName?: string;
         identityStatement?: string;
         limitingBeliefs?: string[];
-        goals?: Array<{ title: string; status: string; progressPercent?: number }>;
-        habits?: Array<{ name?: string; state?: string }>;
+        goals?: GoalDoc[];
+        habits?: HabitDoc[];
         dailyCompletions?: CompletionDoc[];
         recentJournalSummaries?: Array<{ date?: string; mood?: string; snippet?: string }>;
         mindsetBlueprintSummary?: string;
-        deepDive?: { modules?: Record<string, { insight?: string }> };
+        mindsetBlueprint?: MindsetBlueprintDoc;
+        blueprintCompleted?: boolean;
+        blueprintCalibrationStartedAt?: string;
+        blueprintLastRecalculatedAt?: string;
+        blueprintSnapshotHistory?: BlueprintSnapshotDoc[];
+        coachMemory?: { longTermSummary?: string; recurringPatterns?: string[] };
+        deepDive?: DeepDiveDoc;
+        evidenceLog?: EvidenceEntryDoc[];
+        beliefPatternHistory?: BeliefPatternDoc[];
         timezone?: string;
         fcmToken?: string;
         weeklyInsight?: WeeklyInsightDoc;
@@ -1609,6 +2149,20 @@ export const weeklyInsightDelivery = onSchedule(
       if (!isWeeklyInsightDeliveryWindow(now, profile.timezone)) return;
 
       const { dateKey: weekEnding } = getLocalTimeInfo(now, profile.timezone);
+
+      // Blueprint recalculation runs independently of weekly insight eligibility.
+      try {
+        await maybeRecalculateBlueprint(
+          userDoc,
+          profile,
+          weekEnding,
+          apiKey,
+          now,
+        );
+      } catch (err) {
+        console.error(`Failed blueprint recalc for user ${userDoc.id}:`, err);
+      }
+
       if (profile.weeklyInsight?.weekEnding === weekEnding) return;
 
       if (

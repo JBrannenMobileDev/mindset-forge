@@ -63,7 +63,7 @@ class ClaudeService {
 
   /// Calls the multi-turn `callClaudeConversation` Cloud Function with a real
   /// messages array. Throws on network/server error.
-  Future<String> completeConversation({
+  Future<({String content, bool truncated})> completeConversation({
     required String systemPrompt,
     required List<Map<String, String>> messages,
     int maxTokens = 1200,
@@ -76,7 +76,12 @@ class ClaudeService {
         'maxTokens': maxTokens,
       });
       final content = result.data['content'];
-      if (content is String) return content;
+      if (content is String) {
+        return (
+          content: content,
+          truncated: result.data['truncated'] as bool? ?? false,
+        );
+      }
       throw Exception('Unexpected response shape from callClaudeConversation');
     } on FirebaseFunctionsException catch (e) {
       debugPrint(
@@ -277,12 +282,19 @@ RULES — NEVER BREAK THESE:
     final messages = _buildConversationMessages(history, userMessage);
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
-        final raw = await completeConversation(
+        final result = await completeConversation(
           systemPrompt: _coachUserContext(profile),
           messages: messages,
-          maxTokens: 1500,
+          maxTokens: attempt == 0 ? 2200 : 3000,
         );
-        return CoachReply.parse(raw);
+        if (result.truncated && attempt < 2) {
+          debugPrint(
+            'ClaudeService.generateCoachResponse: truncated on attempt '
+            '${attempt + 1}, retrying with higher maxTokens',
+          );
+          continue;
+        }
+        return CoachReply.parse(result.content);
       } catch (e) {
         if (attempt < 2) {
           await Future.delayed(Duration(seconds: attempt + 1));

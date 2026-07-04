@@ -56,6 +56,12 @@ class UserProfile {
   final String mindsetBlueprintSummary;
   final String? mindsetBlueprintSnapshotAt;
   final List<BlueprintSnapshot> blueprintSnapshotHistory;
+
+  /// ISO timestamp when the 10-day behavioral calibration window began.
+  final String? blueprintCalibrationStartedAt;
+
+  /// ISO timestamp of the last automatic weekly AI blueprint recalculation.
+  final String? blueprintLastRecalculatedAt;
   final Map<String, String> dailyWisdom;
   final List<String> priorityActions;
   final String priorityActionsDate;
@@ -144,6 +150,8 @@ class UserProfile {
     this.mindsetBlueprintSummary = '',
     this.mindsetBlueprintSnapshotAt,
     this.blueprintSnapshotHistory = const [],
+    this.blueprintCalibrationStartedAt,
+    this.blueprintLastRecalculatedAt,
     this.dailyWisdom = const {},
     this.priorityActions = const [],
     this.priorityActionsDate = '',
@@ -351,6 +359,8 @@ class UserProfile {
     String? mindsetBlueprintSummary,
     String? mindsetBlueprintSnapshotAt,
     List<BlueprintSnapshot>? blueprintSnapshotHistory,
+    String? blueprintCalibrationStartedAt,
+    String? blueprintLastRecalculatedAt,
     Map<String, String>? dailyWisdom,
     List<String>? priorityActions,
     String? priorityActionsDate,
@@ -417,6 +427,10 @@ class UserProfile {
           mindsetBlueprintSnapshotAt ?? this.mindsetBlueprintSnapshotAt,
       blueprintSnapshotHistory:
           blueprintSnapshotHistory ?? this.blueprintSnapshotHistory,
+      blueprintCalibrationStartedAt:
+          blueprintCalibrationStartedAt ?? this.blueprintCalibrationStartedAt,
+      blueprintLastRecalculatedAt:
+          blueprintLastRecalculatedAt ?? this.blueprintLastRecalculatedAt,
       dailyWisdom: dailyWisdom ?? this.dailyWisdom,
       priorityActions: priorityActions ?? this.priorityActions,
       priorityActionsDate: priorityActionsDate ?? this.priorityActionsDate,
@@ -557,6 +571,10 @@ class UserProfile {
                       BlueprintSnapshot.fromJson(e as Map<String, dynamic>))
                   .toList() ??
               [],
+      blueprintCalibrationStartedAt:
+          json['blueprintCalibrationStartedAt'] as String?,
+      blueprintLastRecalculatedAt:
+          json['blueprintLastRecalculatedAt'] as String?,
       dailyWisdom:
           Map<String, String>.from(json['dailyWisdom'] as Map? ?? {}),
       priorityActions:
@@ -660,6 +678,10 @@ class UserProfile {
           'mindsetBlueprintSnapshotAt': mindsetBlueprintSnapshotAt,
         'blueprintSnapshotHistory':
             blueprintSnapshotHistory.map((e) => e.toJson()).toList(),
+        if (blueprintCalibrationStartedAt != null)
+          'blueprintCalibrationStartedAt': blueprintCalibrationStartedAt,
+        if (blueprintLastRecalculatedAt != null)
+          'blueprintLastRecalculatedAt': blueprintLastRecalculatedAt,
         'dailyWisdom': dailyWisdom,
         'priorityActions': priorityActions,
         'priorityActionsDate': priorityActionsDate,

@@ -8,21 +8,27 @@ class BlueprintSnapshot {
   final String createdAt;
   final String source;
 
+  /// One-line explanation per trait key (e.g. `discipline`) for automatic updates.
+  final Map<String, String> rationale;
+
   const BlueprintSnapshot({
     required this.blueprint,
     required this.createdAt,
     this.source = 'self_assessment',
+    this.rationale = const {},
   });
 
   BlueprintSnapshot copyWith({
     MindsetBlueprint? blueprint,
     String? createdAt,
     String? source,
+    Map<String, String>? rationale,
   }) {
     return BlueprintSnapshot(
       blueprint: blueprint ?? this.blueprint,
       createdAt: createdAt ?? this.createdAt,
       source: source ?? this.source,
+      rationale: rationale ?? this.rationale,
     );
   }
 
@@ -35,6 +41,9 @@ class BlueprintSnapshot {
           : const MindsetBlueprint(),
       createdAt: json['createdAt'] as String? ?? '',
       source: json['source'] as String? ?? 'self_assessment',
+      rationale: Map<String, String>.from(
+        json['rationale'] as Map? ?? {},
+      ),
     );
   }
 
@@ -42,5 +51,6 @@ class BlueprintSnapshot {
         'blueprint': blueprint.toJson(),
         'createdAt': createdAt,
         'source': source,
+        if (rationale.isNotEmpty) 'rationale': rationale,
       };
 }
