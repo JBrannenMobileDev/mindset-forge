@@ -82,9 +82,13 @@ class _StepMentalToughnessState extends State<StepMentalToughness> {
         AppColors.success),
   ];
 
-  _Band get _currentBand =>
-      _bands.firstWhere((b) => _finalScore >= b.min && _finalScore <= b.max,
-          orElse: () => _bands.last);
+  _Band get _currentBand {
+    final s = _finalScore.round();
+    return _bands.firstWhere(
+      (b) => s >= b.min && s <= b.max,
+      orElse: () => _bands.first,
+    );
+  }
 
   void _selectAnswer(int score) {
     final updated = List<int>.from(_answers)..add(score);

@@ -56,6 +56,8 @@ abstract final class AppStrings {
       'Manage your subscription in the app';
   static const String manageSubscriptionWebSubtitle =
       'Subscriptions are purchased and managed in the MindsetForge mobile app. Open the app on your phone to subscribe or change your plan.';
+  static const String pricingCancelAnytimeNote =
+      'Cancel anytime · no questions asked';
 
   // Auth
   static const String getStarted = 'Get Started';
@@ -199,6 +201,17 @@ abstract final class AppStrings {
   static const String onboardingAssessmentTitle = 'Your Mindset Assessment';
   static const String onboardingAssessmentSubtitle =
       'Rate yourself honestly on each trait. This is your starting point.';
+
+  // Blueprint setup — AI-seeded trait sliders + beliefs recap
+  static const String blueprintAssessmentTitle = 'Your Starting Point';
+  static const String blueprintAssessmentSubtitle =
+      "Here's where we think you're starting, based on what you've shared. Nudge anything that doesn't feel right.";
+  static const String blueprintAssessmentLoading = 'Reading your profile...';
+  static const String blueprintBeliefsRecapTitle = "What's Holding You Back";
+  static const String blueprintBeliefsRecapCaption =
+      'From what you shared earlier. You can refine these anytime in your Blueprint.';
+  static const String blueprintBeliefsRecapEmpty =
+      "You haven't named any limiting beliefs yet — you can add them anytime in your Blueprint.";
   static const String onboardingBeliefsTitle = 'Your Limiting Beliefs';
   static const String onboardingBeliefsSubtitle =
       'What stories are holding you back? Name them so we can reprogram them.';

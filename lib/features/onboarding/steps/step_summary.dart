@@ -229,8 +229,9 @@ class StepSummary extends StatelessWidget {
   }
 
   Widget _toughnessBadge(double score) {
-    final label = score <= 33 ? 'Still Building' : score <= 66 ? 'Rising' : 'Champion';
-    final color = score <= 33 ? AppColors.error : score <= 66 ? AppColors.warning : AppColors.success;
+    final s = score.round();
+    final label = s <= 33 ? 'Still Building' : s <= 66 ? 'Rising' : 'Champion';
+    final color = s <= 33 ? AppColors.error : s <= 66 ? AppColors.warning : AppColors.success;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
       decoration: BoxDecoration(

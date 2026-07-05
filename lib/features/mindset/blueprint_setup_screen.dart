@@ -139,13 +139,15 @@ class _BlueprintSetupScreenState extends ConsumerState<BlueprintSetupScreen> {
           controller: _pageController,
           physics: const NeverScrollableScrollPhysics(),
           children: [
-            // Page 0 — trait sliders + limiting beliefs
+            // Page 0 — AI-seeded trait sliders + limiting beliefs recap
             StepAssessment(
               initialBlueprint: _blueprint,
               initialBeliefs: _beliefs,
-              onNext: (blueprint, beliefs) {
+              blueprintCompleted:
+                  ref.read(currentUserProfileProvider).valueOrNull?.blueprintCompleted ??
+                      false,
+              onNext: (blueprint) {
                 _blueprint = blueprint;
-                _beliefs = beliefs;
                 _savePartial();
                 _goToPage(1);
               },

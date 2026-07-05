@@ -86,7 +86,7 @@ MindsetForge is a mindset and personal-growth coach. It is not therapy, counseli
 
 SUBSCRIPTION
 
-MindsetForge Premium unlocks full access and starts with a 7-day free trial, then $9.99/month or $71.88/year. Payment is charged to your Apple ID at confirmation of purchase. Your subscription auto-renews unless it is turned off at least 24 hours before the end of the current period, and your account is charged for renewal within 24 hours before the period ends. Manage or cancel anytime in your App Store account settings after purchase.
+MindsetForge Premium unlocks full access and starts with a 7-day free trial, then $12.99/month or $99.99/year. Payment is charged to your Apple ID at confirmation of purchase. Your subscription auto-renews unless it is turned off at least 24 hours before the end of the current period, and your account is charged for renewal within 24 hours before the period ends. Manage or cancel anytime in your App Store account settings after purchase.
 
 Terms of Use: https://app.mindsetforge.app/terms-of-service.html
 Privacy Policy: https://app.mindsetforge.app/privacy-policy.html

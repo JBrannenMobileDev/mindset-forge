@@ -328,12 +328,29 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
               ),
             ],
             const SizedBox(height: AppSpacing.xl),
-            if (current != null)
+            if (current != null) ...[
               AppPrimaryButton(
                 label: _isPurchasing ? 'Processing...' : 'Start 7-Day Free Trial',
                 onPressed: _isPurchasing ? null : _purchase,
                 isLoading: _isPurchasing,
               ),
+              const SizedBox(height: AppSpacing.sm),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.check_circle_outline_rounded,
+                    size: 14,
+                    color: AppColors.textMuted,
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Text(
+                    AppStrings.pricingCancelAnytimeNote,
+                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted),
+                  ),
+                ],
+              ),
+            ],
             if (_errorMessage != null) ...[
               const SizedBox(height: AppSpacing.md),
               Text(
@@ -507,8 +524,26 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
     );
   }
 
+  int? _annualSavingsPercent(Offering current) {
+    final monthly = current.monthly;
+    final annual = current.annual;
+    if (monthly == null || annual == null) return null;
+    final monthlyPrice = monthly.storeProduct.price;
+    final annualPrice = annual.storeProduct.price;
+    if (monthlyPrice <= 0 || annualPrice <= 0) return null;
+    final yearlyCostAtMonthlyRate = monthlyPrice * 12;
+    final percent =
+        ((yearlyCostAtMonthlyRate - annualPrice) / yearlyCostAtMonthlyRate * 100)
+            .round();
+    return percent > 0 ? percent : null;
+  }
+
   Widget _buildToggle(Offering current) {
     final hasAnnual = current.annual != null;
+    final savingsPercent = _annualSavingsPercent(current);
+    final annualLabel = savingsPercent != null
+        ? 'Annual  🔥 Save $savingsPercent%'
+        : 'Annual';
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
@@ -530,7 +565,7 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
             },
           ),
           _ToggleOption(
-            label: 'Annual  🔥 Save 40%',
+            label: annualLabel,
             isSelected: _isAnnual,
             enabled: hasAnnual,
             onTap: () {

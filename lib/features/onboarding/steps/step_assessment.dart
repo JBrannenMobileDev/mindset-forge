@@ -1,42 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/shimmer_widget.dart';
 import '../../../models/mindset_blueprint.dart';
+import '../../../providers/auth_provider.dart';
+import '../../../providers/claude_provider.dart';
 
-/// Combined mindset assessment + limiting beliefs step.
-class StepAssessment extends StatefulWidget {
+/// Mindset trait assessment step.
+///
+/// Rather than handing the user 5 blank sliders and asking them to guess a
+/// number 1-10 (noisy, no anchoring, invites social-desirability bias), we
+/// infer a starting point from what they've already told the app — situation,
+/// aspired qualities, goals, and the limiting beliefs they selected — via
+/// [ClaudeService.inferBaselineBlueprint], then let them react and tune
+/// (recognition, not blank recall). Limiting beliefs are NOT re-collected
+/// here; they were already captured in onboarding's `StepBlocker` and remain
+/// editable in the Blueprint tab, so this step only recaps them for context.
+class StepAssessment extends ConsumerStatefulWidget {
   final MindsetBlueprint initialBlueprint;
   final List<String> initialBeliefs;
-  final void Function(MindsetBlueprint blueprint, List<String> beliefs) onNext;
+  final bool blueprintCompleted;
+  final void Function(MindsetBlueprint blueprint) onNext;
   final VoidCallback onBack;
 
   const StepAssessment({
     super.key,
     required this.initialBlueprint,
     required this.initialBeliefs,
+    required this.blueprintCompleted,
     required this.onNext,
     required this.onBack,
   });
 
   @override
-  State<StepAssessment> createState() => _StepAssessmentState();
+  ConsumerState<StepAssessment> createState() => _StepAssessmentState();
 }
 
-class _StepAssessmentState extends State<StepAssessment> {
+class _StepAssessmentState extends ConsumerState<StepAssessment> {
   late double _confidence;
   late double _discipline;
   late double _abundance;
   late double _resilience;
   late double _decisiveness;
 
-  late List<String> _beliefs;
-  final _beliefCtrl = TextEditingController();
-  String? _errorText;
+  bool _loading = false;
 
   static const _traits = [
     _TraitMeta(
@@ -66,33 +79,34 @@ class _StepAssessmentState extends State<StepAssessment> {
     ),
   ];
 
-  static const _suggestions = [
-    "I'm not good enough",
-    "Money is hard to make",
-    "I always fail",
-    "Success isn't for people like me",
-    "I don't deserve success",
-    "People will judge me",
-    "I'm too young/old",
-    "I lack the talent",
-  ];
-
   @override
   void initState() {
     super.initState();
-    final b = widget.initialBlueprint;
+    _applyBlueprint(widget.initialBlueprint);
+    if (!widget.blueprintCompleted) {
+      _inferBaseline();
+    }
+  }
+
+  void _applyBlueprint(MindsetBlueprint b) {
     _confidence = b.confidence;
     _discipline = b.discipline;
     _abundance = b.abundanceThinking;
     _resilience = b.resilience;
     _decisiveness = b.decisiveness;
-    _beliefs = List.from(widget.initialBeliefs);
   }
 
-  @override
-  void dispose() {
-    _beliefCtrl.dispose();
-    super.dispose();
+  Future<void> _inferBaseline() async {
+    final profile = ref.read(currentUserProfileProvider).valueOrNull;
+    if (profile == null) return;
+    setState(() => _loading = true);
+    final inferred =
+        await ref.read(claudeServiceProvider).inferBaselineBlueprint(profile);
+    if (!mounted) return;
+    setState(() {
+      _applyBlueprint(inferred);
+      _loading = false;
+    });
   }
 
   double _getTraitValue(int index) => switch (index) {
@@ -122,24 +136,7 @@ class _StepAssessmentState extends State<StepAssessment> {
     return '💪';
   }
 
-  void _addBelief(String belief) {
-    final trimmed = belief.trim();
-    if (trimmed.isEmpty || _beliefs.contains(trimmed)) return;
-    setState(() {
-      _beliefs = [..._beliefs, trimmed];
-      _beliefCtrl.clear();
-      _errorText = null;
-    });
-  }
-
-  void _removeBelief(String belief) =>
-      setState(() => _beliefs = _beliefs.where((b) => b != belief).toList());
-
   void _tryNext() {
-    if (_beliefs.isEmpty) {
-      setState(() => _errorText = 'Add at least one limiting belief to continue.');
-      return;
-    }
     widget.onNext(
       MindsetBlueprint(
         confidence: _confidence,
@@ -148,7 +145,6 @@ class _StepAssessmentState extends State<StepAssessment> {
         resilience: _resilience,
         decisiveness: _decisiveness,
       ),
-      _beliefs,
     );
   }
 
@@ -168,182 +164,133 @@ class _StepAssessmentState extends State<StepAssessment> {
               children: [
                 // ── Trait sliders ──────────────────────────────────────────
                 Text(
-                  AppStrings.onboardingAssessmentTitle,
+                  AppStrings.blueprintAssessmentTitle,
                   style: AppTextStyles.headlineLarge,
                 ).animate().fadeIn(duration: 400.ms),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  AppStrings.onboardingAssessmentSubtitle,
+                  AppStrings.blueprintAssessmentSubtitle,
                   style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
                 ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
                 const SizedBox(height: AppSpacing.xl),
 
-                ...List.generate(_traits.length, (i) {
-                  final value = _getTraitValue(i);
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                    child: AppCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(_traits[i].icon, color: AppColors.primary, size: 20),
-                              const SizedBox(width: AppSpacing.sm),
-                              Text(_traits[i].name, style: AppTextStyles.labelLarge),
-                              const Spacer(),
-                              Text(_emoji(value), style: const TextStyle(fontSize: 20)),
-                              const SizedBox(width: AppSpacing.sm),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: AppSpacing.sm,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primaryContainer,
-                                  borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
-                                ),
-                                child: Text(
-                                  value.toStringAsFixed(0),
-                                  style: AppTextStyles.labelLarge.copyWith(color: AppColors.primary),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(
-                            _traits[i].description,
-                            style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                          Row(
-                            children: [
-                              Text('1', style: AppTextStyles.labelSmall),
-                              Expanded(
-                                child: Slider(
-                                  value: value,
-                                  min: 1,
-                                  max: 10,
-                                  divisions: 9,
-                                  label: value.toStringAsFixed(0),
-                                  onChanged: (v) => _setTraitValue(i, v),
-                                ),
-                              ),
-                              Text('10', style: AppTextStyles.labelSmall),
-                            ],
-                          ),
-                        ],
+                if (_loading) ...[
+                  Row(
+                    children: [
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.primary),
                       ),
-                    ).animate().fadeIn(delay: Duration(milliseconds: 200 + i * 80), duration: 400.ms),
-                  );
-                }),
+                      const SizedBox(width: AppSpacing.sm),
+                      Text(
+                        AppStrings.blueprintAssessmentLoading,
+                        style: AppTextStyles.bodyMedium
+                            .copyWith(color: AppColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  const ShimmerList(count: 5, itemHeight: 120),
+                ] else
+                  ...List.generate(_traits.length, (i) {
+                    final value = _getTraitValue(i);
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                      child: AppCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(_traits[i].icon, color: AppColors.primary, size: 20),
+                                const SizedBox(width: AppSpacing.sm),
+                                Text(_traits[i].name, style: AppTextStyles.labelLarge),
+                                const Spacer(),
+                                Text(_emoji(value), style: const TextStyle(fontSize: 20)),
+                                const SizedBox(width: AppSpacing.sm),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: AppSpacing.sm,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryContainer,
+                                    borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
+                                  ),
+                                  child: Text(
+                                    value.toStringAsFixed(0),
+                                    style: AppTextStyles.labelLarge.copyWith(color: AppColors.primary),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: AppSpacing.xs),
+                            Text(
+                              _traits[i].description,
+                              style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                            ),
+                            const SizedBox(height: AppSpacing.sm),
+                            Row(
+                              children: [
+                                Text('1', style: AppTextStyles.labelSmall),
+                                Expanded(
+                                  child: Slider(
+                                    value: value,
+                                    min: 1,
+                                    max: 10,
+                                    divisions: 9,
+                                    label: value.toStringAsFixed(0),
+                                    onChanged: (v) => _setTraitValue(i, v),
+                                  ),
+                                ),
+                                Text('10', style: AppTextStyles.labelSmall),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ).animate().fadeIn(delay: Duration(milliseconds: 200 + i * 80), duration: 400.ms),
+                    );
+                  }),
 
                 const SizedBox(height: AppSpacing.xl),
-                Divider(color: AppColors.border),
+                const Divider(color: AppColors.border),
                 const SizedBox(height: AppSpacing.xl),
 
-                // ── Limiting beliefs ──────────────────────────────────────
-                Text('Your Limiting Beliefs', style: AppTextStyles.headlineMedium)
+                // ── Limiting beliefs recap (already captured in onboarding) ──
+                Text(AppStrings.blueprintBeliefsRecapTitle, style: AppTextStyles.headlineMedium)
                     .animate().fadeIn(duration: 400.ms),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  'What stories are holding you back? Naming them is the first step to outwitting them.',
+                  widget.initialBeliefs.isEmpty
+                      ? AppStrings.blueprintBeliefsRecapEmpty
+                      : AppStrings.blueprintBeliefsRecapCaption,
                   style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
                 ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
-                const SizedBox(height: AppSpacing.lg),
 
-                // Suggestions
-                Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.sm,
-                  children: _suggestions.map((s) {
-                    final added = _beliefs.contains(s);
-                    return GestureDetector(
-                      onTap: added ? () => _removeBelief(s) : () => _addBelief(s),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
+                if (widget.initialBeliefs.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.sm,
+                    children: widget.initialBeliefs.map((belief) {
+                      return Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.md,
                           vertical: AppSpacing.sm,
                         ),
                         decoration: BoxDecoration(
-                          color: added ? AppColors.primaryContainer : AppColors.surfaceElevated,
-                          border: Border.all(
-                            color: added ? AppColors.primary : AppColors.border,
-                          ),
+                          color: AppColors.surfaceElevated,
+                          border: Border.all(color: AppColors.border),
                           borderRadius: BorderRadius.circular(AppSpacing.radiusFull),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (added)
-                              const Padding(
-                                padding: EdgeInsets.only(right: 4),
-                                child: Icon(Icons.check_rounded, size: 14, color: AppColors.primary),
-                              ),
-                            Text(
-                              s,
-                              style: AppTextStyles.bodySmall.copyWith(
-                                color: added ? AppColors.primary : AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          belief,
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
                         ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-
-                const SizedBox(height: AppSpacing.lg),
-
-                // Custom belief input
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _beliefCtrl,
-                        style: AppTextStyles.bodyMedium,
-                        cursorColor: AppColors.primary,
-                        textCapitalization: TextCapitalization.sentences,
-                        onSubmitted: _addBelief,
-                        decoration: InputDecoration(
-                          hintText: 'Type your own...',
-                          hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
-                          filled: true,
-                          fillColor: AppColors.surfaceElevated,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                            borderSide: const BorderSide(color: AppColors.border),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                            borderSide: const BorderSide(color: AppColors.primary),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                            borderSide: const BorderSide(color: AppColors.border),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.md,
-                            vertical: AppSpacing.md,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    IconButton.filled(
-                      onPressed: () => _addBelief(_beliefCtrl.text),
-                      icon: const Icon(Icons.add_rounded),
-                      style: IconButton.styleFrom(backgroundColor: AppColors.primary),
-                    ),
-                  ],
-                ),
-
-                if (_errorText != null) ...[
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    _errorText!,
-                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.error),
+                      );
+                    }).toList(),
                   ),
                 ],
 
@@ -373,7 +320,7 @@ class _StepAssessmentState extends State<StepAssessment> {
                   Expanded(
                     child: AppPrimaryButton(
                       label: AppStrings.onboardingNext,
-                      onPressed: _tryNext,
+                      onPressed: _loading ? null : _tryNext,
                       icon: Icons.arrow_forward_rounded,
                     ),
                   ),

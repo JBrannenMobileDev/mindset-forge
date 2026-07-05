@@ -13,8 +13,8 @@ import '../utils/manifestation_scoring.dart';
 abstract final class UserContextBuilder {
   // ─── Core block ───────────────────────────────────────────────────────────
 
-  /// Name, identity, all 5 blueprint scores, limiting beliefs, fears, mental
-  /// toughness score, and AI blueprint summary.
+  /// Name, identity, blueprint scores (when self-assessed), limiting beliefs,
+  /// fears, mental toughness score, and AI blueprint summary.
   /// Include in every AI call as the minimum baseline context.
   static String coreBlock(UserProfile p) {
     final b = p.mindsetBlueprint;
@@ -29,9 +29,10 @@ abstract final class UserContextBuilder {
           }).join(' | ')
         : 'Not yet assessed';
 
-    final toughnessLabel = p.mentalToughnessScore <= 33
+    final toughnessScore = p.mentalToughnessScore.round();
+    final toughnessLabel = toughnessScore <= 33
         ? 'Still Building'
-        : p.mentalToughnessScore <= 66
+        : toughnessScore <= 66
             ? 'Rising'
             : 'Champion';
 
@@ -46,16 +47,22 @@ abstract final class UserContextBuilder {
         ? '\nQualities They Aspire To: ${p.identityQualities.join(', ')}'
         : '';
 
-    return '''USER CONTEXT:
-Name: ${p.displayName}
-Identity Statement: "${p.identityStatement}"$situationLine$qualitiesLine
-Mindset Blueprint Scores (1–10):
+    final blueprintLine = p.blueprintCompleted
+        ? '''Mindset Blueprint Scores (1–10):
   Confidence: ${b.confidence.toStringAsFixed(1)}
   Discipline: ${b.discipline.toStringAsFixed(1)}
   Abundance Thinking: ${b.abundanceThinking.toStringAsFixed(1)}
   Resilience: ${b.resilience.toStringAsFixed(1)}
   Decisiveness: ${b.decisiveness.toStringAsFixed(1)}
-  Overall Average: ${b.average.toStringAsFixed(1)}
+  Overall Average: ${b.average.toStringAsFixed(1)}'''
+        : 'Mindset Blueprint: Not yet self-assessed — do not reference specific '
+            'trait scores or imply they rated themselves; they have not done '
+            'this assessment yet.';
+
+    return '''USER CONTEXT:
+Name: ${p.displayName}
+Identity Statement: "${p.identityStatement}"$situationLine$qualitiesLine
+$blueprintLine
 Limiting Beliefs: $beliefs
 Fears to Outwit (Outwitting the Devil): $fearLine
 Mental Toughness Score: ${p.mentalToughnessScore.toStringAsFixed(0)}/100 ($toughnessLabel)$summaryLine''';

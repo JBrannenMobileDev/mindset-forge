@@ -13,71 +13,88 @@ class StepWelcome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPaddingH),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 96,
-            height: 96,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [AppColors.primary, AppColors.secondary],
-              ),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primaryGlow,
-                  blurRadius: 40,
-                  spreadRadius: 8,
-                ),
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPaddingH),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(height: AppSpacing.xl),
+                Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [AppColors.primary, AppColors.secondary],
+                    ),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primaryGlow,
+                        blurRadius: 40,
+                        spreadRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 48),
+                )
+                    .animate()
+                    .fadeIn(duration: 600.ms)
+                    .scale(begin: const Offset(0.7, 0.7), duration: 600.ms, curve: Curves.elasticOut),
+                const SizedBox(height: AppSpacing.xl),
+                Text(
+                  AppStrings.onboardingWelcomeTitle,
+                  style: AppTextStyles.displaySmall,
+                  textAlign: TextAlign.center,
+                ).animate().fadeIn(delay: 300.ms, duration: 500.ms).slideY(begin: 0.3, end: 0, delay: 300.ms),
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  AppStrings.onboardingWelcomeSubtitle,
+                  style: AppTextStyles.bodyLarge.copyWith(color: AppColors.textSecondary),
+                  textAlign: TextAlign.center,
+                ).animate().fadeIn(delay: 500.ms, duration: 500.ms),
+                const SizedBox(height: AppSpacing.xxl),
+                _FeatureRow(
+                  icon: Icons.psychology_rounded,
+                  title: 'Personalized Coaching',
+                  subtitle: 'A coach that adapts to you and remembers your story',
+                ).animate().fadeIn(delay: 700.ms, duration: 400.ms),
+                const SizedBox(height: AppSpacing.md),
+                _FeatureRow(
+                  icon: Icons.track_changes_rounded,
+                  title: 'Goal Achievement System',
+                  subtitle: 'Break down goals into identity-driven daily actions',
+                ).animate().fadeIn(delay: 800.ms, duration: 400.ms),
+                const SizedBox(height: AppSpacing.md),
+                _FeatureRow(
+                  icon: Icons.auto_fix_high_rounded,
+                  title: 'Mindset Reprogramming',
+                  subtitle: 'Replace limiting beliefs with empowering identities',
+                ).animate().fadeIn(delay: 900.ms, duration: 400.ms),
+                const SizedBox(height: AppSpacing.xl),
               ],
             ),
-            child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 48),
-          )
-              .animate()
-              .fadeIn(duration: 600.ms)
-              .scale(begin: const Offset(0.7, 0.7), duration: 600.ms, curve: Curves.elasticOut),
-          const SizedBox(height: AppSpacing.xl),
-          Text(
-            AppStrings.onboardingWelcomeTitle,
-            style: AppTextStyles.displaySmall,
-            textAlign: TextAlign.center,
-          ).animate().fadeIn(delay: 300.ms, duration: 500.ms).slideY(begin: 0.3, end: 0, delay: 300.ms),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            AppStrings.onboardingWelcomeSubtitle,
-            style: AppTextStyles.bodyLarge.copyWith(color: AppColors.textSecondary),
-            textAlign: TextAlign.center,
-          ).animate().fadeIn(delay: 500.ms, duration: 500.ms),
-          const SizedBox(height: AppSpacing.xxl),
-          _FeatureRow(
-            icon: Icons.psychology_rounded,
-            title: 'Personalized Coaching',
-            subtitle: 'A coach that adapts to you and remembers your story',
-          ).animate().fadeIn(delay: 700.ms, duration: 400.ms),
-          const SizedBox(height: AppSpacing.md),
-          _FeatureRow(
-            icon: Icons.track_changes_rounded,
-            title: 'Goal Achievement System',
-            subtitle: 'Break down goals into identity-driven daily actions',
-          ).animate().fadeIn(delay: 800.ms, duration: 400.ms),
-          const SizedBox(height: AppSpacing.md),
-          _FeatureRow(
-            icon: Icons.auto_fix_high_rounded,
-            title: 'Mindset Reprogramming',
-            subtitle: 'Replace limiting beliefs with empowering identities',
-          ).animate().fadeIn(delay: 900.ms, duration: 400.ms),
-          const SizedBox(height: AppSpacing.xxxl),
-          AppPrimaryButton(
+          ),
+        ),
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.screenPaddingH,
+            AppSpacing.md,
+            AppSpacing.screenPaddingH,
+            bottomInset + AppSpacing.md,
+          ),
+          child: AppPrimaryButton(
             label: AppStrings.onboardingNext,
             onPressed: onNext,
           ).animate().fadeIn(delay: 1000.ms, duration: 400.ms),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

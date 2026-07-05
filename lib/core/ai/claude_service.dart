@@ -7,6 +7,7 @@ import '../../models/chat_message.dart';
 import '../../models/coach_reply.dart';
 import '../../models/future_self_setup.dart';
 import '../../models/goal.dart';
+import '../../models/mindset_blueprint.dart';
 import 'user_context_builder.dart';
 
 /// All Claude AI calls route through the Firebase Cloud Function `callClaude`.
@@ -446,6 +447,48 @@ RULES — NEVER BREAK THESE:
       final list = jsonDecode(jsonStr) as List<dynamic>;
       final beliefs = list.map((e) => e.toString()).toList();
       return beliefs.isEmpty ? fallback : beliefs;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  /// Infers a starting-point mindset blueprint (5 trait scores, 1-10) from
+  /// what the user has already shared — situation, aspired qualities, goals,
+  /// and the limiting beliefs they selected — so the trait sliders in the
+  /// in-app blueprint setup open pre-filled instead of blank. The user still
+  /// tunes each value; this only removes the cold "guess a number 1-10" ask.
+  Future<MindsetBlueprint> inferBaselineBlueprint(UserProfile profile) async {
+    const fallback = MindsetBlueprint();
+    try {
+      final response = await complete(
+        systemPrompt:
+            'You are a mindset coach estimating someone\'s starting-point '
+            'scores (1-10) across 5 traits, based only on what they\'ve '
+            'shared so far. Be a fair, realistic judge — most people land in '
+            'the 4-7 range; only go higher or lower when the evidence clearly '
+            'supports it. Return ONLY a JSON object with keys "confidence", '
+            '"discipline", "abundanceThinking", "resilience", "decisiveness", '
+            'each a number 1-10. No other text.',
+        userPrompt:
+            '${UserContextBuilder.coreBlock(profile)}\n\n'
+            '${UserContextBuilder.goalsBlock(profile)}\n\n'
+            'Estimate this person\'s starting scores for: confidence, '
+            'discipline, abundance thinking, resilience, decisiveness.',
+        maxTokens: 150,
+      );
+      final jsonStr = response.contains('{')
+          ? response.substring(
+              response.indexOf('{'), response.lastIndexOf('}') + 1)
+          : response;
+      final json = jsonDecode(jsonStr) as Map<String, dynamic>;
+      final parsed = MindsetBlueprint.fromJson(json);
+      return MindsetBlueprint(
+        confidence: parsed.confidence.clamp(1.0, 10.0),
+        discipline: parsed.discipline.clamp(1.0, 10.0),
+        abundanceThinking: parsed.abundanceThinking.clamp(1.0, 10.0),
+        resilience: parsed.resilience.clamp(1.0, 10.0),
+        decisiveness: parsed.decisiveness.clamp(1.0, 10.0),
+      );
     } catch (_) {
       return fallback;
     }

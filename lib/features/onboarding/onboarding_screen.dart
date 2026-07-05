@@ -99,6 +99,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Future<void> _goToStep(int step) async {
+    FocusManager.instance.primaryFocus?.unfocus();
     // Track the step the user is leaving (i.e. the step they just completed).
     if (step > _currentStep) {
       ref
