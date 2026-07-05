@@ -76,9 +76,13 @@ abstract final class AppStrings {
   static const String loginLink = 'Log in';
   static const String signupLink = 'Sign up';
 
+  // Login screen headings
+  static const String loginTitle = 'Welcome back';
+  static const String loginSubtitle = 'Your coach remembers where you left off.';
+
   // Signup screen headings (default vs. accountability-partner invite)
   static const String signupTitle = 'Create your account';
-  static const String signupSubtitle = 'Begin forging your ideal mindset';
+  static const String signupSubtitle = 'Turn what you know into who you are.';
   static const String partnerSignupTitle = 'Accept your partner invite';
   static const String partnerSignupSubtitle =
       'Create your free account to support your friend and follow their progress.';

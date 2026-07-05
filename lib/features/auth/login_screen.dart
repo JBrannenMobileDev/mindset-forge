@@ -53,12 +53,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
                   Text(
-                    'Welcome back',
+                    AppStrings.loginTitle,
                     style: AppTextStyles.displaySmall,
                   ).animate().fadeIn(duration: 400.ms),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'Continue your mindset journey',
+                    AppStrings.loginSubtitle,
                     style: AppTextStyles.bodyLarge.copyWith(
                       color: AppColors.textSecondary,
                     ),
