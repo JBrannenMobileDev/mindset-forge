@@ -594,6 +594,8 @@ abstract final class AppStrings {
   static const String messageCopied = 'Copied!';
   static const String coachErrorRetry =
       'I\'m having trouble connecting right now.';
+  static const String coachDailyLimitReached =
+      'You\'ve reached today\'s coaching limit. It refreshes tomorrow.';
   static const String noSavedSessions = 'No saved sessions yet.';
   static const String coachIsTyping = 'Your coach is thinking...';
   static const String futureSelfIsTyping = 'Your future self is remembering...';

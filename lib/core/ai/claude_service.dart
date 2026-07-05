@@ -149,6 +149,16 @@ class ClaudeService {
   static String _stripActionMarkers(String text) =>
       text.replaceAll(RegExp(r'\[\[ACTION:[^\]]*\]\]'), '').trim();
 
+  /// Permanent Cloud Function failures — retrying won't help.
+  static bool _isNonRetryableFunctionsError(Object e) {
+    if (e is FirebaseFunctionsException) {
+      return e.code == 'resource-exhausted' ||
+          e.code == 'unauthenticated' ||
+          e.code == 'invalid-argument';
+    }
+    return false;
+  }
+
   // ─── System prompts ───────────────────────────────────────────────────────
 
   /// Builds the user-specific context block sent as the dynamic portion of the
@@ -297,6 +307,7 @@ RULES — NEVER BREAK THESE:
         }
         return CoachReply.parse(result.content);
       } catch (e) {
+        if (_isNonRetryableFunctionsError(e)) rethrow;
         if (attempt < 2) {
           await Future.delayed(Duration(seconds: attempt + 1));
           continue;
@@ -325,6 +336,7 @@ RULES — NEVER BREAK THESE:
           maxTokens: 400,
         );
       } catch (e) {
+        if (_isNonRetryableFunctionsError(e)) rethrow;
         if (attempt < 2) {
           await Future.delayed(Duration(seconds: attempt + 1));
           continue;

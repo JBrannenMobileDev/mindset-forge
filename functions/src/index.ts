@@ -33,9 +33,22 @@ const revenueCatWebhookSecret = defineSecret('REVENUECAT_WEBHOOK_SECRET');
 const db = admin.firestore();
 
 // Per-user daily ceiling on AI calls. Bounds cost/abuse from any single account
-// (or a leaked token) without affecting normal usage. Enforced in callClaude /
-// callClaudeConversation via enforceDailyAiLimit.
-const DAILY_AI_CALL_LIMIT = 50;
+// (or a leaked token) without affecting normal usage. Tiered by subscription so
+// paying users are not blocked during normal engagement.
+const DAILY_AI_CALL_LIMIT_FREE = 60;
+const DAILY_AI_CALL_LIMIT_SUBSCRIBER = 300;
+
+function dailyAiLimitForUser(data: {
+  subscriptionStatus?: string;
+  userType?: string;
+} | undefined): number {
+  if (data?.userType === 'admin') return DAILY_AI_CALL_LIMIT_SUBSCRIBER;
+  const status = data?.subscriptionStatus;
+  if (status === 'active' || status === 'trialing' || status === 'lifetime') {
+    return DAILY_AI_CALL_LIMIT_SUBSCRIBER;
+  }
+  return DAILY_AI_CALL_LIMIT_FREE;
+}
 
 /**
  * Constant-time string comparison to avoid leaking secrets via timing.
@@ -429,33 +442,47 @@ async function callAnthropicConversation(
 }
 
 /**
- * Enforces DAILY_AI_CALL_LIMIT per user. Atomically reads + increments a daily
- * counter on the user doc (`aiUsage: { date, count }`), resetting at UTC
- * midnight. Throws resource-exhausted (without incrementing) once the cap is
- * hit, so a single account can never run the AI budget away.
+ * Checks the user's daily AI call count against their tier limit. Does NOT
+ * increment — call [recordDailyAiUsage] only after a successful AI response so
+ * client retries and failed Anthropic calls do not burn quota.
  */
-async function enforceDailyAiLimit(uid: string): Promise<void> {
+async function assertDailyAiLimit(uid: string): Promise<void> {
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
   const userRef = db.collection('users').doc(uid);
-  const allowed = await db.runTransaction(async (tx) => {
+  const snap = await userRef.get();
+  const data = snap.data();
+  const limit = dailyAiLimitForUser(data);
+  const usage = (data?.aiUsage ?? {}) as {
+    date?: string;
+    count?: number;
+  };
+  const count = usage.date === today ? usage.count ?? 0 : 0;
+  if (count >= limit) {
+    console.warn(
+      `Daily AI limit reached: uid=${uid} count=${count} limit=${limit}`,
+    );
+    throw new HttpsError(
+      'resource-exhausted',
+      'Daily AI usage limit reached. Please try again tomorrow.',
+    );
+  }
+}
+
+/** Increments the user's daily AI usage counter after a successful call. */
+async function recordDailyAiUsage(uid: string): Promise<void> {
+  const today = new Date().toISOString().slice(0, 10);
+  const userRef = db.collection('users').doc(uid);
+  await db.runTransaction(async (tx) => {
     const snap = await tx.get(userRef);
     const usage = (snap.data()?.aiUsage ?? {}) as {
       date?: string;
       count?: number;
     };
     const count = usage.date === today ? usage.count ?? 0 : 0;
-    if (count >= DAILY_AI_CALL_LIMIT) return false;
     tx.set(userRef, { aiUsage: { date: today, count: count + 1 } }, {
       merge: true,
     });
-    return true;
   });
-  if (!allowed) {
-    throw new HttpsError(
-      'resource-exhausted',
-      'Daily AI usage limit reached. Please try again tomorrow.',
-    );
-  }
 }
 
 // ─── Core AI callable ─────────────────────────────────────────────────────
@@ -485,7 +512,7 @@ export const callClaude = onCall(
       throw new HttpsError('invalid-argument', 'userPrompt is required.');
     }
 
-    await enforceDailyAiLimit(request.auth.uid);
+    await assertDailyAiLimit(request.auth.uid);
 
     try {
       const content = await callAnthropicInternal(
@@ -494,8 +521,10 @@ export const callClaude = onCall(
         maxTokens,
         anthropicKey.value().trim(),
       );
+      await recordDailyAiUsage(request.auth.uid);
       return { content };
     } catch (err) {
+      if (err instanceof HttpsError) throw err;
       console.error('Claude API error:', sanitizeForLog(err));
       throw new HttpsError('internal', 'Failed to get AI response. Please try again.');
     }
@@ -546,7 +575,7 @@ export const callClaudeConversation = onCall(
       );
     }
 
-    await enforceDailyAiLimit(request.auth.uid);
+    await assertDailyAiLimit(request.auth.uid);
 
     try {
       const { text, truncated } = await callAnthropicConversation(
@@ -555,8 +584,10 @@ export const callClaudeConversation = onCall(
         maxTokens,
         anthropicKey.value().trim(),
       );
+      await recordDailyAiUsage(request.auth.uid);
       return { content: text, truncated };
     } catch (err) {
+      if (err instanceof HttpsError) throw err;
       console.error('Claude conversation error:', sanitizeForLog(err));
       throw new HttpsError('internal', 'Failed to get AI response. Please try again.');
     }
@@ -602,7 +633,7 @@ export const synthesizeFutureSelfNarration = onCall(
     }
 
     // Bound abuse the same way as the Claude callables.
-    await enforceDailyAiLimit(request.auth.uid);
+    await assertDailyAiLimit(request.auth.uid);
 
     const voiceName =
       typeof voice === 'string' && voice.trim().length > 0
@@ -645,8 +676,10 @@ export const synthesizeFutureSelfNarration = onCall(
         `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
         `${encodeURIComponent(filePath)}?alt=media&token=${token}`;
 
+      await recordDailyAiUsage(request.auth.uid);
       return { url, voice: voiceName, scriptHash: hash };
     } catch (err) {
+      if (err instanceof HttpsError) throw err;
       console.error('Future Self narration error:', sanitizeForLog(err));
       throw new HttpsError('internal', 'Failed to synthesize narration.');
     }

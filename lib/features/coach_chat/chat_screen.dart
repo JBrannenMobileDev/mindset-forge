@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -479,6 +480,27 @@ class _ChatViewState extends ConsumerState<_ChatView> {
     _send();
   }
 
+  String _chatErrorMessage(Object e) {
+    if (e is FirebaseFunctionsException && e.code == 'resource-exhausted') {
+      return AppStrings.coachDailyLimitReached;
+    }
+    return AppStrings.coachErrorRetry;
+  }
+
+  bool _chatErrorIsRetryableForMessage(ChatMessage msg) {
+    return msg.content != AppStrings.coachDailyLimitReached;
+  }
+
+  ChatMessage _chatErrorBubble(Object e) {
+    return ChatMessage(
+      id: const Uuid().v4(),
+      role: 'assistant',
+      content: _chatErrorMessage(e),
+      timestamp: DateTime.now(),
+      isError: true,
+    );
+  }
+
   /// Opens the exact creation flow a coach action pill maps to, prefilled with
   /// the AI's suggested [payload]. Each action corresponds to a real in-app
   /// feature; there is no generic-navigation fallback.
@@ -586,16 +608,10 @@ class _ChatViewState extends ConsumerState<_ChatView> {
 
       await ref.read(activeChatProvider.notifier).addMessage(aiMsg);
       if (mounted) _scrollToBottom();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('ChatScreen._send failed: $e');
       if (mounted) {
-        final errMsg = ChatMessage(
-          id: const Uuid().v4(),
-          role: 'assistant',
-          content: AppStrings.coachErrorRetry,
-          timestamp: DateTime.now(),
-          isError: true,
-        );
-        await ref.read(activeChatProvider.notifier).addMessage(errMsg);
+        await ref.read(activeChatProvider.notifier).addMessage(_chatErrorBubble(e));
         if (mounted) _scrollToBottom();
       }
     } finally {
@@ -658,16 +674,10 @@ class _ChatViewState extends ConsumerState<_ChatView> {
       if (!mounted) return;
       await ref.read(activeChatProvider.notifier).addMessage(aiMsg);
       if (mounted) _scrollToBottom();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('ChatScreen._retry failed: $e');
       if (mounted) {
-        final errMsg = ChatMessage(
-          id: const Uuid().v4(),
-          role: 'assistant',
-          content: AppStrings.coachErrorRetry,
-          timestamp: DateTime.now(),
-          isError: true,
-        );
-        await ref.read(activeChatProvider.notifier).addMessage(errMsg);
+        await ref.read(activeChatProvider.notifier).addMessage(_chatErrorBubble(e));
         if (mounted) _scrollToBottom();
       }
     } finally {
@@ -750,7 +760,9 @@ class _ChatViewState extends ConsumerState<_ChatView> {
                             feedback,
                           );
                     },
-                    onRetry: msg.isError && prevUserContent != null
+                    onRetry: msg.isError &&
+                            prevUserContent != null &&
+                            _chatErrorIsRetryableForMessage(msg)
                         ? () => _retry(msg.id, prevUserContent)
                         : null,
                   )
