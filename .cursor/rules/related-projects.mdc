@@ -1,0 +1,27 @@
+---
+description: Where the marketing website and other sibling projects live
+alwaysApply: true
+---
+
+# Related Projects (outside this workspace)
+
+This workspace (`~/MindsetForge`) is the **Flutter app only** (`app.mindsetforge.app`). It does not
+contain the marketing website — don't search here for hero sections, landing page copy, or
+marketing components; go straight to the sibling repo below instead.
+
+| What | Where | Stack |
+|------|-------|-------|
+| Marketing website (`mindsetforge.app`) | `~/mindsetforge-web` | Next.js, static export |
+| Flutter app (`app.mindsetforge.app`, this repo) | `~/MindsetForge` | Flutter |
+
+Full hosting/deploy details (sites, Firebase project, deploy commands, custom domain setup) are in
+[deployment.md](/Users/jonathanbrannen/MindsetForge/deployment.md).
+
+Deploy the marketing site with:
+
+```bash
+cd ~/mindsetforge-web && npm run deploy
+```
+
+If the user says "marketing site", "marketing website", "landing page", or "mindsetforge.app"
+(without the `app.` prefix), they almost always mean `~/mindsetforge-web`, not this repo.

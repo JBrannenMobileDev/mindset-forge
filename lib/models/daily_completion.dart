@@ -171,4 +171,50 @@ class DailyCompletion {
         'evidenceLogged': evidenceLogged,
         'completionTimes': completionTimes,
       };
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DailyCompletion &&
+          date == other.date &&
+          habitsCompleted == other.habitsCompleted &&
+          dayPlanned == other.dayPlanned &&
+          focusCompleted == other.focusCompleted &&
+          priorityActionsCompleted == other.priorityActionsCompleted &&
+          affirmationsMorning == other.affirmationsMorning &&
+          affirmationsEvening == other.affirmationsEvening &&
+          futureSelfCompleted == other.futureSelfCompleted &&
+          journalCompleted == other.journalCompleted &&
+          chatCompleted == other.chatCompleted &&
+          identityRead == other.identityRead &&
+          gratitudeLogged == other.gratitudeLogged &&
+          evidenceLogged == other.evidenceLogged &&
+          _mapEquals(completionTimes, other.completionTimes);
+
+  @override
+  int get hashCode => Object.hash(
+        date,
+        habitsCompleted,
+        dayPlanned,
+        focusCompleted,
+        priorityActionsCompleted,
+        affirmationsMorning,
+        affirmationsEvening,
+        futureSelfCompleted,
+        journalCompleted,
+        chatCompleted,
+        identityRead,
+        gratitudeLogged,
+        evidenceLogged,
+        Object.hashAll(completionTimes.entries
+            .map((e) => Object.hash(e.key, e.value))),
+      );
+
+  static bool _mapEquals(Map<String, String> a, Map<String, String> b) {
+    if (a.length != b.length) return false;
+    for (final key in a.keys) {
+      if (a[key] != b[key]) return false;
+    }
+    return true;
+  }
 }

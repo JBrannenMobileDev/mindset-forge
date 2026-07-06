@@ -51,6 +51,14 @@ abstract final class AppStrings {
       "Couldn't open the app. Install it from your app store.";
   static const String appOpenDeepLink = 'mindsetforge://dashboard';
 
+  // App update gate (UpdateRequiredScreen + showUpdateRequiredDialog)
+  static const String updateRequiredTitle = 'Update required';
+  static const String updateRequiredBody =
+      'This feature needs the latest version of MindsetForge to keep working. Update the app to continue.';
+  static const String updateRequiredAppBody =
+      'A new version of MindsetForge is required to continue. Update the app to keep going.';
+  static const String updateRequiredMaybeLater = 'Maybe later';
+
   // Pricing screen on web (subscriptions are mobile-only)
   static const String manageSubscriptionWebTitle =
       'Manage your subscription in the app';

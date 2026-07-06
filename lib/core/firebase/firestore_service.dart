@@ -3,6 +3,7 @@ import '../../models/user_profile.dart';
 import '../../models/journal_entry.dart';
 import '../../models/chat_session.dart';
 import '../../models/chat_message.dart';
+import '../../models/app_version_config.dart';
 
 class FirestoreService {
   FirestoreService() {
@@ -102,5 +103,16 @@ class FirestoreService {
 
   Future<void> deleteChatSession(String sessionId) async {
     await _chatSessions.doc(sessionId).delete();
+  }
+
+  // ─── AppVersionConfig ─────────────────────────────────────────────────────
+
+  /// Reads the app update gate config from `app_config/version`. Returns a
+  /// no-op config (no gates active) if the doc is missing or unreadable —
+  /// the gate must fail open, never fail closed.
+  Future<AppVersionConfig> getAppVersionConfig() async {
+    final snap = await _db.collection('app_config').doc('version').get();
+    if (!snap.exists || snap.data() == null) return const AppVersionConfig();
+    return AppVersionConfig.fromJson(snap.data()!);
   }
 }

@@ -11,12 +11,20 @@ class StreakCelebrationStore {
 
   static const _flawlessKey = 'celebrated_flawless_week_v1';
 
+  /// Synchronous cache so a remounted widget can read the flag before the async
+  /// SharedPreferences round-trip completes.
+  static bool? _memoryFlawless;
+
   static Future<bool> flawlessCelebrated() async {
+    if (_memoryFlawless != null) return _memoryFlawless!;
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_flawlessKey) ?? false;
+    final stored = prefs.getBool(_flawlessKey) ?? false;
+    _memoryFlawless = stored;
+    return stored;
   }
 
   static Future<void> setFlawlessCelebrated(bool value) async {
+    _memoryFlawless = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_flawlessKey, value);
   }

@@ -101,9 +101,29 @@ class CoachReply {
   /// Plain-text fallback when no structured JSON could be parsed.
   factory CoachReply.plain(String text) => CoachReply(response: text);
 
-  /// Parses the raw model output. The model is instructed to return a single
-  /// JSON object; but it can misbehave (prepend prose, wrap the object in a
-  /// ```json fence, or get truncated mid-object when it hits the token cap).
+  /// Builds a reply directly from the structured object returned by the
+  /// `coach_reply` tool call (see `callClaudeConversation`). Anthropic's
+  /// constrained decoding guarantees this already matches the schema, so no
+  /// string parsing or salvage logic is needed on this path.
+  factory CoachReply.fromJson(Map<String, dynamic> json) {
+    final text = (json['response'] as String?)?.trim() ?? '';
+    return CoachReply(
+      response: text.isNotEmpty ? text : AppStrings.coachErrorRetry,
+      mode: _parseMode(json['mode'] as String?),
+      framework: json['framework'] as String? ?? '',
+      safety: _parseSafety(json['safety'] as String?),
+      memory: json['memory_updates'] is Map<String, dynamic>
+          ? CoachMemoryUpdate.fromJson(json['memory_updates'] as Map<String, dynamic>)
+          : const CoachMemoryUpdate(),
+    );
+  }
+
+  /// Defensive fallback parser for raw text output. The primary coach path
+  /// now uses [CoachReply.fromJson] on the schema-guaranteed `coach_reply`
+  /// tool call, but this remains for any path that still hands back raw text
+  /// (e.g. an unexpected non-tool response) — it can misbehave (prepend
+  /// prose, wrap the object in a ```json fence, or get truncated mid-object
+  /// when it hits the token cap).
   ///
   /// The parse is defensive in three tiers so raw/broken JSON can NEVER reach
   /// the chat bubble:

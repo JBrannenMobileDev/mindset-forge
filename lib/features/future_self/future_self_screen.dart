@@ -158,7 +158,7 @@ class FutureSelfScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.md),
             Center(
               child: TextButton.icon(
-                onPressed: () => context.push('/chat',
+                onPressed: () => context.go('/chat',
                     extra: {'initialMode': 'future_self'}),
                 icon: const Icon(Icons.forum_rounded,
                     color: AppColors.futureSelfAccent, size: AppSpacing.iconMd),

@@ -199,6 +199,7 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
   @override
   Widget build(BuildContext context) {
     final progress = (_step) / (_totalSteps - 1);
+    final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     return Scaffold(
       backgroundColor: AppColors.futureSelfBackground,
       appBar: AppBar(
@@ -215,41 +216,45 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
         ),
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.screenPaddingH,
-                  AppSpacing.sm, AppSpacing.screenPaddingH, AppSpacing.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Step ${_step + 1} of $_totalSteps',
-                    style: AppTextStyles.labelSmall,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      backgroundColor: AppColors.futureSelfSurface,
-                      valueColor: const AlwaysStoppedAnimation(
-                          AppColors.futureSelfAccent),
-                      minHeight: 6,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(AppSpacing.screenPaddingH,
+                    AppSpacing.sm, AppSpacing.screenPaddingH, AppSpacing.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Step ${_step + 1} of $_totalSteps',
+                      style: AppTextStyles.labelSmall,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: AppSpacing.xs),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: AppColors.futureSelfSurface,
+                        valueColor: const AlwaysStoppedAnimation(
+                            AppColors.futureSelfAccent),
+                        minHeight: 6,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(AppSpacing.screenPaddingH, 0,
-                    AppSpacing.screenPaddingH, AppSpacing.xl),
-                child: _buildStep(),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.screenPaddingH,
+                      0, AppSpacing.screenPaddingH, AppSpacing.xl),
+                  child: _buildStep(),
+                ),
               ),
-            ),
-            _buildNav(),
-          ],
+              if (!keyboardOpen) _buildNav(),
+            ],
+          ),
         ),
       ),
     );

@@ -185,84 +185,88 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
         ),
       ),
       body: SafeArea(
-        child: switch (_step) {
-          0 => _ModeSelector(
-              modes: _modes,
-              onSelect: (mode) {
-                setState(() {
-                  _mode = mode;
-                  _step = 1;
-                });
-              },
-            ),
-          1 => _MoodSelector(
-              moods: _moods,
-              onSelect: (mood) {
-                setState(() => _mood = mood);
-                // Prime always gets a coach prompt — that IS the priming mechanism.
-                // Reflect and Grow give the user a choice.
-                if (_mode == 'prime') {
-                  _generatePrompt();
-                } else {
-                  setState(() => _step = 10);
-                }
-              },
-            ),
-          10 => _PromptChoiceStep(
-              onCoachPrompt: _generatePrompt,
-              onFreeWrite: () => setState(() {
-                _isFreeWrite = true;
-                _step = 2;
-              }),
-            ),
-          2 => _WritingStep(
-              prompt: _prompt,
-              isGenerating: _isGeneratingPrompt,
-              isFreeWrite: _isFreeWrite,
-              controller: _contentCtrl,
-              onChanged: (_) => setState(() {}),
-              onNext: () => setState(() => _step = 3),
-              onGetCoachPrompt: _generatePrompt,
-            ),
-          _ => _TagsStep(
-              profile: ref.watch(currentUserProfileProvider).valueOrNull,
-              selectedBeliefs: _beliefsShifted,
-              selectedFears: _fearsOutwitted,
-              mode: _mode,
-              prompt: _prompt,
-              content: _contentCtrl.text.trim(),
-              isSaving: _isSaving,
-              isSaved: _isSaved,
-              onToggleBelief: (belief) {
-                setState(() {
-                  if (_beliefsShifted.contains(belief)) {
-                    _beliefsShifted.remove(belief);
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: switch (_step) {
+            0 => _ModeSelector(
+                modes: _modes,
+                onSelect: (mode) {
+                  setState(() {
+                    _mode = mode;
+                    _step = 1;
+                  });
+                },
+              ),
+            1 => _MoodSelector(
+                moods: _moods,
+                onSelect: (mood) {
+                  setState(() => _mood = mood);
+                  // Prime always gets a coach prompt — that IS the priming mechanism.
+                  // Reflect and Grow give the user a choice.
+                  if (_mode == 'prime') {
+                    _generatePrompt();
                   } else {
-                    _beliefsShifted.add(belief);
+                    setState(() => _step = 10);
                   }
-                });
-              },
-              onToggleFear: (fear) {
-                setState(() {
-                  if (_fearsOutwitted.contains(fear)) {
-                    _fearsOutwitted.remove(fear);
+                },
+              ),
+            10 => _PromptChoiceStep(
+                onCoachPrompt: _generatePrompt,
+                onFreeWrite: () => setState(() {
+                  _isFreeWrite = true;
+                  _step = 2;
+                }),
+              ),
+            2 => _WritingStep(
+                prompt: _prompt,
+                isGenerating: _isGeneratingPrompt,
+                isFreeWrite: _isFreeWrite,
+                controller: _contentCtrl,
+                onChanged: (_) => setState(() {}),
+                onNext: () => setState(() => _step = 3),
+                onGetCoachPrompt: _generatePrompt,
+              ),
+            _ => _TagsStep(
+                profile: ref.watch(currentUserProfileProvider).valueOrNull,
+                selectedBeliefs: _beliefsShifted,
+                selectedFears: _fearsOutwitted,
+                mode: _mode,
+                prompt: _prompt,
+                content: _contentCtrl.text.trim(),
+                isSaving: _isSaving,
+                isSaved: _isSaved,
+                onToggleBelief: (belief) {
+                  setState(() {
+                    if (_beliefsShifted.contains(belief)) {
+                      _beliefsShifted.remove(belief);
+                    } else {
+                      _beliefsShifted.add(belief);
+                    }
+                  });
+                },
+                onToggleFear: (fear) {
+                  setState(() {
+                    if (_fearsOutwitted.contains(fear)) {
+                      _fearsOutwitted.remove(fear);
+                    } else {
+                      _fearsOutwitted.add(fear);
+                    }
+                  });
+                },
+                onSave: _save,
+                onDone: () {
+                  if (context.canPop()) {
+                    context.pop();
                   } else {
-                    _fearsOutwitted.add(fear);
+                    context.go('/dashboard');
                   }
-                });
-              },
-              onSave: _save,
-              onDone: () {
-                if (context.canPop()) {
-                  context.pop();
-                } else {
-                  context.go('/dashboard');
-                }
-              },
-              onDiscuss: (content, prompt) => context.go('/chat',
-                  extra: {'journalContext': content, 'journalPrompt': prompt}),
-            ),
-        },
+                },
+                onDiscuss: (content, prompt) => context.go('/chat',
+                    extra: {'journalContext': content, 'journalPrompt': prompt}),
+              ),
+          },
+        ),
       ),
     );
   }

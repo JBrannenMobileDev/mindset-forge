@@ -254,74 +254,78 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   /// glass pane both host this same [PageView]; only the surrounding chrome
   /// differs. Data wiring is identical across layouts.
   Widget _buildPageView() {
-    return PageView(
-      controller: _pageController,
-      physics: const NeverScrollableScrollPhysics(),
-      children: [
-        // Step 0 — Welcome
-        StepWelcome(onNext: () => _goToStep(_kStepGoalsSelect)),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: PageView(
+        controller: _pageController,
+        physics: const NeverScrollableScrollPhysics(),
+        children: [
+          // Step 0 — Welcome
+          StepWelcome(onNext: () => _goToStep(_kStepGoalsSelect)),
 
-        // Step 1 — Goals: select
-        StepGoalsSelect(
-          initial: _goals,
-          onNext: (goals) {
-            _goals = goals;
-            _goToStep(_kStepGoalsFocus);
-          },
-          onBack: () => _goToStep(_kStepWelcome),
-        ),
+          // Step 1 — Goals: select
+          StepGoalsSelect(
+            initial: _goals,
+            onNext: (goals) {
+              _goals = goals;
+              _goToStep(_kStepGoalsFocus);
+            },
+            onBack: () => _goToStep(_kStepWelcome),
+          ),
 
-        // Step 2 — Goals: focus (#1 + why)
-        StepGoalsFocus(
-          goals: _goals,
-          initialPrimaryGoalId: _primaryGoalId,
-          onNext: (goals, primaryGoalId) {
-            _goals = goals;
-            _primaryGoalId = primaryGoalId;
-            _goToStep(_kStepIdentity);
-          },
-          onBack: () => _goToStep(_kStepGoalsSelect),
-          onChangeGoals: () => _goToStep(_kStepGoalsSelect),
-        ),
+          // Step 2 — Goals: focus (#1 + why)
+          StepGoalsFocus(
+            goals: _goals,
+            initialPrimaryGoalId: _primaryGoalId,
+            onNext: (goals, primaryGoalId) {
+              _goals = goals;
+              _primaryGoalId = primaryGoalId;
+              _goToStep(_kStepIdentity);
+            },
+            onBack: () => _goToStep(_kStepGoalsSelect),
+            onChangeGoals: () => _goToStep(_kStepGoalsSelect),
+          ),
 
-        // Step 3 — Identity inputs (situation + qualities)
-        StepIdentity(
-          initialSituation: _identitySituation,
-          initialQualities: _identityQualities,
-          onNext: (situation, qualities) {
-            _identitySituation = situation;
-            _identityQualities = qualities;
-            _goToStep(_kStepBlocker);
-          },
-          onBack: () => _goToStep(_kStepGoalsFocus),
-        ),
+          // Step 3 — Identity inputs (situation + qualities)
+          StepIdentity(
+            initialSituation: _identitySituation,
+            initialQualities: _identityQualities,
+            onNext: (situation, qualities) {
+              _identitySituation = situation;
+              _identityQualities = qualities;
+              _goToStep(_kStepBlocker);
+            },
+            onBack: () => _goToStep(_kStepGoalsFocus),
+          ),
 
-        // Step 4 — Blocker (AI-inferred limiting beliefs)
-        StepBlocker(
-          identitySituation: _identitySituation,
-          identityQualities: _identityQualities,
-          goals: _goals,
-          initialBeliefs: _limitingBeliefs,
-          onNext: (beliefs) {
-            _limitingBeliefs = beliefs;
-            _goToStep(_kStepAiAnalysis);
-          },
-          onBack: () => _goToStep(_kStepIdentity),
-        ),
+          // Step 4 — Blocker (AI-inferred limiting beliefs)
+          StepBlocker(
+            identitySituation: _identitySituation,
+            identityQualities: _identityQualities,
+            goals: _goals,
+            initialBeliefs: _limitingBeliefs,
+            onNext: (beliefs) {
+              _limitingBeliefs = beliefs;
+              _goToStep(_kStepAiAnalysis);
+            },
+            onBack: () => _goToStep(_kStepIdentity),
+          ),
 
-        // Step 5 — Merged reveal (identity statement + analysis)
-        StepAiSummary(
-          blueprint: _blueprint,
-          limitingBeliefs: _limitingBeliefs,
-          goals: _goals,
-          primaryGoalId: _primaryGoalId,
-          identitySituation: _identitySituation,
-          identityQualities: _identityQualities,
-          fearsDrift: _fearsDrift,
-          mentalToughnessScore: _mentalToughnessScore,
-          onComplete: _completeOnboarding,
-        ),
-      ],
+          // Step 5 — Merged reveal (identity statement + analysis)
+          StepAiSummary(
+            blueprint: _blueprint,
+            limitingBeliefs: _limitingBeliefs,
+            goals: _goals,
+            primaryGoalId: _primaryGoalId,
+            identitySituation: _identitySituation,
+            identityQualities: _identityQualities,
+            fearsDrift: _fearsDrift,
+            mentalToughnessScore: _mentalToughnessScore,
+            onComplete: _completeOnboarding,
+          ),
+        ],
+      ),
     );
   }
 

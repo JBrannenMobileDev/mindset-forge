@@ -286,7 +286,7 @@ class _FutureSelfPlayerScreenState
           onLogEvidence: _openEvidenceSheet,
           onTalkToFutureSelf: () {
             Navigator.of(context).pop();
-            context.push('/chat', extra: {'initialMode': 'future_self'});
+            context.go('/chat', extra: {'initialMode': 'future_self'});
           },
           onDone: () => Navigator.of(context).pop(),
         );

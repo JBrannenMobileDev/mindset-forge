@@ -283,35 +283,90 @@ CRITICAL: Only emit a marker when the action maps EXACTLY to one of these four f
 
 Example: "Let's lock this in. [[ACTION:Goal:Run a half marathon by spring]]"
 
-# RESPONSE FORMAT (return ONLY this JSON object, nothing else)
+# YOUR REPLY
 
-{
-  "response": "your coaching message as plain text, may contain at most one [[ACTION:Type:Payload]] marker",
-  "mode": "support | clarity | action | reflective_inquiry | belief_reframe | accountability | celebrate",
-  "framework": "the one book you drew from, or empty string",
-  "safety": "none | concern | crisis",
-  "memory_updates": {
-    "session_summary": "one sentence recap of this exchange, or empty",
-    "long_term_summary": "only if your understanding of them meaningfully updated, else empty",
-    "new_commitments": ["any concrete thing they committed to, else empty array"],
-    "fulfilled_commitments": ["any prior commitment they reported doing"],
-    "patterns": ["any recurring pattern worth remembering, short phrase"],
-    "key_moments": ["any breakthrough or emotionally significant moment"],
-    "belief_reframes": [{"belief": "the limiting belief", "reframe": "the reframe you offered"}]
-  }
-}
+You must call the \`coach_reply\` tool exactly once per turn with your structured reply — never respond in plain text. The "response" field is your coaching message as plain text (may contain at most one [[ACTION:Type:Payload]] marker); "mode", "framework", and "safety" classify this turn; "memory_updates" captures anything worth remembering.
 
 Keep memory_updates minimal and only include what genuinely happened this turn. Empty arrays and empty strings are expected most of the time. Be terse: session_summary and long_term_summary are ONE short sentence each; every array holds at most 1 to 2 short items; include at most one belief_reframe per turn, with the belief and reframe each kept to one sentence. Never restate the full coaching message here.
-
-OUTPUT RULES (critical):
-- Output the JSON object ONLY. Your entire reply must be valid JSON that starts with "{" and ends with "}".
-- Do NOT wrap it in markdown code fences (no \`\`\`json).
-- Do NOT write any text before or after the JSON. Never repeat the coaching message outside the "response" field, doing so wastes tokens and breaks the app.
 
 STYLE RULES (non-negotiable):
 - Never use "--" or "—" (em dash). Use a comma, period, or new sentence instead.
 - Never use "..." (ellipsis) to trail off. End every thought completely.
 - Write like a trusted human coach who knows this person well, not like an AI assistant.`;
+
+/**
+ * Forces the coach reply through Anthropic's tool-use mechanism instead of
+ * asking the model to hand-write a JSON blob as plain text. Constrained
+ * decoding guarantees the "input" the model produces matches this schema, so
+ * a stray unescaped quote inside the coaching message can never again corrupt
+ * the surrounding JSON and get silently mis-parsed into a truncated reply.
+ */
+const COACH_REPLY_TOOL: Anthropic.Tool = {
+  name: 'coach_reply',
+  description: "Deliver this turn's structured coach reply.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      response: {
+        type: 'string',
+        description:
+          'The coaching message as plain text, may contain at most one [[ACTION:Type:Payload]] marker.',
+      },
+      mode: {
+        type: 'string',
+        enum: [
+          'support',
+          'clarity',
+          'action',
+          'reflective_inquiry',
+          'belief_reframe',
+          'accountability',
+          'celebrate',
+        ],
+      },
+      framework: {
+        type: 'string',
+        description: 'The one book drawn from this turn, or an empty string.',
+      },
+      safety: {
+        type: 'string',
+        enum: ['none', 'concern', 'crisis'],
+      },
+      memory_updates: {
+        type: 'object',
+        properties: {
+          session_summary: { type: 'string' },
+          long_term_summary: { type: 'string' },
+          new_commitments: { type: 'array', items: { type: 'string' } },
+          fulfilled_commitments: { type: 'array', items: { type: 'string' } },
+          patterns: { type: 'array', items: { type: 'string' } },
+          key_moments: { type: 'array', items: { type: 'string' } },
+          belief_reframes: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                belief: { type: 'string' },
+                reframe: { type: 'string' },
+              },
+              required: ['belief', 'reframe'],
+            },
+          },
+        },
+        required: [
+          'session_summary',
+          'long_term_summary',
+          'new_commitments',
+          'fulfilled_commitments',
+          'patterns',
+          'key_moments',
+          'belief_reframes',
+        ],
+      },
+    },
+    required: ['response', 'mode', 'framework', 'safety', 'memory_updates'],
+  },
+};
 
 /**
  * True for transient Anthropic failures worth retrying: rate limits (429),
@@ -395,7 +450,7 @@ async function callAnthropicConversation(
   messages: ConversationTurn[],
   maxTokens: number,
   apiKey: string,
-): Promise<{ text: string; truncated: boolean }> {
+): Promise<{ reply: Record<string, unknown>; truncated: boolean }> {
   const client = new Anthropic({ apiKey });
   try {
     const message = await withAnthropicRetry(() => client.messages.create({
@@ -413,28 +468,29 @@ async function callAnthropicConversation(
           cache_control: { type: 'ephemeral' },
         },
       ],
-      messages: [
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
-        // Prefill the assistant turn with the opening brace so the model must
-        // continue a single JSON object immediately. This makes it structurally
-        // impossible to emit a prose preamble (which would duplicate the
-        // message once as text and again in the JSON "response" field).
-        { role: 'assistant' as const, content: '{' },
-      ],
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      tools: [COACH_REPLY_TOOL],
+      // Force the model to call coach_reply every turn — the API's constrained
+      // decoding then guarantees the "input" object matches the schema, so a
+      // stray quote in the coaching message can never corrupt the surrounding
+      // structure the way it could with hand-written JSON-as-text.
+      tool_choice: { type: 'tool', name: COACH_REPLY_TOOL.name },
     }));
-    const block = message.content[0];
-    if (block.type !== 'text') throw new Error('Unexpected response type from Claude');
+    const toolUse = message.content.find(
+      (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use',
+    );
+    if (!toolUse) throw new Error('Claude did not return a coach_reply tool call');
     const truncated = message.stop_reason === 'max_tokens';
     if (truncated) {
       console.warn(
         `coach reply hit max_tokens (maxTokens=${maxTokens}); output may be truncated`,
       );
     }
-    // Anthropic returns only the continuation after the prefill, so prepend the
-    // brace back to hand downstream a complete JSON object.
-    let text = '{' + block.text;
-    text = text.replace(/\s*—\s*/g, ', ').replace(/\s*--\s*/g, ', ');
-    return { text, truncated };
+    const reply = toolUse.input as Record<string, unknown>;
+    if (typeof reply.response === 'string') {
+      reply.response = reply.response.replace(/\s*—\s*/g, ', ').replace(/\s*--\s*/g, ', ');
+    }
+    return { reply, truncated };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`Anthropic request failed: ${sanitizeForLog(msg)}`);
@@ -535,7 +591,17 @@ export const callClaude = onCall(
  * callClaudeConversation — auth-gated multi-turn Claude callable for the coach.
  * Sends a real messages array so the model sees authentic dialogue turns.
  * Input:  { systemPrompt?: string, messages: {role,content}[], maxTokens?: number }
- * Output: { content: string, truncated: boolean }
+ * Output: { reply: object, content: string, truncated: boolean }
+ *
+ * `content` is a JSON.stringify() of `reply` kept ONLY for backward
+ * compatibility with app builds released before the tool-use migration —
+ * this Cloud Function deploys instantly to 100% of traffic, while the app
+ * update rolls out gradually, so older clients still call this function and
+ * expect a `content` string field. Since `content` is now always a clean
+ * JSON.stringify of a schema-valid object, it also can no longer trigger the
+ * stray-quote truncation bug for those older clients. Remove `content` once
+ * the pre-migration app version has fully rolled off (check analytics/store
+ * adoption before deleting).
  */
 export const callClaudeConversation = onCall(
   // enforceAppCheck stays false until the App Check-enabled app build has fully
@@ -578,14 +644,15 @@ export const callClaudeConversation = onCall(
     await assertDailyAiLimit(request.auth.uid);
 
     try {
-      const { text, truncated } = await callAnthropicConversation(
+      const { reply, truncated } = await callAnthropicConversation(
         systemPrompt,
         clean,
         maxTokens,
         anthropicKey.value().trim(),
       );
       await recordDailyAiUsage(request.auth.uid);
-      return { content: text, truncated };
+      // See the backward-compatibility note above `content`.
+      return { reply, content: JSON.stringify(reply), truncated };
     } catch (err) {
       if (err instanceof HttpsError) throw err;
       console.error('Claude conversation error:', sanitizeForLog(err));

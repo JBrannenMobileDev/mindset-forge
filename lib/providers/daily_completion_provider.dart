@@ -10,21 +10,35 @@ class DailyCompletionNotifier extends StateNotifier<DailyCompletion> {
   DailyCompletionNotifier(this._ref)
       : super(DailyCompletion(date: AppDateUtils.todayStringWithGracePeriod()));
 
+  @override
+  bool updateShouldNotify(DailyCompletion old, DailyCompletion current) =>
+      old != current;
+
   void _initFromProfile() {
     final profile = _ref.read(currentUserProfileProvider).valueOrNull;
     if (profile != null) {
       // Use the 4 AM–4 AM "active day" so the checklist keeps the prior day's
       // progress during the midnight–4 AM grace window instead of resetting.
       final today = AppDateUtils.todayStringWithGracePeriod();
-      state = profile.dailyCompletions.firstWhere(
+      final fromProfile = profile.dailyCompletions.firstWhere(
         (c) => c.date == today,
         orElse: () => DailyCompletion(date: today),
       );
+      // Ignore stale/out-of-order Firestore snapshots that would regress today's
+      // progress — a lost-update race on the dailyCompletions array can briefly
+      // look less complete than what we've already applied locally.
+      if (fromProfile.date == state.date &&
+          fromProfile.completedCount < state.completedCount) {
+        return;
+      }
+      state = fromProfile;
     }
   }
 
   Future<void> toggle(String field, bool value) async {
     final wasComplete = _fieldValue(field);
+    if (value == wasComplete) return;
+
     final times = Map<String, String>.from(state.completionTimes);
     if (value) {
       times[field] = DateTime.now().toIso8601String();

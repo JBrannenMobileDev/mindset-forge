@@ -12,12 +12,23 @@ class PerfectDayCelebrationStore {
 
   static const _key = 'celebrated_perfect_day_v1';
 
+  /// Synchronous cache so a remounted widget can read "already celebrated"
+  /// before the async SharedPreferences round-trip completes.
+  static String? _memoryDate;
+
   static Future<bool> hasCelebrated(String date) async {
+    if (_memoryDate == date) return true;
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_key) == date;
+    final stored = prefs.getString(_key);
+    if (stored == date) {
+      _memoryDate = date;
+      return true;
+    }
+    return false;
   }
 
   static Future<void> markCelebrated(String date) async {
+    _memoryDate = date;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, date);
   }

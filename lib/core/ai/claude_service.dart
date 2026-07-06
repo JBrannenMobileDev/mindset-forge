@@ -63,8 +63,10 @@ class ClaudeService {
   }
 
   /// Calls the multi-turn `callClaudeConversation` Cloud Function with a real
-  /// messages array. Throws on network/server error.
-  Future<({String content, bool truncated})> completeConversation({
+  /// messages array. The Cloud Function forces Claude through a tool call, so
+  /// `reply` is already a schema-valid structured object — no text parsing
+  /// needed. Throws on network/server error.
+  Future<({Map<String, dynamic> reply, bool truncated})> completeConversation({
     required String systemPrompt,
     required List<Map<String, String>> messages,
     int maxTokens = 1200,
@@ -76,10 +78,10 @@ class ClaudeService {
         'messages': messages,
         'maxTokens': maxTokens,
       });
-      final content = result.data['content'];
-      if (content is String) {
+      final reply = result.data['reply'];
+      if (reply is Map) {
         return (
-          content: content,
+          reply: Map<String, dynamic>.from(reply),
           truncated: result.data['truncated'] as bool? ?? false,
         );
       }
@@ -305,7 +307,7 @@ RULES — NEVER BREAK THESE:
           );
           continue;
         }
-        return CoachReply.parse(result.content);
+        return CoachReply.fromJson(result.reply);
       } catch (e) {
         if (_isNonRetryableFunctionsError(e)) rethrow;
         if (attempt < 2) {

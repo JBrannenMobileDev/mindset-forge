@@ -34,5 +34,13 @@ service cloud.firestore {
     match /viral_metrics/{docId} {
       allow read, write: if false;
     }
+
+    // App version gate config — read by every client (including signed-out
+    // and pre-update users) at startup to detect forced/feature update
+    // requirements. Written only via the Firebase console / admin scripts.
+    match /app_config/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
   }
 }

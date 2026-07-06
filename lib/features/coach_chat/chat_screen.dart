@@ -14,6 +14,7 @@ import '../../core/widgets/app_button.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/responsive_layout.dart';
 import '../../core/utils/breakpoints.dart';
+import '../../core/utils/version_gate.dart';
 import '../../models/chat_session.dart';
 import '../../models/chat_message.dart';
 import '../../models/coach_reply.dart';
@@ -527,6 +528,12 @@ class _ChatViewState extends ConsumerState<_ChatView> {
   Future<void> _send() async {
     final text = _inputCtrl.text.trim();
     if (text.isEmpty) return;
+
+    // Must be the very first guard: if this build can't use the coach API
+    // contract, bail before touching the input or state at all, so a blocked
+    // send is a true no-op — the draft stays exactly as typed.
+    if (!await ensureFeatureVersion(context, 'coachChat')) return;
+    if (!mounted) return;
 
     // Free partner accounts get a limited number of coach messages per week.
     final allowed = await ref
