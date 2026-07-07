@@ -26,6 +26,7 @@ import 'steps/step_welcome.dart';
 import 'steps/step_goals_select.dart';
 import 'steps/step_goals_focus.dart';
 import 'steps/step_identity.dart';
+import 'steps/step_ai_consent.dart';
 import 'steps/step_blocker.dart';
 import 'steps/step_ai_summary.dart';
 
@@ -35,13 +36,18 @@ import 'steps/step_ai_summary.dart';
 /// one blocker) to deliver a personalized "aha" via the AI analysis, then hand
 /// off into the app. Deeper mindset data (trait blueprint, mental toughness,
 /// full fear quiz) is collected progressively in-app afterwards.
+///
+/// The AI Consent step sits before Blocker (the first step that calls the AI
+/// provider) so explicit consent is always obtained before any user data is
+/// sent to our third-party AI provider (Anthropic).
 const _kStepWelcome = 0;
 const _kStepGoalsSelect = 1;
 const _kStepGoalsFocus = 2;
 const _kStepIdentity = 3;
-const _kStepBlocker = 4;
-const _kStepAiAnalysis = 5;
-const _kTotalSteps = 6;
+const _kStepAiConsent = 4;
+const _kStepBlocker = 5;
+const _kStepAiAnalysis = 6;
+const _kTotalSteps = 7;
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -133,6 +139,25 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       'identityQualities': _identityQualities,
       'limitingBeliefs': _limitingBeliefs,
     });
+  }
+
+  /// Persists explicit AI data-sharing consent, then advances to Blocker (the
+  /// first step that calls our AI provider). Non-blocking on write failure,
+  /// matching the coach disclaimer pattern, so a transient Firestore error
+  /// never traps the user on this step; it will simply be re-recorded on
+  /// next attempt since [_goToStep] retries the write via [_saveStep].
+  Future<void> _acceptAiConsentAndContinue() async {
+    final uid = ref.read(authStateProvider).valueOrNull?.uid;
+    if (uid != null) {
+      try {
+        await ref.read(firestoreServiceProvider).updateUserField(uid, {
+          'aiConsentAcceptedAt': DateTime.now().toIso8601String(),
+        });
+      } catch (_) {
+        // Non-blocking: allow the user through even if the write fails.
+      }
+    }
+    await _goToStep(_kStepBlocker);
   }
 
   Future<void> _completeOnboarding(
@@ -294,12 +319,19 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             onNext: (situation, qualities) {
               _identitySituation = situation;
               _identityQualities = qualities;
-              _goToStep(_kStepBlocker);
+              _goToStep(_kStepAiConsent);
             },
             onBack: () => _goToStep(_kStepGoalsFocus),
           ),
 
-          // Step 4 — Blocker (AI-inferred limiting beliefs)
+          // Step 4 — Explicit AI data-sharing consent, required before the
+          // first AI call (Blocker, next).
+          StepAiConsent(
+            onNext: _acceptAiConsentAndContinue,
+            onBack: () => _goToStep(_kStepIdentity),
+          ),
+
+          // Step 5 — Blocker (AI-inferred limiting beliefs)
           StepBlocker(
             identitySituation: _identitySituation,
             identityQualities: _identityQualities,
@@ -309,10 +341,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               _limitingBeliefs = beliefs;
               _goToStep(_kStepAiAnalysis);
             },
-            onBack: () => _goToStep(_kStepIdentity),
+            onBack: () => _goToStep(_kStepAiConsent),
           ),
 
-          // Step 5 — Merged reveal (identity statement + analysis)
+          // Step 6 — Merged reveal (identity statement + analysis)
           StepAiSummary(
             blueprint: _blueprint,
             limitingBeliefs: _limitingBeliefs,

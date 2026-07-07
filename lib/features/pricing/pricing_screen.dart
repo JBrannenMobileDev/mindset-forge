@@ -596,7 +596,10 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
         final isSelected = _selectedPackage?.identifier == pkg.identifier;
         final priceStr = pkg.storeProduct.priceString;
         final isAnnual = pkg.packageType == PackageType.annual;
-        final subLabel = isAnnual ? '/year · equals ${_monthlyEquivalent(pkg)}/mo' : '/month';
+        final periodSuffix = isAnnual ? '/year' : '/month';
+        final trialLine = isAnnual
+            ? '7-day free trial · equals ${_monthlyEquivalent(pkg)}/mo'
+            : '7-day free trial · then billed monthly';
 
         return GestureDetector(
           onTap: () => setState(() => _selectedPackage = pkg),
@@ -639,9 +642,29 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
                         isAnnual ? 'Annual Plan' : 'Monthly Plan',
                         style: AppTextStyles.labelLarge,
                       ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: priceStr,
+                              style: AppTextStyles.headlineSmall,
+                            ),
+                            TextSpan(
+                              text: periodSuffix,
+                              style: AppTextStyles.labelLarge.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
                       Text(
-                        '7-day free trial · then $priceStr$subLabel',
-                        style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                        trialLine,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.textMuted,
+                        ),
                       ),
                     ],
                   ),

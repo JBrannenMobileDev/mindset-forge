@@ -74,4 +74,15 @@ void main() {
       expect(block, isNot(contains('Confidence: 5.0')));
     });
   });
+
+  group('UserContextBuilder.builtInRoutinesBlock', () {
+    test('lists identity reading and affirmations', () {
+      final block = UserContextBuilder.builtInRoutinesBlock();
+
+      expect(block, contains('do NOT suggest as habits'));
+      expect(block, contains('Identity statement reading'));
+      expect(block, contains('Morning affirmations'));
+      expect(block, contains('Journal entry'));
+    });
+  });
 }

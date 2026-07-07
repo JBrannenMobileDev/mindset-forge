@@ -82,8 +82,10 @@ class AnalyticsService {
 
   static const _stepNames = [
     'welcome',
-    'goals',
+    'goals_select',
+    'goals_focus',
     'identity',
+    'ai_consent',
     'blocker',
     'ai_summary',
   ];

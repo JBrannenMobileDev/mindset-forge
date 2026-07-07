@@ -145,6 +145,21 @@ abstract final class AppStrings {
   static const String coachDisclaimerReadMore =
       'Read our Terms and Privacy Policy';
 
+  // AI data-sharing consent (onboarding, before first AI call)
+  static const String aiConsentTitle = 'How your coach is powered';
+  static const String aiConsentBody =
+      'To generate personalized coaching, we securely send relevant parts of '
+      'your profile, goals, journal entries, and chat messages to our AI '
+      'provider (Anthropic) for processing. Your data is never sold, and it is '
+      'not used to publicly identify you. We only send what is needed to '
+      'power the feature you are using.';
+  static const String aiConsentCheckboxLabel =
+      'I understand and agree to this AI data processing.';
+  static const String aiConsentCta = 'Continue';
+  static const String aiConsentReadMore = 'Read our Privacy Policy';
+  static const String aiConsentRequiredHint =
+      'Please check the box above to continue.';
+
   // Manifestation system explainer
   static const String manifestationSystemTitle = 'How MindsetForge Works';
   static const String manifestationSystemIntro =

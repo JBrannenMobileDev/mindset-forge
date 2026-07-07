@@ -32,8 +32,12 @@ void main() {
       expect(profile(onboardingStep: 5).hasCompletedOnboarding, isFalse);
     });
 
-    test('new user finishing with step 6 is complete', () {
-      expect(profile(onboardingStep: 6).hasCompletedOnboarding, isTrue);
+    test('new user mid-flow on step 6 without summary is incomplete', () {
+      expect(profile(onboardingStep: 6).hasCompletedOnboarding, isFalse);
+    });
+
+    test('new user finishing with step 7 is complete', () {
+      expect(profile(onboardingStep: 7).hasCompletedOnboarding, isTrue);
     });
   });
 }

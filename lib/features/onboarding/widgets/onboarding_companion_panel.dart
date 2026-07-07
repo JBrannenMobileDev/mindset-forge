@@ -32,6 +32,7 @@ class OnboardingCompanionPanel extends StatelessWidget {
     'Goals',
     'Focus',
     'Identity',
+    'Consent',
     'Beliefs',
     'Reveal',
   ];

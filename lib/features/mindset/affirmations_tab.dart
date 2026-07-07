@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -797,8 +799,14 @@ class _AffirmationSessionSheetState extends State<AffirmationSessionSheet>
   Future<void> _complete() async {
     if (_completing) return;
     setState(() => _completing = true);
-    await widget.onComplete();
     _successCtrl.forward();
+
+    unawaited(
+      widget.onComplete().catchError((Object e) {
+        debugPrint('AffirmationSessionSheet._complete failed: $e');
+      }),
+    );
+
     await Future.delayed(const Duration(milliseconds: 1800));
     if (mounted) Navigator.of(context).pop();
   }

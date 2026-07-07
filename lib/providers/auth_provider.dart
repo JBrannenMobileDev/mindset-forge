@@ -48,7 +48,11 @@ Future<void> migrateBlueprintCalibrationStart(
 }
 
 /// One-time silent migration: legacy completed users stored [onboardingStep] 5
-/// under the old 5-step flow. Bump to 6 so Firestore matches the new schema.
+/// under the old 5-step flow. Bump to 7 (current total step count) so
+/// Firestore matches the new schema and [UserProfile.hasCompletedOnboarding]
+/// continues to read them as complete. These users already completed
+/// onboarding under the account-creation-time Terms/Privacy agreement, so
+/// they are not retroactively routed through the new AI consent step.
 Future<void> migrateLegacyOnboardingStep(
   FirestoreService firestore,
   UserProfile profile,
@@ -57,7 +61,7 @@ Future<void> migrateLegacyOnboardingStep(
   if (profile.onboardingStep != 5) return;
   if (profile.mindsetBlueprintSummary.isEmpty) return;
   try {
-    await firestore.updateUserField(uid, {'onboardingStep': 6});
+    await firestore.updateUserField(uid, {'onboardingStep': 7});
   } catch (e) {
     debugPrint('migrateLegacyOnboardingStep failed: $e');
   }

@@ -8,6 +8,7 @@ import '../../models/coach_reply.dart';
 import '../../models/future_self_setup.dart';
 import '../../models/goal.dart';
 import '../../models/mindset_blueprint.dart';
+import '../utils/habit_suggestion_guard.dart';
 import 'user_context_builder.dart';
 
 /// All Claude AI calls route through the Firebase Cloud Function `callClaude`.
@@ -943,28 +944,45 @@ Voice style: $voiceGuidance''',
     Goal goal,
     UserProfile profile,
   ) async {
+    const systemPrompt =
+        'You suggest ONE powerful identity-based daily habit that directly '
+        'supports a specific goal. Return ONLY a JSON object with keys: '
+        'name (string), trigger (string, a clear cue/when), '
+        'identityReinforces (string). No other text. '
+        'Never suggest a habit that duplicates a built-in app routine or an '
+        'existing user habit.';
+
+    String buildUserPrompt({String retryNote = ''}) {
+      final retry = retryNote.isEmpty ? '' : '\n\n$retryNote';
+      return 'Suggest one habit that builds toward this goal: "${goal.title}"\n\n'
+          '${UserContextBuilder.coreBlock(profile)}\n\n'
+          '${UserContextBuilder.habitsBlock(profile)}\n\n'
+          '${UserContextBuilder.builtInRoutinesBlock()}\n\n'
+          'The habit must NOT duplicate any existing habit or built-in app routine above.'
+          '$retry';
+    }
+
     try {
-      final response = await complete(
-        systemPrompt:
-            'You suggest ONE powerful identity-based daily habit that directly '
-            'supports a specific goal. Return ONLY a JSON object with keys: '
-            'name (string), trigger (string, a clear cue/when), '
-            'identityReinforces (string). No other text.',
-        userPrompt:
-            'Suggest one habit that builds toward this goal: "${goal.title}"\n\n'
-            '${UserContextBuilder.coreBlock(profile)}\n\n'
-            '${UserContextBuilder.habitsBlock(profile)}\n\n'
-            'The habit must NOT duplicate any existing habit above.',
-        maxTokens: 150,
-      );
-      final jsonStr = response.contains('{')
-          ? response.substring(
-              response.indexOf('{'), response.lastIndexOf('}') + 1)
-          : response;
-      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-      return Map<String, String>.from(
-        data.map((k, v) => MapEntry(k, v?.toString() ?? '')),
-      );
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final retryNote = attempt == 0
+            ? ''
+            : 'Your previous suggestion duplicated a built-in app routine or '
+                'existing habit. Pick something different that is NOT already '
+                'tracked by the app.';
+        final response = await complete(
+          systemPrompt: systemPrompt,
+          userPrompt: buildUserPrompt(retryNote: retryNote),
+          maxTokens: 150,
+        );
+        final suggestion = _parseHabitSuggestionObject(response);
+        if (suggestion.isEmpty || (suggestion['name'] ?? '').isEmpty) {
+          continue;
+        }
+        if (!HabitSuggestionGuard.isInvalidSuggestion(suggestion, profile)) {
+          return suggestion;
+        }
+      }
+      return {};
     } catch (_) {
       return {};
     }
@@ -1033,7 +1051,15 @@ Voice style: $voiceGuidance''',
 
   Future<List<Map<String, String>>> generateHabitSuggestions(
       UserProfile profile) async {
-    try {
+    const systemPrompt =
+        'You suggest 3 powerful identity-based habits for who the user is becoming. '
+        'Respond with ONLY a raw JSON array — no markdown, no code fences, no explanation. '
+        'Each element is an object with exactly three string keys: '
+        '"name" (the habit name), "trigger" (the cue/when), "identityReinforces" (an "I am" statement). '
+        'Example: [{"name":"...","trigger":"...","identityReinforces":"I am..."}] '
+        'Never suggest habits that duplicate built-in app routines or existing user habits.';
+
+    String buildUserPrompt({String retryNote = ''}) {
       final deepDive = UserContextBuilder.deepDiveBlock(profile);
       final deepDiveContext = deepDive.isNotEmpty ? '$deepDive\n\n' : '';
       final futureSelf = UserContextBuilder.futureSelfBlock(profile);
@@ -1042,61 +1068,93 @@ Voice style: $voiceGuidance''',
           ? 'Anchor the habits in who they are becoming: pick habits their future self already does daily, '
               'drawn from the future self\'s typical day and defining traits above. '
           : '';
-      final response = await complete(
-        systemPrompt:
-            'You suggest 3 powerful identity-based habits for who the user is becoming. '
-            'Respond with ONLY a raw JSON array — no markdown, no code fences, no explanation. '
-            'Each element is an object with exactly three string keys: '
-            '"name" (the habit name), "trigger" (the cue/when), "identityReinforces" (an "I am" statement). '
-            'Example: [{"name":"...","trigger":"...","identityReinforces":"I am..."}]',
-        userPrompt:
-            '${UserContextBuilder.coreBlock(profile)}\n\n'
-            '${UserContextBuilder.goalsBlock(profile)}\n\n'
-            '${UserContextBuilder.habitsBlock(profile)}\n\n'
-            '$futureSelfContext'
-            '$deepDiveContext'
-            'Suggest 3 habits that are NOT already in the existing habits list above. '
-            '$futureSelfDirective'
-            'Each habit should reinforce the user\'s identity and support their active goals.',
-        maxTokens: 500,
-      );
+      final retry = retryNote.isEmpty ? '' : '\n\n$retryNote';
+      return '${UserContextBuilder.coreBlock(profile)}\n\n'
+          '${UserContextBuilder.goalsBlock(profile)}\n\n'
+          '${UserContextBuilder.habitsBlock(profile)}\n\n'
+          '${UserContextBuilder.builtInRoutinesBlock()}\n\n'
+          '$futureSelfContext'
+          '$deepDiveContext'
+          'Suggest 3 habits that are NOT already in the existing habits list or '
+          'built-in app routines above. '
+          '$futureSelfDirective'
+          'Each habit should reinforce the user\'s identity and support their active goals.'
+          '$retry';
+    }
 
-      // Extract the JSON array, tolerating any surrounding text / code fences.
-      String jsonStr = response.trim();
-      final startIdx = jsonStr.indexOf('[');
-      // Find the matching closing bracket by walking forward from the opener.
-      int depth = 0;
-      int endIdx = -1;
-      for (int i = startIdx; i < jsonStr.length; i++) {
-        if (jsonStr[i] == '[') depth++;
-        if (jsonStr[i] == ']') {
-          depth--;
-          if (depth == 0) {
-            endIdx = i;
-            break;
-          }
+    try {
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final retryNote = attempt == 0
+            ? ''
+            : 'Your previous suggestions duplicated built-in app routines or '
+                'existing habits. Replace invalid ones with habits the app does '
+                'NOT already track natively.';
+        final response = await complete(
+          systemPrompt: systemPrompt,
+          userPrompt: buildUserPrompt(retryNote: retryNote),
+          maxTokens: 500,
+        );
+        final parsed = _parseHabitSuggestionList(response);
+        final valid = HabitSuggestionGuard.filterValid(parsed, profile);
+        if (valid.length >= 3 || attempt == 1) {
+          return valid;
         }
       }
-      if (startIdx == -1 || endIdx == -1) {
-        throw FormatException('No JSON array found in response: $jsonStr');
-      }
-      jsonStr = jsonStr.substring(startIdx, endIdx + 1);
-
-      final list = jsonDecode(jsonStr) as List<dynamic>;
-      return list.map((e) {
-        final map = e as Map<String, dynamic>;
-        return {
-          'name': (map['name'] ?? '').toString(),
-          'trigger': (map['trigger'] ?? '').toString(),
-          'identityReinforces': (map['identityReinforces'] ?? '').toString(),
-        };
-      }).toList();
+      return [];
     } catch (e) {
       // Re-throw so callers can surface a proper error + retry UI rather than
       // silently returning an empty list that looks like a successful response.
       debugPrint('ClaudeService.generateHabitSuggestions failed: $e');
       rethrow;
     }
+  }
+
+  Map<String, String> _parseHabitSuggestionObject(String response) {
+    try {
+      final jsonStr = response.contains('{')
+          ? response.substring(
+              response.indexOf('{'), response.lastIndexOf('}') + 1)
+          : response;
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      return Map<String, String>.from(
+        data.map((k, v) => MapEntry(k, v?.toString() ?? '')),
+      );
+    } catch (_) {
+      return {};
+    }
+  }
+
+  List<Map<String, String>> _parseHabitSuggestionList(String response) {
+    // Extract the JSON array, tolerating any surrounding text / code fences.
+    String jsonStr = response.trim();
+    final startIdx = jsonStr.indexOf('[');
+    // Find the matching closing bracket by walking forward from the opener.
+    int depth = 0;
+    int endIdx = -1;
+    for (int i = startIdx; i < jsonStr.length; i++) {
+      if (jsonStr[i] == '[') depth++;
+      if (jsonStr[i] == ']') {
+        depth--;
+        if (depth == 0) {
+          endIdx = i;
+          break;
+        }
+      }
+    }
+    if (startIdx == -1 || endIdx == -1) {
+      throw FormatException('No JSON array found in response: $jsonStr');
+    }
+    jsonStr = jsonStr.substring(startIdx, endIdx + 1);
+
+    final list = jsonDecode(jsonStr) as List<dynamic>;
+    return list.map((e) {
+      final map = e as Map<String, dynamic>;
+      return {
+        'name': (map['name'] ?? '').toString(),
+        'trigger': (map['trigger'] ?? '').toString(),
+        'identityReinforces': (map['identityReinforces'] ?? '').toString(),
+      };
+    }).toList();
   }
 
   Future<String> generateDeepDiveInsight(

@@ -35,9 +35,12 @@ class DailyCompletionNotifier extends StateNotifier<DailyCompletion> {
     }
   }
 
-  Future<void> toggle(String field, bool value) async {
+  /// Optimistically applies a daily win toggle and fires analytics. Returns the
+  /// updated [DailyCompletion], or null if the field was already [value].
+  DailyCompletion? applyFieldUpdate(String field, bool value) {
+    final previous = state;
     final wasComplete = _fieldValue(field);
-    if (value == wasComplete) return;
+    if (value == wasComplete) return null;
 
     final times = Map<String, String>.from(state.completionTimes);
     if (value) {
@@ -47,17 +50,45 @@ class DailyCompletionNotifier extends StateNotifier<DailyCompletion> {
     }
     final updated = _applyField(field, value).copyWith(completionTimes: times);
     state = updated;
-    await _persist(updated);
 
-    // Only fire when flipping to true for the first time.
     if (value && !wasComplete) {
-      final analytics = _ref.read(analyticsServiceProvider);
-      analytics.trackDailyWinCompleted(field);
-      if (field == 'gratitudeLogged') analytics.trackGratitudeLogged();
-      if (field == 'evidenceLogged') analytics.trackEvidenceLogged();
-      _checkPerfectDay(updated, analytics);
-      _checkStreakMilestone(analytics);
+      _trackCompletionAnalytics(field, previous, updated);
     }
+    return updated;
+  }
+
+  /// Merges [completion] into a profile's daily completions list for persistence.
+  static List<DailyCompletion> mergeIntoProfileList(
+    List<DailyCompletion> profileCompletions,
+    DailyCompletion completion,
+  ) {
+    final completions = [...profileCompletions];
+    final idx = completions.indexWhere((c) => c.date == completion.date);
+    if (idx >= 0) {
+      completions[idx] = completion;
+    } else {
+      completions.add(completion);
+    }
+    return completions;
+  }
+
+  Future<void> toggle(String field, bool value) async {
+    final updated = applyFieldUpdate(field, value);
+    if (updated == null) return;
+    await _persist(updated);
+  }
+
+  void _trackCompletionAnalytics(
+    String field,
+    DailyCompletion previous,
+    DailyCompletion updated,
+  ) {
+    final analytics = _ref.read(analyticsServiceProvider);
+    analytics.trackDailyWinCompleted(field);
+    if (field == 'gratitudeLogged') analytics.trackGratitudeLogged();
+    if (field == 'evidenceLogged') analytics.trackEvidenceLogged();
+    _checkPerfectDay(previous, updated, analytics);
+    _checkStreakMilestone(analytics);
   }
 
   bool _fieldValue(String field) {
@@ -78,12 +109,13 @@ class DailyCompletionNotifier extends StateNotifier<DailyCompletion> {
     };
   }
 
-  void _checkPerfectDay(DailyCompletion updated, AnalyticsService analytics) {
+  void _checkPerfectDay(
+    DailyCompletion previous,
+    DailyCompletion updated,
+    AnalyticsService analytics,
+  ) {
     if (!updated.isPerfectDay) return;
-    // Only fire once per day — if it was already a perfect day before this
-    // toggle, we already fired.
-    final wasAlreadyPerfect = state.isPerfectDay;
-    if (wasAlreadyPerfect) return;
+    if (previous.isPerfectDay) return;
     final profile = _ref.read(currentUserProfileProvider).valueOrNull;
     analytics.trackPerfectDayAchieved(profile?.currentStreak ?? 0);
   }
@@ -136,15 +168,8 @@ class DailyCompletionNotifier extends StateNotifier<DailyCompletion> {
     final profile = _ref.read(currentUserProfileProvider).valueOrNull;
     if (profile == null) return;
 
-    // Build updated list from the in-memory profile — avoids a Firestore
-    // round-trip read and the stale-cache race condition it creates.
-    final completions = [...profile.dailyCompletions];
-    final idx = completions.indexWhere((c) => c.date == completion.date);
-    if (idx >= 0) {
-      completions[idx] = completion;
-    } else {
-      completions.add(completion);
-    }
+    final completions =
+        mergeIntoProfileList(profile.dailyCompletions, completion);
 
     await _ref.read(firestoreServiceProvider).updateUserField(uid, {
       'dailyCompletions': completions.map((c) => c.toJson()).toList(),

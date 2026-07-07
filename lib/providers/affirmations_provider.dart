@@ -100,23 +100,32 @@ class AffirmationsNotifier extends StateNotifier<List<Affirmation>> {
       completions.add(updated);
     }
 
-    try {
-      await _ref.read(firestoreServiceProvider).updateUserField(uid, {
-        'affirmationCompletions': completions.map((c) => c.toJson()).toList(),
-      });
-    } catch (e) {
-      debugPrint('AffirmationsNotifier.recordSessionCompletion failed: $e');
-      rethrow;
-    }
-
     final field =
         sessionType == 'morning' ? 'affirmationsMorning' : 'affirmationsEvening';
-    await _ref.read(dailyCompletionProvider.notifier).toggle(field, true);
+    final updatedDaily = _ref
+        .read(dailyCompletionProvider.notifier)
+        .applyFieldUpdate(field, true);
 
     _ref.read(analyticsServiceProvider).trackAffirmationSessionCompleted(
           sessionType: sessionType,
           affirmationCount: activeAffirmations.length,
         );
+
+    final dailyCompletions = updatedDaily != null
+        ? DailyCompletionNotifier.mergeIntoProfileList(
+            profile.dailyCompletions,
+            updatedDaily,
+          )
+        : profile.dailyCompletions;
+
+    try {
+      await _ref.read(firestoreServiceProvider).updateUserField(uid, {
+        'affirmationCompletions': completions.map((c) => c.toJson()).toList(),
+        'dailyCompletions': dailyCompletions.map((c) => c.toJson()).toList(),
+      });
+    } catch (e) {
+      debugPrint('AffirmationsNotifier.recordSessionCompletion failed: $e');
+    }
   }
 
   /// Persists that the user has dismissed the affirmations intro/education card

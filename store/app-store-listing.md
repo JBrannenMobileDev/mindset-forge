@@ -140,9 +140,9 @@ site vocabulary (remembers, connects, one system, the callback).
 Front-load the differentiator and use the site's vocabulary
 (remembers, connects, one system, the callback).
 
-1. Dashboard - "One coach that remembers everything you tell it"
-2. Coach chat callback (NEW SHOT - see below) - "It ties today's slip to the fear you logged last week"
-3. Blueprint - "Name the beliefs quietly running your decisions"
+1. Poster: coach hub graphic - "Other apps remember your streak. MindsetForge remembers you."
+2. Coach chat callback (NEW SHOT - see below) - "It doesn't shame you. It explains you."
+3. Poster: trust/credibility graphic - "Built on Think and Grow Rich and 5 more."
 4. Journal - "Every entry feeds the same coach, nothing gets forgotten"
 5. Actions / Goals - "Your goals, broken into today's one action"
 6. Affirmations - "It suggests affirmations aimed at your exact fears"
@@ -160,6 +160,10 @@ missing from the listing. Capture a chat where the coach says something like:
 "Three missed days isn't laziness - it's the 'I'll never have enough' story you
 wrote in your Blueprint. Let's separate the two."
 
+**Status: not yet captured.** This blocks slot 2's final copy below from going
+live until the screen exists to shoot. Everything else in slot 2 (eyebrow,
+headline, subtext) is finalized and ready the moment the screenshot exists.
+
 ## What changed vs. the old listing (for reference)
 
 - Old captions were interchangeable vibe statements ("Become who your goals
@@ -167,3 +171,103 @@ wrote in your Blueprint. Let's separate the two."
   sticks") that presented 7 disconnected features.
 - New captions present one connected system that remembers you, and promote the
   callback proof to slot 2.
+
+---
+
+## Full slide copy: eyebrow / headline / subtext (slots 1-3)
+
+Slides 1 and 3 moved from standard UI screenshots to **poster-style concept
+graphics** (Wysa-inspired - a single bold visual + headline, no phone chrome
+needed). Slide 2 stays a real in-app screenshot since the coach-chat callback
+*is* the proof and needs to be seen actually happening. Poster slides drop the
+subtext line entirely - the graphic + headline should carry the full idea at a
+glance, the way a poster does.
+
+**Slide 1 - Poster: the coach hub graphic** (adapted from the site's
+`CoachHub.tsx` - central coach node wired to Goals/Habits/Journal/Affirmations)
+- Eyebrow: `ONE COACH. YOUR WHOLE STORY.`
+- Headline: `Other apps remember your streak. MindsetForge remembers you.`
+
+**Slide 2 - Coach chat callback (net-new screenshot - see above)**
+- Eyebrow: `CONNECTING THE DOTS`
+- Headline: `It doesn't shame you. `**`It explains you.`**
+- Subtext: `Not a generic nudge. A coach that connects the dots.`
+
+**Slide 3 - Poster: the trust/credibility graphic** (brain glyph glowing
+inside a disc, wired down to glowing book-spine icons in app colors)
+- Eyebrow: `GROUNDED IN REAL WISDOM`
+- Headline: `Built on Think and Grow Rich and 5 more.`
+
+Rationale: slide 1 leads with the validated marketing-site line ("Other apps
+remember your streak...") instead of a mechanism-first description - it's the
+emotional differentiator, not a feature list. Slide 2 is the proof moment (the
+Monday-fear -> Wednesday-callback story already built out on the marketing
+site in `ProofSequence.tsx`), and its headline was retargeted from describing
+the AI's memory mechanism ("it never lets go of what you told it") to the
+user's emotional outcome ("it doesn't shame you, it explains you") - outcome
+sells better than mechanism. Slide 3 replaces the old boxed "BASED ON THE
+BOOKS..." bullet-list callout (least premium element of the old set) with a
+single credibility graphic; "GROUNDED IN REAL WISDOM" sets up the "Built on..."
+payoff as a trust/foundation beat rather than restating it.
+
+### Tagline note: "One Coach. Total Memory." -> "One Coach. Your Whole Story."
+
+Slide 1's eyebrow deliberately does not reuse the marketing site's original
+`Hero.tsx` tag ("One Coach. Total Memory."). "Total Memory" names the storage
+mechanism, not the emotional outcome, and reads closer to a hardware spec than
+a coaching brand. "Your Whole Story" keeps the identical two-beat rhythm and
+length but reframes the same fact - the coach remembers everything - as
+identity/continuity instead of a technical feature. The website's `Hero.tsx`
+tag has been updated to match (see below), so the phrase is now consistent
+across the App Store listing and the site.
+
+## Design guidance for a premium feel
+
+Grounded in the design tokens already in use (`lib/core/constants/app_colors.dart`
+in the Flutter app, mirrored in the marketing site's `app/globals.css`, and the
+`PhoneMockup.tsx` / nebula background conventions):
+
+1. **Keep the nebula backdrop, but confirm it's the same asset.** The current
+   screenshots already use the purple-top/cyan-bottom nebula
+   (`assets/images/splash_nebula.jpg` in the Flutter app, same gradient recipe
+   in `bg-radial-glow` on the web). This is correct and should stay - it's the
+   one visual thread tying splash, web hero, and App Store screenshots
+   together. Don't introduce a new background treatment.
+
+2. **One accent color per campaign, not one per slide.** The old set
+   highlighted in a different color every slide (purple, cyan, amber) - a
+   different accent every slide reads as decorative rather than intentional.
+   Reserve amber/warning strictly for Future-Self/morning-ritual contexts (per
+   the design system's session-accent convention) and cyan strictly for
+   evening-ritual contexts. Since none of slides 1-3 are Future Self or
+   evening-ritual screens, all three should highlight in primary purple
+   (`#9B40FF`). A consistent accent color across the first-impression set reads
+   more deliberate and premium than a rainbow rotation.
+
+3. **Bold fewer words.** Highlight only the 2-4 word phrase that carries the
+   differentiator (bolded in the copy above), not a single word chosen for
+   line-break convenience. The accent should do rhetorical work, not just
+   decorate.
+
+4. **Match the marketing site's phone-bezel treatment exactly.**
+   `PhoneMockup.tsx` uses a `#08080d` bezel, `ring-1 ring-white/5`, a dual-layer
+   glow (purple radial + cyan radial, blurred), and `rounded-[2.75rem]`. If the
+   App Store screenshot phone mockup uses a different bezel/glow recipe than
+   the website, the two will feel like different products. Pull the exact glow
+   values (`rgba(155,64,255,0.5)` outer / `rgba(0,229,255,0.22)` inner) into
+   the screenshot template.
+
+5. **Cut the old "BASED ON THE BOOKS..." list treatment.** A three-item bullet
+   list of book titles in a boxed callout was the least premium element in the
+   old set - it read as a citation/disclaimer, not a hook. Replacing that slide
+   with the coach-chat callback screenshot (slide 2 above) removes it entirely
+   in favor of the strongest proof asset.
+
+6. **Add more top breathing room.** In the old screenshots, the eyebrow tag sat
+   very close to the top edge of the frame on every slide. Increase top margin
+   so the eyebrow has clear air above it - cramped top margins are one of the
+   more common tells of a non-premium screenshot set.
+
+7. **Keep the type treatment as-is.** Space Grotesk bold display headline +
+   Inter secondary/body is correct and matches the rest of the brand; no change
+   needed there.

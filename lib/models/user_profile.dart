@@ -97,6 +97,12 @@ class UserProfile {
   final bool affirmationsIntroDismissed;
   final CoachMemory coachMemory;
   final DateTime? coachDisclaimerAcceptedAt;
+
+  /// ISO timestamp when the user explicitly consented to their profile,
+  /// journal, and chat data being sent to our third-party AI provider
+  /// (Anthropic) to generate personalized coaching. Set once during
+  /// onboarding, before any AI call is made.
+  final DateTime? aiConsentAcceptedAt;
   final String? fcmToken;
   final DateTime? lastActiveAt;
 
@@ -171,6 +177,7 @@ class UserProfile {
     this.affirmationsIntroDismissed = false,
     this.coachMemory = const CoachMemory(),
     this.coachDisclaimerAcceptedAt,
+    this.aiConsentAcceptedAt,
     this.fcmToken,
     this.lastActiveAt,
     this.timezone = '',
@@ -182,6 +189,10 @@ class UserProfile {
 
   /// Whether the user has acknowledged the one-time coach disclaimer.
   bool get hasAcceptedCoachDisclaimer => coachDisclaimerAcceptedAt != null;
+
+  /// Whether the user has explicitly consented to sending their data to our
+  /// third-party AI provider (Anthropic) for personalized coaching.
+  bool get hasAcceptedAiConsent => aiConsentAcceptedAt != null;
 
   /// True when a weekly review exists and the user has not opened it yet.
   bool get hasUnreadWeeklyInsight =>
@@ -225,18 +236,18 @@ class UserProfile {
     return null;
   }
 
-  /// Onboarding has 6 steps (0–5): Welcome, Goals Select, Goals Focus,
-  /// Identity, Blocker, AI Analysis. It is only complete once [onboardingStep]
-  /// reaches the total set on the final step. Deferred mindset data (blueprint,
-  /// toughness, fears) is collected in-app afterwards and tracked separately
-  /// via [blueprintCompleted].
+  /// Onboarding has 7 steps (0–6): Welcome, Goals Select, Goals Focus,
+  /// Identity, AI Consent, Blocker, AI Analysis. It is only complete once
+  /// [onboardingStep] reaches the total set on the final step. Deferred
+  /// mindset data (blueprint, toughness, fears) is collected in-app afterwards
+  /// and tracked separately via [blueprintCompleted].
   ///
-  /// Legacy 5-step onboarding stored completion as [onboardingStep] == 5 with a
-  /// populated [mindsetBlueprintSummary]. The new flow also saves step index 5
-  /// mid-flow on the AI summary screen, but those users lack a summary until
-  /// they finish.
+  /// Legacy 5-step onboarding (pre-consent-step) stored completion as
+  /// [onboardingStep] == 5 with a populated [mindsetBlueprintSummary]. The
+  /// current flow also saves step index 6 mid-flow on the AI summary screen,
+  /// but those users lack a summary until they finish.
   bool get hasCompletedOnboarding {
-    if (onboardingStep >= 6) return true;
+    if (onboardingStep >= 7) return true;
     if (onboardingStep == 5 && mindsetBlueprintSummary.isNotEmpty) return true;
     return false;
   }
@@ -380,6 +391,7 @@ class UserProfile {
     bool? affirmationsIntroDismissed,
     CoachMemory? coachMemory,
     DateTime? coachDisclaimerAcceptedAt,
+    DateTime? aiConsentAcceptedAt,
     String? fcmToken,
     DateTime? lastActiveAt,
     String? timezone,
@@ -454,6 +466,7 @@ class UserProfile {
       coachMemory: coachMemory ?? this.coachMemory,
       coachDisclaimerAcceptedAt:
           coachDisclaimerAcceptedAt ?? this.coachDisclaimerAcceptedAt,
+      aiConsentAcceptedAt: aiConsentAcceptedAt ?? this.aiConsentAcceptedAt,
       fcmToken: fcmToken ?? this.fcmToken,
       lastActiveAt: lastActiveAt ?? this.lastActiveAt,
       timezone: timezone ?? this.timezone,
@@ -619,6 +632,9 @@ class UserProfile {
       coachDisclaimerAcceptedAt: json['coachDisclaimerAcceptedAt'] != null
           ? DateTime.tryParse(json['coachDisclaimerAcceptedAt'] as String)
           : null,
+      aiConsentAcceptedAt: json['aiConsentAcceptedAt'] != null
+          ? DateTime.tryParse(json['aiConsentAcceptedAt'] as String)
+          : null,
       fcmToken: json['fcmToken'] as String?,
       lastActiveAt: json['lastActiveAt'] != null
           ? DateTime.tryParse(json['lastActiveAt'] as String)
@@ -704,6 +720,7 @@ class UserProfile {
         'affirmationsIntroDismissed': affirmationsIntroDismissed,
         'coachMemory': coachMemory.toJson(),
         'coachDisclaimerAcceptedAt': coachDisclaimerAcceptedAt?.toIso8601String(),
+        'aiConsentAcceptedAt': aiConsentAcceptedAt?.toIso8601String(),
         'fcmToken': fcmToken,
         'lastActiveAt': lastActiveAt?.toIso8601String(),
         'timezone': timezone,

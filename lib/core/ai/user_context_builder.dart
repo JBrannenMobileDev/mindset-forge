@@ -1,6 +1,7 @@
 import '../../models/user_profile.dart';
 import '../../models/deep_dive.dart';
 import '../../models/goal.dart';
+import '../constants/app_routines.dart';
 import '../utils/manifestation_scoring.dart';
 
 /// Builds structured, reusable context blocks from a [UserProfile].
@@ -163,6 +164,16 @@ Mental Toughness Score: ${p.mentalToughnessScore.toStringAsFixed(0)}/100 ($tough
   }
 
   // ─── Habits block ─────────────────────────────────────────────────────────
+
+  /// Native app rituals already tracked as daily wins — never suggest these as habits.
+  static String builtInRoutinesBlock() {
+    final lines = kBuiltInAppRoutines
+        .map((r) => '  • ${r.label} — ${r.description}')
+        .join('\n');
+    return 'Built-In App Routines (already tracked natively — do NOT suggest as habits):\n'
+        '$lines\n'
+        'Suggest habits that complement these routines, not repeat them.';
+  }
 
   /// Existing active habits with name and current streak.
   /// Always include when generating habit suggestions to prevent duplicates.
