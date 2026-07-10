@@ -12,6 +12,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/constants/crisis_resources.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/personalize_nudge.dart';
 import '../../core/widgets/responsive_layout.dart';
 import '../../core/utils/breakpoints.dart';
 import '../../core/utils/version_gate.dart';
@@ -265,6 +266,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             },
           ),
         ),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.screenPaddingH),
+          child: PersonalizeNudge(),
+        ),
         Expanded(child: _chatBody(profile)),
       ],
     );
@@ -292,7 +297,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 820),
-              child: _chatBody(profile),
+              child: Column(
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(AppSpacing.screenPaddingH,
+                        AppSpacing.md, AppSpacing.screenPaddingH, 0),
+                    child: PersonalizeNudge(),
+                  ),
+                  Expanded(child: _chatBody(profile)),
+                ],
+              ),
             ),
           ),
         ),

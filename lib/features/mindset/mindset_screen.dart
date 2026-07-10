@@ -18,6 +18,7 @@ import '../../models/user_profile.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/future_self_provider.dart';
 import '../../providers/identity_provider.dart';
+import '../../providers/partner_limits_provider.dart';
 import '../../providers/streak_provider.dart';
 import 'affirmations_tab.dart';
 
@@ -306,14 +307,19 @@ class _SubconsciousPracticeHero extends ConsumerWidget {
       case SubconsciousHeroKind.evening:
         final active =
             profile.affirmations.where((a) => a.isActive).toList();
-        if (active.isEmpty) {
+        final locked = ref
+            .read(partnerLimitsProvider)
+            .lockedIds(profile, PartnerFeature.affirmation);
+        final sessionAffirmations =
+            active.where((a) => !locked.contains(a.id)).toList();
+        if (sessionAffirmations.isEmpty) {
           context.push('/affirmations');
           return;
         }
         launchAffirmationSession(
           context: context,
           ref: ref,
-          affirmations: active,
+          affirmations: sessionAffirmations,
           sessionType:
               hero.kind == SubconsciousHeroKind.morning ? 'morning' : 'evening',
           completedSessionCount: affirmationSessionsCompletedCount(profile),

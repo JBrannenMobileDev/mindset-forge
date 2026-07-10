@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/services/scene_draft_store.dart';
 import '../../../models/future_self_setup.dart';
 import '../../../providers/auth_provider.dart';
 
@@ -13,6 +16,7 @@ class SceneDraft {
   final String title;
   final String setting;
   final String people;
+  final String flowText;
   final List<String> beats;
   final String sensory;
   final List<String> goalIds;
@@ -21,26 +25,58 @@ class SceneDraft {
     this.title = '',
     this.setting = '',
     this.people = '',
+    this.flowText = '',
     this.beats = const [],
     this.sensory = '',
     this.goalIds = const [],
   });
 
-  /// A scene needs a name and at least a couple of beats to be worth generating.
-  bool get isValid => title.trim().isNotEmpty && beats.length >= 2;
+  /// A scene needs a name and a non-empty flow description.
+  bool get isValid =>
+      title.trim().isNotEmpty && flowText.trim().isNotEmpty;
+
+  /// What's still missing before the user can create the scene.
+  String? get validationHint {
+    if (title.trim().isEmpty) return AppStrings.futureSelfBuilderNeedsTitle;
+    if (flowText.trim().isEmpty) return AppStrings.futureSelfBuilderNeedsFlow;
+    return null;
+  }
+
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'setting': setting,
+        'people': people,
+        'flowText': flowText,
+        'sensory': sensory,
+        'goalIds': goalIds,
+      };
+
+  factory SceneDraft.fromJson(Map<String, dynamic> json) => SceneDraft(
+        title: json['title'] as String? ?? '',
+        setting: json['setting'] as String? ?? '',
+        people: json['people'] as String? ?? '',
+        flowText: json['flowText'] as String? ?? '',
+        sensory: json['sensory'] as String? ?? '',
+        goalIds: List<String>.from(json['goalIds'] as List<dynamic>? ?? const []),
+      );
 }
 
 /// Guided builder for a vivid, specific Future Self scene. The parent owns the
-/// resulting [SceneDraft] via [onChanged]; this widget manages its own fields,
-/// optional starter templates, and goal linking.
+/// resulting [SceneDraft] via [onChanged]; this widget manages its own fields
+/// and goal linking. Every field starts blank — the user writes their own scene
+/// rather than editing a generic template.
 class VisionSceneBuilder extends ConsumerStatefulWidget {
   final FutureSelfScene? initial;
   final ValueChanged<SceneDraft> onChanged;
+
+  /// When true (add-scene sheet only), saves in-progress drafts locally.
+  final bool persistDraft;
 
   const VisionSceneBuilder({
     super.key,
     this.initial,
     required this.onChanged,
+    this.persistDraft = false,
   });
 
   @override
@@ -51,10 +87,10 @@ class _VisionSceneBuilderState extends ConsumerState<VisionSceneBuilder> {
   final _titleCtrl = TextEditingController();
   final _settingCtrl = TextEditingController();
   final _peopleCtrl = TextEditingController();
-  final _beatsCtrl = TextEditingController();
+  final _flowCtrl = TextEditingController();
   final _sensoryCtrl = TextEditingController();
   final Set<String> _goalIds = {};
-  String? _activeTemplateKey;
+  Timer? _saveDebounce;
 
   @override
   void initState() {
@@ -64,58 +100,80 @@ class _VisionSceneBuilderState extends ConsumerState<VisionSceneBuilder> {
       _titleCtrl.text = s.title;
       _settingCtrl.text = s.setting;
       _peopleCtrl.text = s.people;
-      _beatsCtrl.text = s.beats.join('\n');
+      _flowCtrl.text = _flowTextFromScene(s);
       _sensoryCtrl.text = s.sensory;
       _goalIds.addAll(s.goalIds);
+    } else if (widget.persistDraft) {
+      _loadSavedDraft();
     }
     for (final c in [
       _titleCtrl,
       _settingCtrl,
       _peopleCtrl,
-      _beatsCtrl,
+      _flowCtrl,
       _sensoryCtrl,
     ]) {
       c.addListener(_emit);
     }
-    // Emit initial validity after first frame.
     WidgetsBinding.instance.addPostFrameCallback((_) => _emit());
+  }
+
+  String _flowTextFromScene(FutureSelfScene scene) {
+    final beats =
+        scene.beats.map((b) => b.trim()).where((b) => b.isNotEmpty).toList();
+    if (beats.isEmpty) return '';
+    if (beats.length == 1) return beats.first;
+    return beats.join('\n\n');
+  }
+
+  Future<void> _loadSavedDraft() async {
+    final uid = ref.read(authStateProvider).valueOrNull?.uid;
+    if (uid == null) return;
+    final draft = await SceneDraftStore.load(uid);
+    if (!mounted || draft == null) return;
+    _titleCtrl.text = draft.title;
+    _settingCtrl.text = draft.setting;
+    _peopleCtrl.text = draft.people;
+    _flowCtrl.text = draft.flowText;
+    _sensoryCtrl.text = draft.sensory;
+    _goalIds
+      ..clear()
+      ..addAll(draft.goalIds);
+    _emit();
   }
 
   @override
   void dispose() {
+    _saveDebounce?.cancel();
     _titleCtrl.dispose();
     _settingCtrl.dispose();
     _peopleCtrl.dispose();
-    _beatsCtrl.dispose();
+    _flowCtrl.dispose();
     _sensoryCtrl.dispose();
     super.dispose();
   }
 
-  List<String> get _beats => _beatsCtrl.text
-      .split('\n')
-      .map((b) => b.trim())
-      .where((b) => b.isNotEmpty)
-      .toList();
-
   void _emit() {
-    widget.onChanged(SceneDraft(
+    final flow = _flowCtrl.text;
+    final draft = SceneDraft(
       title: _titleCtrl.text.trim(),
       setting: _settingCtrl.text.trim(),
       people: _peopleCtrl.text.trim(),
-      beats: _beats,
+      flowText: flow,
+      beats: flow.trim().isNotEmpty ? [flow.trim()] : const [],
       sensory: _sensoryCtrl.text.trim(),
       goalIds: _goalIds.toList(),
-    ));
-  }
+    );
+    widget.onChanged(draft);
 
-  void _applyTemplate(FutureSelfSceneTemplate t) {
-    setState(() => _activeTemplateKey = t.key);
-    _titleCtrl.text = t.label;
-    _settingCtrl.text = t.setting;
-    _peopleCtrl.text = t.people;
-    _beatsCtrl.text = t.beats.join('\n');
-    _sensoryCtrl.text = t.sensory;
-    _emit();
+    if (widget.persistDraft && widget.initial == null) {
+      _saveDebounce?.cancel();
+      _saveDebounce = Timer(const Duration(milliseconds: 400), () {
+        final uid = ref.read(authStateProvider).valueOrNull?.uid;
+        if (uid == null) return;
+        unawaited(SceneDraftStore.save(uid, draft));
+      });
+    }
   }
 
   @override
@@ -128,25 +186,6 @@ class _VisionSceneBuilderState extends ConsumerState<VisionSceneBuilder> {
         Text(
           AppStrings.futureSelfBuilderIntro,
           style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
-        ),
-        const SizedBox(height: AppSpacing.lg),
-
-        // Optional starter templates
-        _label(AppStrings.futureSelfBuilderTemplatesLabel),
-        const SizedBox(height: AppSpacing.xs),
-        Text(AppStrings.futureSelfBuilderTemplatesHint,
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted)),
-        const SizedBox(height: AppSpacing.sm),
-        Wrap(
-          spacing: AppSpacing.sm,
-          runSpacing: AppSpacing.sm,
-          children: FutureSelfSceneTemplates.all
-              .map((t) => _Chip(
-                    label: t.label,
-                    selected: _activeTemplateKey == t.key,
-                    onTap: () => _applyTemplate(t),
-                  ))
-              .toList(),
         ),
         const SizedBox(height: AppSpacing.xl),
 
@@ -176,7 +215,7 @@ class _VisionSceneBuilderState extends ConsumerState<VisionSceneBuilder> {
         Text(AppStrings.futureSelfSceneFlowHelper,
             style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted)),
         const SizedBox(height: AppSpacing.sm),
-        _field(_beatsCtrl, AppStrings.futureSelfSceneFlowHint, maxLines: 8),
+        _field(_flowCtrl, AppStrings.futureSelfSceneFlowHint, maxLines: 8),
         const SizedBox(height: AppSpacing.lg),
 
         _label(AppStrings.futureSelfSceneSensoryLabel),

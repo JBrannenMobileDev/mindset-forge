@@ -11,9 +11,12 @@ import '../../core/utils/app_date_utils.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/section_header.dart';
+import '../../core/widgets/partner_locked_overlay.dart';
 import '../../models/goal.dart';
+import '../../models/user_profile.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/goals_provider.dart';
+import '../../providers/partner_limits_provider.dart';
 import 'actions_layout.dart';
 import 'goal_form_modal.dart';
 import 'widgets/actions_tab_skeleton.dart';
@@ -46,6 +49,7 @@ class GoalsTab extends ConsumerWidget {
         return _GoalsContent(
           layoutContext: layoutContext,
           primaryGoalId: profile.primaryGoalId,
+          profile: profile,
         );
       },
     );
@@ -60,15 +64,21 @@ class GoalsTab extends ConsumerWidget {
 class _GoalsContent extends ConsumerWidget {
   final ActionsLayoutContext layoutContext;
   final String primaryGoalId;
+  final UserProfile profile;
 
   const _GoalsContent({
     required this.layoutContext,
     required this.primaryGoalId,
+    required this.profile,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final goals = ref.watch(goalsProvider);
+    final limits = ref.read(partnerLimitsProvider);
+    final lockedGoalIds = limits.lockedIds(profile, PartnerFeature.goal);
+    final onLockedGoalTap =
+        () => limits.showLockedUpgrade(context, PartnerFeature.goal);
     final active = goals.where((g) => g.status == 'active').toList();
     final completed = goals.where((g) => g.status == 'completed').toList()
       ..sort((a, b) => (b.completedAt ?? b.createdAt)
@@ -107,7 +117,11 @@ class _GoalsContent extends ConsumerWidget {
                   child: _GoalCard(
                     goal: e.value,
                     isNorthStar: e.value.id == primaryGoalId,
-                    onTap: () => context.push('/actions/goal/${e.value.id}'),
+                    isLocked: lockedGoalIds.contains(e.value.id),
+                    onLockedTap: onLockedGoalTap,
+                    onTap: lockedGoalIds.contains(e.value.id)
+                        ? onLockedGoalTap
+                        : () => context.push('/actions/goal/${e.value.id}'),
                   ).animate().fadeIn(
                         delay: Duration(milliseconds: e.key * 60),
                         duration: 400.ms,
@@ -125,7 +139,11 @@ class _GoalsContent extends ConsumerWidget {
               padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               child: _CompletedGoalTile(
                 goal: g,
-                onTap: () => context.push('/actions/goal/${g.id}'),
+                isLocked: lockedGoalIds.contains(g.id),
+                onLockedTap: onLockedGoalTap,
+                onTap: lockedGoalIds.contains(g.id)
+                    ? onLockedGoalTap
+                    : () => context.push('/actions/goal/${g.id}'),
               ),
             ),
           ),
@@ -140,11 +158,15 @@ class _GoalCard extends StatelessWidget {
   final Goal goal;
   final bool isNorthStar;
   final VoidCallback onTap;
+  final bool isLocked;
+  final VoidCallback? onLockedTap;
 
   const _GoalCard({
     required this.goal,
     required this.isNorthStar,
     required this.onTap,
+    this.isLocked = false,
+    this.onLockedTap,
   });
 
   @override
@@ -152,10 +174,13 @@ class _GoalCard extends StatelessWidget {
     final color = goalCategoryColor(goal.category);
     final progress = goal.derivedProgress;
 
-    return AppCard(
-      onTap: onTap,
-      borderColor: isNorthStar ? AppColors.primary.withValues(alpha: 0.5) : null,
-      child: Column(
+    return PartnerLockedOverlay(
+      isLocked: isLocked,
+      onLockedTap: onLockedTap,
+      child: AppCard(
+        onTap: onTap,
+        borderColor: isNorthStar ? AppColors.primary.withValues(alpha: 0.5) : null,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (isNorthStar) ...[
@@ -253,6 +278,7 @@ class _GoalCard extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
   }
 }
@@ -262,19 +288,29 @@ class _GoalCard extends StatelessWidget {
 class _CompletedGoalTile extends StatelessWidget {
   final Goal goal;
   final VoidCallback onTap;
+  final bool isLocked;
+  final VoidCallback? onLockedTap;
 
-  const _CompletedGoalTile({required this.goal, required this.onTap});
+  const _CompletedGoalTile({
+    required this.goal,
+    required this.onTap,
+    this.isLocked = false,
+    this.onLockedTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final color = goalCategoryColor(goal.category);
-    return AppCard(
-      onTap: onTap,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm + 2,
-      ),
-      child: Row(
+    return PartnerLockedOverlay(
+      isLocked: isLocked,
+      onLockedTap: onLockedTap,
+      child: AppCard(
+        onTap: onTap,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm + 2,
+        ),
+        child: Row(
         children: [
           Icon(Icons.check_circle_rounded, color: color, size: 20),
           const SizedBox(width: AppSpacing.sm),
@@ -293,6 +329,7 @@ class _CompletedGoalTile extends StatelessWidget {
               style: AppTextStyles.labelSmall,
             ),
         ],
+      ),
       ),
     );
   }

@@ -25,7 +25,7 @@ class HabitDetailScreen extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       barrierColor: AppColors.scrim,
-      builder: (_) => Dialog(
+      builder: (dialogContext) => Dialog(
         backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
@@ -54,7 +54,7 @@ class HabitDetailScreen extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context, false),
+                      onPressed: () => Navigator.of(dialogContext).pop(false),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: AppColors.border),
                         padding: const EdgeInsets.symmetric(
@@ -71,7 +71,7 @@ class HabitDetailScreen extends ConsumerWidget {
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context, true),
+                      onPressed: () => Navigator.of(dialogContext).pop(true),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.error,
                         padding: const EdgeInsets.symmetric(
@@ -95,8 +95,19 @@ class HabitDetailScreen extends ConsumerWidget {
     );
 
     if (confirmed == true && context.mounted) {
-      await ref.read(habitsProvider.notifier).deleteHabit(habitId);
-      if (context.mounted) context.pop();
+      final deleted =
+          await ref.read(habitsProvider.notifier).deleteHabit(habitId);
+      if (!context.mounted) return;
+      if (deleted) {
+        context.pop();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(AppStrings.errorGeneric),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
     }
   }
 

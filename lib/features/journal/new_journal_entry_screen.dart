@@ -8,6 +8,7 @@ import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/widgets/app_button.dart';
+import '../../core/widgets/personalize_nudge.dart';
 import '../../core/utils/app_date_utils.dart';
 import '../../models/journal_entry.dart';
 import '../../models/journal_summary.dart';
@@ -287,6 +288,7 @@ class _ModeSelector extends StatelessWidget {
         children: [
           Text('Choose your journal mode', style: AppTextStyles.headlineMedium),
           const SizedBox(height: AppSpacing.lg),
+          const PersonalizeNudge(),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,

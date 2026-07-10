@@ -124,7 +124,9 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Resume a pending partner invite once the user has an account. This
       // takes priority over the onboarding gate so invited partners skip
-      // straight to accepting (acceptPartnerInvite marks onboarding complete).
+      // straight to accepting. Partner accounts are then exempt from the
+      // onboarding gate below via isPartnerAccount (onboarding is not
+      // force-completed on accept).
       if (PendingInviteStore.hasPending) {
         final target = '/partner-invite/${PendingInviteStore.inviteId}';
         if (location != target) return target;
@@ -354,6 +356,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 /// several other providers settling at the same time.
 class _RouterRefreshNotifier extends ChangeNotifier {
   String? _lastUid;
+  String? _lastProfileUid;
   bool? _lastHasCompletedOnboarding;
   bool? _lastIsPartnerAccount;
   bool? _lastHasActiveSubscription;
@@ -364,20 +367,30 @@ class _RouterRefreshNotifier extends ChangeNotifier {
       final uid = next.valueOrNull?.uid;
       if (uid == _lastUid) return;
       _lastUid = uid;
+      if (uid == null) {
+        _lastProfileUid = null;
+        _lastHasCompletedOnboarding = null;
+        _lastIsPartnerAccount = null;
+        _lastHasActiveSubscription = null;
+        _lastUserType = null;
+      }
       notifyListeners();
     });
     ref.listen(currentUserProfileProvider, (_, next) {
       final profile = next.valueOrNull;
+      final profileUid = profile?.uid;
       final hasCompletedOnboarding = profile?.hasCompletedOnboarding;
       final isPartnerAccount = profile?.isPartnerAccount;
       final hasActiveSubscription = profile?.hasActiveSubscription;
       final userType = profile?.userType;
-      if (hasCompletedOnboarding == _lastHasCompletedOnboarding &&
+      if (profileUid == _lastProfileUid &&
+          hasCompletedOnboarding == _lastHasCompletedOnboarding &&
           isPartnerAccount == _lastIsPartnerAccount &&
           hasActiveSubscription == _lastHasActiveSubscription &&
           userType == _lastUserType) {
         return;
       }
+      _lastProfileUid = profileUid;
       _lastHasCompletedOnboarding = hasCompletedOnboarding;
       _lastIsPartnerAccount = isPartnerAccount;
       _lastHasActiveSubscription = hasActiveSubscription;

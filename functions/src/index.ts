@@ -17,7 +17,19 @@ const ttsClient = new TextToSpeechClient();
 // Default neural voice for Future Self narration. Chirp 3: HD voices sound
 // natural and warm for the calm, embodied script while costing ~5x less than
 // Studio voices ($30 vs $160 per 1M characters).
-const DEFAULT_NARRATION_VOICE = 'en-US-Chirp3-HD-Aoede';
+const DEFAULT_NARRATION_VOICE = 'en-US-Chirp3-HD-Charon';
+
+const ALLOWED_NARRATION_VOICES = new Set([
+  'en-US-Chirp3-HD-Aoede',
+  'en-US-Chirp3-HD-Despina',
+  'en-US-Chirp3-HD-Charon',
+  'en-US-Chirp3-HD-Enceladus',
+]);
+
+// Narration playback rate (1.0 = the voice's natural speed). A guided
+// visualization should feel unhurried, so we pace it well below normal speech.
+// Lower this for a slower, more meditative delivery.
+const NARRATION_SPEAKING_RATE = 0.8;
 
 // Bound autoscaling so a traffic spike can't exhaust the regional Cloud Run CPU
 // quota. The project's us-central1 CpuAllocPerProjectRegion quota is 20 vCPU, and
@@ -37,6 +49,11 @@ const db = admin.firestore();
 // paying users are not blocked during normal engagement.
 const DAILY_AI_CALL_LIMIT_FREE = 60;
 const DAILY_AI_CALL_LIMIT_SUBSCRIBER = 300;
+
+// Length of the card-free premium window gifted to a new partner account when
+// they accept an invite. Long enough to build a daily habit before the limited
+// tier kicks in.
+const PARTNER_GIFT_PREMIUM_DAYS = 14;
 
 function dailyAiLimitForUser(data: {
   subscriptionStatus?: string;
@@ -703,13 +720,15 @@ export const synthesizeFutureSelfNarration = onCall(
     await assertDailyAiLimit(request.auth.uid);
 
     const voiceName =
-      typeof voice === 'string' && voice.trim().length > 0
+      typeof voice === 'string' &&
+      voice.trim().length > 0 &&
+      ALLOWED_NARRATION_VOICES.has(voice.trim())
         ? voice.trim()
         : DEFAULT_NARRATION_VOICE;
     const hash =
       typeof scriptHash === 'string' && scriptHash.trim().length > 0
         ? scriptHash.trim()
-        : createHash('sha1').update(script).digest('hex');
+        : createHash('sha1').update(`${voiceName}\n${script}`).digest('hex');
 
     try {
       const [response] = await ttsClient.synthesizeSpeech({
@@ -717,8 +736,8 @@ export const synthesizeFutureSelfNarration = onCall(
         voice: { languageCode: 'en-US', name: voiceName },
         audioConfig: {
           audioEncoding: 'MP3',
-          // Slightly slower than default for a calm, meditative pace.
-          speakingRate: 0.88,
+          // Slower than default for a calm, meditative, guided-visualization pace.
+          speakingRate: NARRATION_SPEAKING_RATE,
         },
       });
 
@@ -984,8 +1003,10 @@ export const acceptPartnerInvite = onCall({ invoker: 'public' }, async (request)
 
   // Determine whether the accepter is already a paying/subscribed user. If they
   // are, keep their existing account intact. Otherwise convert them into a free
-  // "partner" account and mark onboarding complete so they skip the full
-  // mindset onboarding and land straight on the partner experience.
+  // "partner" account and gift them a fixed card-free premium window so they can
+  // build the daily habit before the limited tier kicks in. Onboarding is NOT
+  // force-completed — partners land on the support experience and run the real
+  // onboarding when they opt into their own personal features.
   const partnerSnap = await db.collection('users').doc(partnerUid).get();
   const partnerData = partnerSnap.data() as {
     userType?: string;
@@ -1015,6 +1036,13 @@ export const acceptPartnerInvite = onCall({ invoker: 'public' }, async (request)
     // the (real) onboarding if/when they choose to try their own personal
     // features — that captured info is what makes those features work well.
     partnerUpdate.userType = 'partner';
+
+    // Gift a card-free premium window so the invitee gets a real daily-use
+    // runway to build the habit. Access lapses automatically when this passes
+    // (client computes it from the timestamp — no expiry job needed), after
+    // which they fall back to the limited partner tier.
+    const giftMs = PARTNER_GIFT_PREMIUM_DAYS * 24 * 60 * 60 * 1000;
+    partnerUpdate.premiumUntil = new Date(Date.now() + giftMs).toISOString();
   }
 
   // Add primary to partner's doc

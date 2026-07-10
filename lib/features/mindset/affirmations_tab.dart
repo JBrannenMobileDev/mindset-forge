@@ -14,7 +14,11 @@ import '../../core/widgets/app_card.dart';
 import '../../models/affirmation.dart';
 import '../../models/user_profile.dart';
 import '../../providers/affirmations_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/claude_provider.dart';
+import '../../providers/partner_limits_provider.dart';
+import '../../core/widgets/partner_upgrade_sheet.dart';
+import '../../core/widgets/partner_locked_overlay.dart';
 import 'widgets/affirmations_how_to.dart';
 
 // ─── Affirmation categories ───────────────────────────────────────────────────
@@ -80,6 +84,27 @@ class AffirmationFormModal {
     required UserProfile profile,
     String? initialText,
   }) {
+    if (!profile.hasGiftedPremium && profile.isPartnerAccount) {
+      if (!profile.hasCompletedOnboarding) {
+        showPartnerSetupSheet(
+          context,
+          featureName: PartnerLimits.label(PartnerFeature.affirmation),
+          partnerName: profile.supportingPersonName,
+        );
+        return;
+      }
+      if (!ref
+          .read(partnerLimitsProvider)
+          .canUse(profile, PartnerFeature.affirmation)) {
+        showPartnerUpgradeSheet(
+          context,
+          featureName: PartnerLimits.label(PartnerFeature.affirmation),
+          partnerName: profile.supportingPersonName,
+        );
+        return;
+      }
+    }
+
     showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
@@ -121,6 +146,14 @@ class _AffirmationsTabState extends ConsumerState<AffirmationsTab> {
   Widget build(BuildContext context) {
     final affirmations = ref.watch(affirmationsProvider);
     final active = affirmations.where((a) => a.isActive).toList();
+    final limits = ref.read(partnerLimitsProvider);
+    final lockedAffirmationIds =
+        limits.lockedIds(widget.profile, PartnerFeature.affirmation);
+    final sessionAffirmations = active
+        .where((a) => !lockedAffirmationIds.contains(a.id))
+        .toList();
+    final onLockedAffirmationTap = () =>
+        limits.showLockedUpgrade(context, PartnerFeature.affirmation);
     final isEmpty = affirmations.isEmpty;
     final showIntro =
         !_introDismissed && !widget.profile.affirmationsIntroDismissed;
@@ -157,12 +190,12 @@ class _AffirmationsTabState extends ConsumerState<AffirmationsTab> {
                     label: AppStrings.morningSession,
                     icon: Icons.wb_sunny_rounded,
                     color: AppColors.warning,
-                    onTap: active.isEmpty
+                    onTap: sessionAffirmations.isEmpty
                         ? null
                         : () => launchAffirmationSession(
                               context: context,
                               ref: ref,
-                              affirmations: active,
+                              affirmations: sessionAffirmations,
                               sessionType: 'morning',
                               completedSessionCount: sessionCount,
                             ),
@@ -174,12 +207,12 @@ class _AffirmationsTabState extends ConsumerState<AffirmationsTab> {
                     label: AppStrings.eveningSession,
                     icon: Icons.nightlight_round,
                     color: AppColors.secondary,
-                    onTap: active.isEmpty
+                    onTap: sessionAffirmations.isEmpty
                         ? null
                         : () => launchAffirmationSession(
                               context: context,
                               ref: ref,
-                              affirmations: active,
+                              affirmations: sessionAffirmations,
                               sessionType: 'evening',
                               completedSessionCount: sessionCount,
                             ),
@@ -230,19 +263,30 @@ class _AffirmationsTabState extends ConsumerState<AffirmationsTab> {
                     itemCount: affirmations.length,
                     separatorBuilder: (_, __) =>
                         const SizedBox(height: AppSpacing.md),
-                    itemBuilder: (_, i) => _AffirmationTile(
-                      affirmation: affirmations[i],
-                      onToggle: () => ref
-                          .read(affirmationsProvider.notifier)
-                          .toggleActive(affirmations[i].id),
-                      onDelete: () => ref
-                          .read(affirmationsProvider.notifier)
-                          .deleteAffirmation(affirmations[i].id),
-                    )
-                        .animate()
-                        .fadeIn(
-                            delay: Duration(milliseconds: i * 50),
-                            duration: 300.ms),
+                    itemBuilder: (_, i) {
+                      final affirmation = affirmations[i];
+                      final isLocked =
+                          lockedAffirmationIds.contains(affirmation.id);
+                      return _AffirmationTile(
+                        affirmation: affirmation,
+                        isLocked: isLocked,
+                        onLockedTap: onLockedAffirmationTap,
+                        onToggle: isLocked
+                            ? onLockedAffirmationTap
+                            : () => ref
+                                .read(affirmationsProvider.notifier)
+                                .toggleActive(affirmation.id),
+                        onDelete: isLocked
+                            ? onLockedAffirmationTap
+                            : () => ref
+                                .read(affirmationsProvider.notifier)
+                                .deleteAffirmation(affirmation.id),
+                      )
+                          .animate()
+                          .fadeIn(
+                              delay: Duration(milliseconds: i * 50),
+                              duration: 300.ms);
+                    },
                   ),
           ),
         ],
@@ -549,11 +593,15 @@ class _AffirmationTile extends StatelessWidget {
   final Affirmation affirmation;
   final VoidCallback onToggle;
   final VoidCallback onDelete;
+  final bool isLocked;
+  final VoidCallback? onLockedTap;
 
   const _AffirmationTile({
     required this.affirmation,
     required this.onToggle,
     required this.onDelete,
+    this.isLocked = false,
+    this.onLockedTap,
   });
 
   @override
@@ -561,11 +609,14 @@ class _AffirmationTile extends StatelessWidget {
     final isActive = affirmation.isActive;
     final showCategory = affirmation.category != 'general';
 
-    return AppCard(
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+    return PartnerLockedOverlay(
+      isLocked: isLocked,
+      onLockedTap: onLockedTap,
+      child: AppCard(
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             // Full-height accent bar — encodes active/paused state.
             Container(
               width: 4,
@@ -602,7 +653,7 @@ class _AffirmationTile extends StatelessWidget {
                         scale: 0.8,
                         child: Switch(
                           value: isActive,
-                          onChanged: (_) => onToggle(),
+                          onChanged: isLocked ? null : (_) => onToggle(),
                           activeThumbColor: AppColors.primary,
                           activeTrackColor:
                               AppColors.primary.withValues(alpha: 0.4),
@@ -647,6 +698,7 @@ class _AffirmationTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -1241,6 +1293,36 @@ class _GenerateAffirmationsSheetState
                                 icon: const Icon(Icons.add_circle_rounded,
                                     color: AppColors.primary),
                                 onPressed: () {
+                                  final profile = ref
+                                      .read(currentUserProfileProvider)
+                                      .valueOrNull;
+                                  if (profile != null &&
+                                      profile.isPartnerAccount &&
+                                      !profile.hasGiftedPremium) {
+                                    if (!profile.hasCompletedOnboarding) {
+                                      showPartnerSetupSheet(
+                                        context,
+                                        featureName: PartnerLimits.label(
+                                            PartnerFeature.affirmation),
+                                        partnerName:
+                                            profile.supportingPersonName,
+                                      );
+                                      return;
+                                    }
+                                    if (!ref
+                                        .read(partnerLimitsProvider)
+                                        .canUse(
+                                            profile, PartnerFeature.affirmation)) {
+                                      showPartnerUpgradeSheet(
+                                        context,
+                                        featureName: PartnerLimits.label(
+                                            PartnerFeature.affirmation),
+                                        partnerName:
+                                            profile.supportingPersonName,
+                                      );
+                                      return;
+                                    }
+                                  }
                                   ref
                                       .read(affirmationsProvider.notifier)
                                       .addAffirmation(
@@ -1347,6 +1429,30 @@ class _LibraryBrowseSheetState extends ConsumerState<_LibraryBrowseSheet> {
   String _category = 'general';
 
   void _add(String text) {
+    final profile = ref.read(currentUserProfileProvider).valueOrNull;
+    if (profile != null &&
+        profile.isPartnerAccount &&
+        !profile.hasGiftedPremium) {
+      if (!profile.hasCompletedOnboarding) {
+        showPartnerSetupSheet(
+          context,
+          featureName: PartnerLimits.label(PartnerFeature.affirmation),
+          partnerName: profile.supportingPersonName,
+        );
+        return;
+      }
+      if (!ref
+          .read(partnerLimitsProvider)
+          .canUse(profile, PartnerFeature.affirmation)) {
+        showPartnerUpgradeSheet(
+          context,
+          featureName: PartnerLimits.label(PartnerFeature.affirmation),
+          partnerName: profile.supportingPersonName,
+        );
+        return;
+      }
+    }
+
     ref.read(affirmationsProvider.notifier).addAffirmation(
           Affirmation(
             id: const Uuid().v4(),

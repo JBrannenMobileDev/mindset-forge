@@ -19,9 +19,74 @@ class AccountabilityBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (profile.isPartnerAccount) {
-      return _PartnerSupportingBanner(profile: profile);
+      final daysLeft = profile.giftedPremiumDaysRemaining;
+      final expiringSoon = daysLeft != null && daysLeft <= 3;
+      return Column(
+        children: [
+          _PartnerSupportingBanner(profile: profile),
+          if (expiringSoon) ...[
+            const SizedBox(height: AppSpacing.md),
+            _PremiumExpiringBanner(daysLeft: daysLeft),
+          ],
+        ],
+      );
     }
     return _InvitePartnerBanner(profile: profile);
+  }
+}
+
+/// Conversion nudge shown to a gifted partner in the final days of their free
+/// premium window: keep the momentum going by starting their own trial.
+class _PremiumExpiringBanner extends StatelessWidget {
+  final int daysLeft;
+  const _PremiumExpiringBanner({required this.daysLeft});
+
+  @override
+  Widget build(BuildContext context) {
+    final dayLabel = daysLeft <= 1 ? 'today' : 'in $daysLeft days';
+    return GestureDetector(
+      onTap: () => context.push('/pricing?source=partner_upgrade'),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: AppColors.warning.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+          border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+              ),
+              child: const Icon(Icons.hourglass_bottom_rounded,
+                  color: AppColors.warning, size: 24),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Your premium access ends $dayLabel',
+                      style: AppTextStyles.labelLarge),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Keep the momentum going — start your own free trial.',
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            const Icon(Icons.arrow_forward_ios_rounded,
+                color: AppColors.textMuted, size: 14),
+          ],
+        ),
+      ).animate().fadeIn(duration: 400.ms),
+    );
   }
 }
 

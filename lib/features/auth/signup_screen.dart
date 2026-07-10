@@ -10,6 +10,7 @@ import '../../core/constants/app_strings.dart';
 import '../../core/utils/validators.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_text_field.dart';
+import '../../core/widgets/partner_gift_details_card.dart';
 import '../../core/services/pending_invite_store.dart';
 import '../../providers/auth_notifier.dart';
 import 'widgets/auth_scaffold.dart';
@@ -88,6 +89,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     _PartnerInviteBanner()
                         .animate()
                         .fadeIn(duration: 400.ms),
+                    const SizedBox(height: AppSpacing.md),
+                    const PartnerGiftDetailsCard(compact: true)
+                        .animate()
+                        .fadeIn(delay: 100.ms, duration: 400.ms),
                     const SizedBox(height: AppSpacing.lg),
                   ],
                   Text(

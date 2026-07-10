@@ -16,7 +16,10 @@ class GoalsNotifier extends StateNotifier<List<Goal>> {
   GoalsNotifier(this._ref) : super([]);
 
   void _loadFromProfile(UserProfile? profile) {
-    if (profile == null) return;
+    if (profile == null) {
+      state = [];
+      return;
+    }
     final goals = profile.goals;
     if (!_migrating && _needsMigration(goals)) {
       _migrateChildGoals(goals);

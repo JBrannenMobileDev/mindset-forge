@@ -11,6 +11,7 @@ import '../../../models/user_profile.dart';
 import '../../../models/daily_completion.dart';
 import '../../../providers/affirmations_provider.dart';
 import '../../../providers/daily_completion_provider.dart';
+import '../../../providers/partner_limits_provider.dart';
 import '../../mindset/affirmations_tab.dart';
 import 'evidence_log_widget.dart';
 import 'gratitude_log_widget.dart';
@@ -165,13 +166,18 @@ VoidCallback winNavCallback({
     'affirmationsMorning' => () {
         final active =
             ref.read(affirmationsProvider).where((a) => a.isActive).toList();
-        if (active.isEmpty) {
+        final locked = ref
+            .read(partnerLimitsProvider)
+            .lockedIds(profile, PartnerFeature.affirmation);
+        final sessionAffirmations =
+            active.where((a) => !locked.contains(a.id)).toList();
+        if (sessionAffirmations.isEmpty) {
           context.push('/affirmations');
         } else {
           launchAffirmationSession(
             context: context,
             ref: ref,
-            affirmations: active,
+            affirmations: sessionAffirmations,
             sessionType: 'morning',
             completedSessionCount: affirmationSessionsCompletedCount(profile),
           );
@@ -180,13 +186,18 @@ VoidCallback winNavCallback({
     'affirmationsEvening' => () {
         final active =
             ref.read(affirmationsProvider).where((a) => a.isActive).toList();
-        if (active.isEmpty) {
+        final locked = ref
+            .read(partnerLimitsProvider)
+            .lockedIds(profile, PartnerFeature.affirmation);
+        final sessionAffirmations =
+            active.where((a) => !locked.contains(a.id)).toList();
+        if (sessionAffirmations.isEmpty) {
           context.push('/affirmations');
         } else {
           launchAffirmationSession(
             context: context,
             ref: ref,
-            affirmations: active,
+            affirmations: sessionAffirmations,
             sessionType: 'evening',
             completedSessionCount: affirmationSessionsCompletedCount(profile),
           );

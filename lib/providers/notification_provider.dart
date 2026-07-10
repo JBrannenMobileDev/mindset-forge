@@ -44,7 +44,11 @@ class NotificationPrefsNotifier extends StateNotifier<NotificationPrefs> {
   NotificationPrefsNotifier(this._ref) : super(const NotificationPrefs());
 
   void _loadFromProfile(UserProfile? profile) {
-    if (profile != null) state = profile.notificationPrefs;
+    if (profile == null) {
+      state = const NotificationPrefs();
+      return;
+    }
+    state = profile.notificationPrefs;
   }
 
   /// Persists [prefs] (optimistically) and reschedules local reminders.

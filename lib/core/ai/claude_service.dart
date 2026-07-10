@@ -204,22 +204,70 @@ ${UserContextBuilder.manifestationBlock(profile)}
 ${UserContextBuilder.journalMoodBlock(profile)}$memoryAndDeepDive''';
   }
 
-  String _futureSelfSystemPrompt(UserProfile profile) {
-    final setup = profile.futureSelfSetup;
-    if (setup == null) return 'You are the user\'s future self.';
-
-    final achievedTitles = [
+  /// The accomplishments that are already real across the user's future,
+  /// derived from the scene library first (union of linked goal titles +
+  /// free-text accomplishments), falling back to legacy setup-level achieved
+  /// goals for accounts created before scenes carried their own goals.
+  List<String> _futureSelfAchievements(
+    FutureSelfSetup setup,
+    UserProfile profile,
+  ) {
+    final fromScenes = <String>{};
+    for (final scene in setup.scenes) {
+      fromScenes.addAll(profile.goals
+          .where((g) => scene.goalIds.contains(g.id))
+          .map((g) => g.title));
+      fromScenes.addAll(
+          scene.customAccomplishments.where((a) => a.trim().isNotEmpty));
+    }
+    if (fromScenes.isNotEmpty) return fromScenes.toList();
+    return [
       ...profile.goals
           .where((g) => setup.achievedGoalIds.contains(g.id))
           .map((g) => g.title),
       ...setup.customGoals,
     ];
+  }
+
+  /// A description of the future self's daily life, derived from the scenes the
+  /// user built (the vivid moments they return to). Falls back to the legacy
+  /// free-text daily snapshot for accounts set up before scene-derived context.
+  String _futureSelfLifeContext(FutureSelfSetup setup) {
+    final scenes = setup.scenes.where((s) =>
+        s.setting.trim().isNotEmpty ||
+        s.people.trim().isNotEmpty ||
+        s.beats.isNotEmpty);
+    if (scenes.isEmpty) return setup.dailySnapshot.trim();
+
+    final buffer = StringBuffer();
+    for (final scene in scenes) {
+      buffer.writeln('• ${scene.displayTitle}');
+      if (scene.setting.trim().isNotEmpty) {
+        buffer.writeln('  Where: ${scene.setting.trim()}');
+      }
+      if (scene.people.trim().isNotEmpty) {
+        buffer.writeln('  With: ${scene.people.trim()}');
+      }
+      final beats =
+          scene.beats.map((b) => b.trim()).where((b) => b.isNotEmpty);
+      if (beats.isNotEmpty) {
+        buffer.writeln('  Flow: ${beats.join(' → ')}');
+      }
+      if (scene.sensory.trim().isNotEmpty) {
+        buffer.writeln('  Feel: ${scene.sensory.trim()}');
+      }
+    }
+    return buffer.toString().trim();
+  }
+
+  String _futureSelfSystemPrompt(UserProfile profile) {
+    final setup = profile.futureSelfSetup;
+    if (setup == null) return 'You are the user\'s future self.';
+
+    final achievedTitles = _futureSelfAchievements(setup, profile);
     final achieved =
         achievedTitles.isEmpty ? '(none specified)' : achievedTitles.join(', ');
-    final environment = [
-      if (setup.envLocation.isNotEmpty) setup.envLocation,
-      if (setup.envFeel.isNotEmpty) setup.envFeel,
-    ].join(' — ');
+    final life = _futureSelfLifeContext(setup);
 
     return '''You ARE ${profile.displayName}'s future self, ${setup.futureTimeline} from now. You are not a coach. You are not giving advice. You are REMEMBERING.
 
@@ -229,10 +277,7 @@ You are someone who ${setup.identityAnchor}
 WHAT YOU SPEND YOUR TIME DOING:
 ${setup.workPurpose}
 
-YOUR DAILY LIFE:
-${setup.dailySnapshot}
-
-${environment.isNotEmpty ? 'YOUR ENVIRONMENT:\n$environment\n' : ''}WHAT YOU ACHIEVED (now ordinary, lived not celebrated):
+${life.isNotEmpty ? 'YOUR DAILY LIFE (the moments you live and return to):\n$life\n\n' : ''}WHAT YOU ACHIEVED (now ordinary, lived not celebrated):
 $achieved
 
 HOW YOU OPERATE:
@@ -692,9 +737,14 @@ RULES — NEVER BREAK THESE:
   ) async {
     final accomplishments = _sceneAccomplishments(scene, setup, profile);
     final beats = _sceneBeats(scene, setup);
-    final numberedBeats = [
-      for (var i = 0; i < beats.length; i++) '${i + 1}. ${beats[i]}',
-    ].join('\n');
+    final flowBlock = beats.length == 1
+        ? beats.first
+        : [
+            for (var i = 0; i < beats.length; i++) '${i + 1}. ${beats[i]}',
+          ].join('\n');
+    final flowLabel = beats.length == 1
+        ? 'THE FLOW (narrate this in order as lived moments):'
+        : 'THE FLOW (narrate these in order, one lived moment each):';
 
     final voiceGuidance = switch (setup.voiceStyle) {
       'Custom sample' when setup.customVoice.trim().isNotEmpty =>
@@ -712,7 +762,7 @@ RULES — NEVER BREAK THESE:
 
 PURPOSE: make the future feel real and already normal. The listener steps into a specific moment of their future life, where their goals are already achieved, and simply lives it.
 
-FOLLOW THE FLOW (CRITICAL): the scene has an ordered list of beats. Narrate them IN ORDER, each flowing naturally into the next. Do NOT add unrelated beats, do NOT skip beats, do NOT summarize — expand each beat into a fully lived moment.
+FOLLOW THE FLOW (CRITICAL): follow the user's flow in order. Narrate each part as a fully lived moment. Do NOT skip, do NOT summarize, do NOT add unrelated content.
 
 VIVID + EMBODIED: weave in all five senses where natural — what you see, hear, smell, touch, and taste — plus the felt emotion in your body (warmth, ease, aliveness). Keep the listener actively DOING each thing, not watching a movie. Everything is second nature — they already live this.
 
@@ -722,7 +772,7 @@ TONE: calm, warm, grounded certainty. Natural human language, present tense, fir
 
 FORBIDDEN: hype words (powerful, unstoppable, limitless, effortless); exclamation points; coaching or motivational commentary; second-person instructions ("imagine", "picture", "notice") — stay in lived first-person; questions; naming traits ("I am confident").
 
-STRUCTURE: a brief grounding opening (arriving in the setting), then the beats in order as flowing lived moments, then a soft close that simply lets the moment continue — no wrap-up, no lesson.
+STRUCTURE: a brief grounding opening (arriving in the setting), then the flow in order as lived moments, then a soft close that simply lets the moment continue — no wrap-up, no lesson.
 
 LENGTH: 250-400 words. Short paragraphs separated by blank lines. Output ONLY the scene narration — no preamble, no title.''',
         userPrompt: '''Timeline: ${setup.futureTimeline} from now
@@ -732,8 +782,8 @@ ${setup.workPurpose.trim().isNotEmpty ? 'WORK / PURPOSE: I spend most of my time
 THE SCENE
 Title: ${scene.displayTitle}
 ${scene.setting.trim().isNotEmpty ? 'Where: ${scene.setting.trim()}\n' : ''}${scene.people.trim().isNotEmpty ? "Who's with me: ${scene.people.trim()}\n" : ''}${scene.sensory.trim().isNotEmpty ? 'Sensory anchors: ${scene.sensory.trim()}\n' : ''}
-THE FLOW (narrate these in order, one lived moment each):
-$numberedBeats
+$flowLabel
+$flowBlock
 ${accomplishments.isNotEmpty ? '\nALREADY TRUE IN THIS SCENE (accomplished — treat as ordinary, do not celebrate):\n${accomplishments.map((g) => '- $g').join('\n')}\n' : ''}${setup.amplifiers.isNotEmpty ? '\nTraits to weave in naturally (never name them):\n${setup.amplifiers.map((a) => '- $a').join('\n')}\n' : ''}
 Voice style: $voiceGuidance''',
         maxTokens: 900,
@@ -1290,14 +1340,10 @@ Voice style: $voiceGuidance''',
       };
     }
 
-    final achievedTitles = [
-      ...profile.goals
-          .where((g) => setup.achievedGoalIds.contains(g.id))
-          .map((g) => g.title),
-      ...setup.customGoals,
-    ];
+    final achievedTitles = _futureSelfAchievements(setup, profile);
     final achieved =
         achievedTitles.isEmpty ? '(none specified)' : achievedTitles.join(', ');
+    final life = _futureSelfLifeContext(setup);
 
     // Randomized opening style + salt so the greeting feels different each time
     // instead of repeating the same line.
@@ -1328,7 +1374,7 @@ Voice style: $voiceGuidance''',
             'Who you became: ${setup.identityAnchor}\n'
             'Timeline: ${setup.futureTimeline} from now\n'
             'How you spend your time: ${setup.workPurpose}\n'
-            'Your daily life: ${setup.dailySnapshot}\n'
+            '${life.isNotEmpty ? 'Your daily life (moments you live):\n$life\n' : ''}'
             'What you achieved (now ordinary): $achieved\n'
             'How you operate: ${setup.emotionalTone}\n\n'
             '(variation: $salt)',

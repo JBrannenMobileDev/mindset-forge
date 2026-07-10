@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+import '../core/constants/future_self_voices.dart';
 import '../core/services/analytics_service.dart';
 import '../core/utils/app_date_utils.dart';
 import '../models/future_self_setup.dart';
@@ -20,7 +21,11 @@ class FutureSelfNotifier extends StateNotifier<FutureSelfSetup?> {
   FutureSelfNotifier(this._ref) : super(null);
 
   void _loadFromProfile(UserProfile? profile) {
-    state = profile?.futureSelfSetup;
+    if (profile == null) {
+      state = null;
+      return;
+    }
+    state = profile.futureSelfSetup;
   }
 
   /// Saves the full setup (shared config + scene library) to Firestore.
@@ -33,14 +38,34 @@ class FutureSelfNotifier extends StateNotifier<FutureSelfSetup?> {
     });
   }
 
-  /// The voice to keep consistent across a user's scenes (reuse the first
-  /// scene's voice so the library sounds like one narrator).
-  String? get _libraryVoice {
-    final scenes = state?.scenes ?? const [];
-    for (final s in scenes) {
-      if (s.narrationVoice.isNotEmpty) return s.narrationVoice;
-    }
-    return null;
+  /// The TTS voice to use for all scenes in this practice.
+  String get _narrationVoice =>
+      FutureSelfVoices.resolve(state?.preferredNarrationVoice ?? '');
+
+  /// True when [scene] is missing a script or its cached audio does not match
+  /// the user's preferred narration voice.
+  bool sceneNeedsNarrationRefresh(FutureSelfScene scene) {
+    return !scene.hasScript || !scene.narrationMatchesVoice(_narrationVoice);
+  }
+
+  /// Updates the preferred narration voice and clears cached audio so scenes
+  /// re-synthesize on next practice.
+  Future<void> updateNarrationVoice(String voiceId) async {
+    final setup = state;
+    if (setup == null) return;
+    final resolved = FutureSelfVoices.resolve(voiceId);
+    if (setup.resolvedNarrationVoice == resolved) return;
+
+    final clearedScenes = setup.scenes
+        .map((s) => s.copyWith(clearNarration: true))
+        .toList();
+
+    await saveSetup(
+      setup.copyWith(
+        preferredNarrationVoice: resolved,
+        scenes: clearedScenes,
+      ),
+    );
   }
 
   /// Generates a scene's script from the shared setup context. Narration is
@@ -121,11 +146,8 @@ class FutureSelfNotifier extends StateNotifier<FutureSelfSetup?> {
       sensory: sensory,
       goalIds: goalIds,
       customAccomplishments: customAccomplishments,
-      // Clear stale narration so the player doesn't play the old audio if
-      // regeneration fails midway.
-      script: null,
-      scriptHash: null,
-      narrationUrl: null,
+      clearScript: true,
+      clearNarration: true,
     );
     final refined = await _generateScene(base, setup, profile);
 
@@ -152,20 +174,32 @@ class FutureSelfNotifier extends StateNotifier<FutureSelfSetup?> {
     final idx = setup.scenes.indexWhere((s) => s.id == sceneId);
     if (idx < 0) return null;
     var scene = setup.scenes[idx];
-    if (scene.hasScript && scene.hasNarration) return scene;
+    if (!sceneNeedsNarrationRefresh(scene)) {
+      // Cache hit. Back-fill the voice id for legacy scenes (narration was
+      // cached before we stored which voice made it) so future sessions match
+      // cleanly without ever re-synthesizing. No TTS call here.
+      if (scene.hasNarration && scene.narrationVoice.isEmpty) {
+        scene = scene.copyWith(narrationVoice: _narrationVoice);
+        final scenes = [...setup.scenes];
+        scenes[idx] = scene;
+        await saveSetup(setup.copyWith(scenes: scenes));
+      }
+      return scene;
+    }
 
     final profile = _ref.read(currentUserProfileProvider).valueOrNull;
     if (profile == null) return scene;
     final claude = _ref.read(claudeServiceProvider);
+    final voice = _narrationVoice;
 
     if (!scene.hasScript) {
       final script =
           await claude.generateFutureSelfSceneScript(scene, setup, profile);
       scene = scene.copyWith(script: script);
     }
-    if (!scene.hasNarration && scene.hasScript) {
+    if (scene.hasScript && !scene.narrationMatchesVoice(voice)) {
       final narration =
-          await claude.synthesizeNarration(scene.script!, voice: _libraryVoice);
+          await claude.synthesizeNarration(scene.script!, voice: voice);
       if (narration != null) {
         scene = scene.copyWith(
           narrationUrl: narration.url,

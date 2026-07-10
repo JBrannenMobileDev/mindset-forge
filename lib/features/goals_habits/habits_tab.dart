@@ -17,12 +17,15 @@ import '../../core/widgets/app_text_field.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/habit_completion_checkbox.dart';
 import '../../core/widgets/shimmer_widget.dart';
+import '../../core/widgets/partner_locked_overlay.dart';
 import '../../models/habit.dart';
 import '../../providers/habits_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/claude_provider.dart';
 import '../../providers/future_self_provider.dart';
 import '../../providers/notification_provider.dart';
+import '../../providers/partner_limits_provider.dart';
+import '../../core/widgets/partner_upgrade_sheet.dart';
 import '../../core/utils/breakpoints.dart';
 import 'actions_layout.dart';
 import 'widgets/actions_tab_skeleton.dart';
@@ -38,6 +41,32 @@ class HabitFormModal {
     String? initialName,
     Habit? editHabit,
   }) {
+    if (editHabit == null) {
+      final profile = ref.read(currentUserProfileProvider).valueOrNull;
+      if (profile != null &&
+          profile.isPartnerAccount &&
+          !profile.hasGiftedPremium) {
+        if (!profile.hasCompletedOnboarding) {
+          showPartnerSetupSheet(
+            context,
+            featureName: PartnerLimits.label(PartnerFeature.habit),
+            partnerName: profile.supportingPersonName,
+          );
+          return;
+        }
+        if (!ref
+            .read(partnerLimitsProvider)
+            .canUse(profile, PartnerFeature.habit)) {
+          showPartnerUpgradeSheet(
+            context,
+            featureName: PartnerLimits.label(PartnerFeature.habit),
+            partnerName: profile.supportingPersonName,
+          );
+          return;
+        }
+      }
+    }
+
     showAdaptiveSheet<void>(
       context: context,
       dialogMaxWidth: 560,
@@ -115,7 +144,16 @@ class _HabitsContentState extends ConsumerState<_HabitsContent> {
     super.dispose();
   }
 
-  Future<void> _completeHabit(Habit habit) async {
+  Future<void> _completeHabit(
+    Habit habit, {
+    required Set<String> lockedHabitIds,
+    required PartnerLimitsController limits,
+  }) async {
+    if (lockedHabitIds.contains(habit.id)) {
+      limits.showLockedUpgrade(context, PartnerFeature.habit);
+      return;
+    }
+
     final before = habit.currentStreak;
     await ref.read(habitsProvider.notifier).completeHabit(habit.id);
     if (!mounted) return;
@@ -143,6 +181,14 @@ class _HabitsContentState extends ConsumerState<_HabitsContent> {
   @override
   Widget build(BuildContext context) {
     final habits = ref.watch(habitsProvider);
+    final profile = ref.watch(currentUserProfileProvider).valueOrNull;
+    final limits = ref.read(partnerLimitsProvider);
+    final lockedHabitIds = profile == null
+        ? const <String>{}
+        : limits.lockedIds(profile, PartnerFeature.habit);
+
+    void onLockedHabitTap() =>
+        limits.showLockedUpgrade(context, PartnerFeature.habit);
 
     if (habits.isEmpty) {
       return HabitsTab._wrapIfDesktop(
@@ -205,18 +251,30 @@ class _HabitsContentState extends ConsumerState<_HabitsContent> {
           ),
           itemCount: active.length,
           onReorder: (oldIndex, newIndex) {
+            final habit = active[oldIndex];
+            if (lockedHabitIds.contains(habit.id)) {
+              onLockedHabitTap();
+              return;
+            }
             if (newIndex > oldIndex) newIndex--;
             ref.read(habitsProvider.notifier).reorderActive(oldIndex, newIndex);
           },
           itemBuilder: (context, index) {
             final habit = active[index];
+            final isLocked = lockedHabitIds.contains(habit.id);
             return Padding(
               key: ValueKey(habit.id),
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
               child: _HabitCard(
                 habit: habit,
-                dragIndex: index,
-                onComplete: () => _completeHabit(habit),
+                dragIndex: isLocked ? null : index,
+                isLocked: isLocked,
+                onLockedTap: onLockedHabitTap,
+                onComplete: () => _completeHabit(
+                  habit,
+                  lockedHabitIds: lockedHabitIds,
+                  limits: limits,
+                ),
                 onOpenDetail: () => context.push('/actions/habit/${habit.id}'),
               ),
             );
@@ -225,6 +283,8 @@ class _HabitsContentState extends ConsumerState<_HabitsContent> {
               ? null
               : _PausedHabitsSection(
                   habits: paused,
+                  lockedHabitIds: lockedHabitIds,
+                  onLockedTap: onLockedHabitTap,
                   expanded: _pausedExpanded,
                   onToggleExpanded: () =>
                       setState(() => _pausedExpanded = !_pausedExpanded),
@@ -279,12 +339,16 @@ class _HabitsContentState extends ConsumerState<_HabitsContent> {
 /// attention with what's actually active.
 class _PausedHabitsSection extends StatelessWidget {
   final List<Habit> habits;
+  final Set<String> lockedHabitIds;
+  final VoidCallback onLockedTap;
   final bool expanded;
   final VoidCallback onToggleExpanded;
   final void Function(Habit) onOpenDetail;
 
   const _PausedHabitsSection({
     required this.habits,
+    required this.lockedHabitIds,
+    required this.onLockedTap,
     required this.expanded,
     required this.onToggleExpanded,
     required this.onOpenDetail,
@@ -322,14 +386,19 @@ class _PausedHabitsSection extends StatelessWidget {
           ),
           if (expanded)
             ...habits.map(
-              (h) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                child: _HabitCard(
-                  habit: h,
-                  onComplete: () {},
-                  onOpenDetail: () => onOpenDetail(h),
-                ),
-              ),
+              (h) {
+                final isLocked = lockedHabitIds.contains(h.id);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                  child: _HabitCard(
+                    habit: h,
+                    isLocked: isLocked,
+                    onLockedTap: onLockedTap,
+                    onComplete: isLocked ? onLockedTap : () {},
+                    onOpenDetail: () => onOpenDetail(h),
+                  ),
+                );
+              },
             ),
         ],
       ),
@@ -342,27 +411,35 @@ class _HabitCard extends StatelessWidget {
   final VoidCallback onComplete;
   final VoidCallback onOpenDetail;
   final int? dragIndex;
+  final bool isLocked;
+  final VoidCallback? onLockedTap;
 
   const _HabitCard({
     required this.habit,
     required this.onComplete,
     required this.onOpenDetail,
     this.dragIndex,
+    this.isLocked = false,
+    this.onLockedTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final isActive = habit.state == 'active';
 
-    return AppCard(
-      onTap: onOpenDetail,
-      child: Row(
-        children: [
-          HabitCompletionCheckbox(
-            isDone: habit.isCompletedToday,
-            enabled: isActive,
-            onTap: onComplete,
-          ),
+    return PartnerLockedOverlay(
+      isLocked: isLocked,
+      onLockedTap: onLockedTap,
+      blockTap: false,
+      child: AppCard(
+        onTap: onOpenDetail,
+        child: Row(
+          children: [
+            HabitCompletionCheckbox(
+              isDone: habit.isCompletedToday,
+              enabled: isActive && !isLocked,
+              onTap: isLocked ? (onLockedTap ?? () {}) : onComplete,
+            ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
@@ -427,6 +504,7 @@ class _HabitCard extends StatelessWidget {
               ),
             ),
         ],
+      ),
       ),
     );
   }
@@ -806,6 +884,28 @@ class _HabitSuggestionsSheetState extends ConsumerState<_HabitSuggestionsSheet> 
   }
 
   Future<void> _addSuggestion(Map<String, String> s) async {
+    final profile = ref.read(currentUserProfileProvider).valueOrNull;
+    if (profile != null &&
+        profile.isPartnerAccount &&
+        !profile.hasGiftedPremium) {
+      if (!profile.hasCompletedOnboarding) {
+        showPartnerSetupSheet(
+          context,
+          featureName: PartnerLimits.label(PartnerFeature.habit),
+          partnerName: profile.supportingPersonName,
+        );
+        return;
+      }
+      if (!ref.read(partnerLimitsProvider).canUse(profile, PartnerFeature.habit)) {
+        showPartnerUpgradeSheet(
+          context,
+          featureName: PartnerLimits.label(PartnerFeature.habit),
+          partnerName: profile.supportingPersonName,
+        );
+        return;
+      }
+    }
+
     final habit = Habit(
       id: const Uuid().v4(),
       name: s['name'] ?? '',
@@ -1013,6 +1113,28 @@ class _HabitLibrarySheetState extends ConsumerState<_HabitLibrarySheet> {
   String _area = kHabitLibraryAreas.first;
 
   void _add(HabitTemplate t) {
+    final profile = ref.read(currentUserProfileProvider).valueOrNull;
+    if (profile != null &&
+        profile.isPartnerAccount &&
+        !profile.hasGiftedPremium) {
+      if (!profile.hasCompletedOnboarding) {
+        showPartnerSetupSheet(
+          context,
+          featureName: PartnerLimits.label(PartnerFeature.habit),
+          partnerName: profile.supportingPersonName,
+        );
+        return;
+      }
+      if (!ref.read(partnerLimitsProvider).canUse(profile, PartnerFeature.habit)) {
+        showPartnerUpgradeSheet(
+          context,
+          featureName: PartnerLimits.label(PartnerFeature.habit),
+          partnerName: profile.supportingPersonName,
+        );
+        return;
+      }
+    }
+
     ref.read(habitsProvider.notifier).addHabit(
           Habit(
             id: const Uuid().v4(),

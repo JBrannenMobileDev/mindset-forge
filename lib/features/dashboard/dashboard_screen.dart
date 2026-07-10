@@ -144,7 +144,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     if (after <= before) return;
 
     InviteTrigger? trigger;
-    if (before < 30 && after >= 30) {
+    if (before < 100 && after >= 100) {
+      trigger = InviteTrigger.streak100;
+    } else if (before < 60 && after >= 60) {
+      trigger = InviteTrigger.streak60;
+    } else if (before < 30 && after >= 30) {
       trigger = InviteTrigger.streak30;
     } else if (before < 7 && after >= 7) {
       trigger = InviteTrigger.streak7;

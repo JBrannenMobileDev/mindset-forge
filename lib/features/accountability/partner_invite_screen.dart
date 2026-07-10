@@ -5,9 +5,12 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
+import '../../core/constants/app_strings.dart';
 import '../../core/widgets/app_button.dart';
+import '../../core/widgets/partner_gift_details_card.dart';
 import '../../core/services/pending_invite_store.dart';
 import '../../providers/accountability_provider.dart';
+import '../../providers/auth_provider.dart';
 
 class PartnerInviteScreen extends ConsumerStatefulWidget {
   final String inviteId;
@@ -127,10 +130,14 @@ class _PartnerInviteScreenState extends ConsumerState<PartnerInviteScreen> {
         ).animate().fadeIn(delay: 100.ms),
         const SizedBox(height: AppSpacing.md),
         Text(
-          'As their partner, you\'ll be able to view their progress, send encouragement, and help them stay on track with their mindset goals.\n\nYou\'ll get free access to MindsetForge.',
+          'As their partner, you\'ll view their progress, send encouragement, and help them stay on track.',
           style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
           textAlign: TextAlign.center,
-        ).animate().fadeIn(delay: 200.ms),
+        ).animate().fadeIn(delay: 150.ms),
+        const SizedBox(height: AppSpacing.md),
+        const PartnerGiftDetailsCard()
+            .animate()
+            .fadeIn(delay: 200.ms),
         const SizedBox(height: AppSpacing.xxl),
         AppPrimaryButton(
           label: 'Accept Partnership',
@@ -158,29 +165,63 @@ class _PartnerInviteScreenState extends ConsumerState<PartnerInviteScreen> {
   }
 
   Widget _buildAccepted() {
+    // Show the gifted premium window as the reward. Read the days remaining from
+    // the freshly-updated profile when available; fall back to generic copy if
+    // the stream hasn't caught up yet.
+    final profile = ref.watch(currentUserProfileProvider).valueOrNull;
+    final giftDays = profile?.giftedPremiumDaysRemaining;
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 80)
-            .animate()
-            .scale(duration: 400.ms),
+        Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.primary, AppColors.secondary],
+            ),
+            shape: BoxShape.circle,
+            boxShadow: [BoxShadow(color: AppColors.primaryGlow, blurRadius: 24, spreadRadius: 2)],
+          ),
+          child: const Icon(Icons.card_giftcard_rounded, color: Colors.white, size: 40),
+        ).animate().scale(duration: 400.ms),
         const SizedBox(height: AppSpacing.xl),
         Text(
-          'Partnership Accepted!',
+          'You\'re in!',
           style: AppTextStyles.headlineMedium,
           textAlign: TextAlign.center,
         ).animate().fadeIn(delay: 100.ms),
         const SizedBox(height: AppSpacing.md),
         Text(
-          'You\'re now $_primaryName\'s accountability partner. Head to the app to view their progress and send encouragement.',
+          giftDays != null
+              ? 'You\'re now $_primaryName\'s accountability partner — and they\'ve gifted you $giftDays days of MindsetForge Premium. Take 2 minutes to personalize it so your coaching, journal, and goals are built around you.'
+              : 'You\'re now $_primaryName\'s accountability partner, with full access to MindsetForge. Take 2 minutes to personalize it so your coaching, journal, and goals are built around you.',
           style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
           textAlign: TextAlign.center,
         ).animate().fadeIn(delay: 200.ms),
+        const SizedBox(height: AppSpacing.md),
+        Text(
+          AppStrings.partnerGiftAcceptSuccessAfter,
+          style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted),
+          textAlign: TextAlign.center,
+        ).animate().fadeIn(delay: 250.ms),
         const SizedBox(height: AppSpacing.xxl),
         AppPrimaryButton(
-          label: 'Go to Dashboard',
-          onPressed: () => context.go('/dashboard'),
+          label: 'Personalize My Experience',
+          icon: Icons.arrow_forward_rounded,
+          onPressed: () => context.go('/onboarding'),
         ).animate().fadeIn(delay: 300.ms),
+        const SizedBox(height: AppSpacing.md),
+        TextButton(
+          onPressed: () => context.go('/dashboard'),
+          child: Text(
+            'Explore first',
+            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
+          ),
+        ),
       ],
     );
   }

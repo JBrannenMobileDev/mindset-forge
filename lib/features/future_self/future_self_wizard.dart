@@ -4,15 +4,23 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/constants/app_text_styles.dart';
+import '../../core/constants/future_self_voices.dart';
+import '../../core/widgets/narration_voice_picker.dart';
 import '../../models/future_self_setup.dart';
-import '../../models/goal.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/future_self_provider.dart';
 import 'widgets/future_self_scene_editor.dart';
 
-/// 6-step setup/refine wizard for the Future Self practice. Framed as a one-time
-/// (occasionally refined) setup, NOT a daily regenerate. On finish it generates
-/// the embodiment script once and stores it via [futureSelfProvider].
+/// Lean setup/refine wizard for the Future Self practice. Captures each answer
+/// exactly once: the shared identity context (who the future self is, their
+/// tone and voice) plus, on first-time setup, the first concrete scene. Both
+/// the audio scene and the "talk to your future self" chat are fed from this
+/// single capture — the chat derives its daily-life context from the scenes,
+/// so nothing is asked twice.
+///
+/// First-time setup is 3 steps (identity, feel & voice, first scene). Refining
+/// the shared config (when scenes already exist) is a clean 2-step prefix
+/// (identity, feel & voice); scenes themselves are added/refined from the hub.
 class FutureSelfWizard extends ConsumerStatefulWidget {
   const FutureSelfWizard({super.key});
 
@@ -21,9 +29,7 @@ class FutureSelfWizard extends ConsumerStatefulWidget {
 }
 
 class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
-  /// First-time setup adds a final scene-focus step; refining shared config
-  /// (when scenes already exist) stops at the config steps.
-  int get _totalSteps => _isFirstTime ? 7 : 6;
+  int get _totalSteps => _isFirstTime ? 3 : 2;
   bool _isFirstTime = true;
 
   static const _timelines = ['1 year', '3 years', '5 years', '10 years'];
@@ -46,22 +52,19 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
   int _step = 0;
   bool _generating = false;
 
-  // Step state
+  // Step 1 — identity
   final _identityCtrl = TextEditingController();
   String _timeline = '5 years';
-  final Set<String> _achievedGoalIds = {};
-  final List<String> _customGoals = [];
-  final _customGoalCtrl = TextEditingController();
-  final _snapshotCtrl = TextEditingController();
-  final _envLocationCtrl = TextEditingController();
-  final _envFeelCtrl = TextEditingController();
   final _workCtrl = TextEditingController();
+
+  // Step 2 — feel & voice
   String _emotion = '';
   final List<String> _amplifiers = [];
   String _voiceStyle = '';
   final _customVoiceCtrl = TextEditingController();
+  String _preferredNarrationVoice = FutureSelfVoices.defaultVoice;
 
-  // First-scene builder draft (only used during first-time setup).
+  // Step 3 — first scene (first-time setup only)
   SceneDraft? _sceneDraft;
 
   @override
@@ -72,20 +75,17 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
     if (existing != null) {
       _identityCtrl.text = existing.identityAnchor;
       _timeline = existing.futureTimeline;
-      _achievedGoalIds.addAll(existing.achievedGoalIds);
-      _customGoals.addAll(existing.customGoals);
-      _snapshotCtrl.text = existing.dailySnapshot;
-      _envLocationCtrl.text = existing.envLocation;
-      _envFeelCtrl.text = existing.envFeel;
       _workCtrl.text = existing.workPurpose;
       _emotion = existing.emotionalTone;
       _amplifiers.addAll(existing.amplifiers);
       _voiceStyle = existing.voiceStyle;
       _customVoiceCtrl.text = existing.customVoice;
+      _preferredNarrationVoice = existing.resolvedNarrationVoice;
     }
 
     // Prefill the identity from the user's existing identity statement so
-    // they edit rather than write from a blank field.
+    // they edit rather than write from a blank field. This is personal, not a
+    // generic template.
     if (_identityCtrl.text.trim().isEmpty) {
       final identity =
           ref.read(currentUserProfileProvider).valueOrNull?.identityStatement ??
@@ -100,10 +100,6 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
   @override
   void dispose() {
     _identityCtrl.dispose();
-    _customGoalCtrl.dispose();
-    _snapshotCtrl.dispose();
-    _envLocationCtrl.dispose();
-    _envFeelCtrl.dispose();
     _workCtrl.dispose();
     _customVoiceCtrl.dispose();
     super.dispose();
@@ -114,31 +110,15 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
       case 0:
         return _identityCtrl.text.trim().isNotEmpty && _timeline.isNotEmpty;
       case 1:
-        return true; // goals optional
-      case 2:
-        return true; // life snapshot optional
-      case 3:
-        return _workCtrl.text.trim().isNotEmpty;
-      case 4:
-        return _emotion.isNotEmpty;
-      case 5:
-        return _voiceStyle.isNotEmpty &&
+        return _emotion.isNotEmpty &&
+            _voiceStyle.isNotEmpty &&
             (_voiceStyle != 'Custom sample' ||
                 _customVoiceCtrl.text.trim().isNotEmpty);
-      case 6:
+      case 2:
         return _sceneDraft?.isValid ?? false;
       default:
         return true;
     }
-  }
-
-  void _addCustomGoal() {
-    final text = _customGoalCtrl.text.trim();
-    if (text.isEmpty) return;
-    setState(() {
-      _customGoals.add(text);
-      _customGoalCtrl.clear();
-    });
   }
 
   void _toggleAmplifier(String label) {
@@ -154,29 +134,42 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
   Future<void> _finish() async {
     setState(() => _generating = true);
     final existing = ref.read(futureSelfProvider);
+    final notifier = ref.read(futureSelfProvider.notifier);
+
+    if (existing != null &&
+        existing.resolvedNarrationVoice != _preferredNarrationVoice) {
+      await notifier.updateNarrationVoice(_preferredNarrationVoice);
+    }
+
+    final scenesAfterVoice =
+        ref.read(futureSelfProvider)?.scenes ?? existing?.scenes ?? const [];
 
     final setup = FutureSelfSetup(
       identityAnchor: _identityCtrl.text.trim(),
       futureTimeline: _timeline,
-      achievedGoalIds: _achievedGoalIds.toList(),
-      customGoals: _customGoals,
-      dailySnapshot: _snapshotCtrl.text.trim(),
-      envLocation: _envLocationCtrl.text.trim(),
-      envFeel: _envFeelCtrl.text.trim(),
       workPurpose: _workCtrl.text.trim(),
       emotionalTone: _emotion,
       amplifiers: _amplifiers,
       voiceStyle: _voiceStyle,
       customVoice: _customVoiceCtrl.text.trim(),
-      // Preserve the existing scene library on config refine.
-      scenes: existing?.scenes ?? const [],
+      preferredNarrationVoice: _preferredNarrationVoice,
+      // Preserve legacy shared context (daily-life/environment/achieved goals)
+      // for back-compat; these are no longer collected here — the chat derives
+      // that context from the scene library instead.
+      achievedGoalIds: existing?.achievedGoalIds ?? const [],
+      customGoals: existing?.customGoals ?? const [],
+      dailySnapshot: existing?.dailySnapshot ?? '',
+      envLocation: existing?.envLocation ?? '',
+      envFeel: existing?.envFeel ?? '',
+      scenes: scenesAfterVoice,
       beatsEnabled: existing?.beatsEnabled ?? true,
       binauralHz: existing?.binauralHz ?? 7,
+      beatsVolume: existing?.beatsVolume ?? 0.3,
+      narrationVolume: existing?.narrationVolume ?? 1.0,
       hasSeenHowTo: existing?.hasSeenHowTo ?? false,
       createdAt: existing?.createdAt ?? DateTime.now(),
     );
 
-    final notifier = ref.read(futureSelfProvider.notifier);
     await notifier.saveSetup(setup);
 
     // First-time setup also generates the first scene (script + narration).
@@ -198,7 +191,7 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
 
   @override
   Widget build(BuildContext context) {
-    final progress = (_step) / (_totalSteps - 1);
+    final progress = (_step + 1) / _totalSteps;
     final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     return Scaffold(
       backgroundColor: AppColors.futureSelfBackground,
@@ -267,49 +260,15 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
           identityCtrl: _identityCtrl,
           timeline: _timeline,
           timelines: _timelines,
+          workCtrl: _workCtrl,
           onTimeline: (t) => setState(() => _timeline = t),
           onChanged: () => setState(() {}),
         );
       case 1:
-        return _StepGoals(
-          goals: ref
-                  .watch(currentUserProfileProvider)
-                  .valueOrNull
-                  ?.goals
-                  .where((g) => g.status == 'active')
-                  .toList() ??
-              const <Goal>[],
-          selectedIds: _achievedGoalIds,
-          customGoals: _customGoals,
-          customCtrl: _customGoalCtrl,
-          onToggle: (id) => setState(() {
-            _achievedGoalIds.contains(id)
-                ? _achievedGoalIds.remove(id)
-                : _achievedGoalIds.add(id);
-          }),
-          onAddCustom: _addCustomGoal,
-          onRemoveCustom: (i) => setState(() => _customGoals.removeAt(i)),
-        );
-      case 2:
-        return _StepSnapshot(
-          snapshotCtrl: _snapshotCtrl,
-          envLocationCtrl: _envLocationCtrl,
-          envFeelCtrl: _envFeelCtrl,
-          onChanged: () => setState(() {}),
-        );
-      case 3:
-        return _StepWork(
-          workCtrl: _workCtrl,
-          onChanged: () => setState(() {}),
-        );
-      case 4:
-        return _StepEmotion(
+        return _StepFeelVoice(
           emotions: _emotions,
-          selected: _emotion,
-          onSelect: (e) => setState(() => _emotion = e),
-        );
-      case 5:
-        return _StepAmplifiersVoice(
+          selectedEmotion: _emotion,
+          onEmotion: (e) => setState(() => _emotion = e),
           amplifierOptions: _amplifierOptions,
           selectedAmplifiers: _amplifiers,
           onToggleAmplifier: _toggleAmplifier,
@@ -317,9 +276,11 @@ class _FutureSelfWizardState extends ConsumerState<FutureSelfWizard> {
           voiceStyle: _voiceStyle,
           onVoice: (v) => setState(() => _voiceStyle = v),
           customVoiceCtrl: _customVoiceCtrl,
+          preferredNarrationVoice: _preferredNarrationVoice,
+          onNarrationVoice: (v) => setState(() => _preferredNarrationVoice = v),
           onChanged: () => setState(() {}),
         );
-      case 6:
+      case 2:
         return _StepScene(
           initial: null,
           onChanged: (d) => setState(() => _sceneDraft = d),
@@ -543,6 +504,7 @@ class _StepIdentity extends StatelessWidget {
   final TextEditingController identityCtrl;
   final String timeline;
   final List<String> timelines;
+  final TextEditingController workCtrl;
   final ValueChanged<String> onTimeline;
   final VoidCallback onChanged;
 
@@ -550,6 +512,7 @@ class _StepIdentity extends StatelessWidget {
     required this.identityCtrl,
     required this.timeline,
     required this.timelines,
+    required this.workCtrl,
     required this.onTimeline,
     required this.onChanged,
   });
@@ -559,8 +522,8 @@ class _StepIdentity extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _WizardHeading(
-            'Who are you in this future?', 'Complete the sentence below'),
+        const _WizardHeading('Who are you becoming?',
+            'This grounds both your scenes and your future-self conversations.'),
         Text('I am someone who…',
             style: AppTextStyles.labelLarge
                 .copyWith(color: AppColors.futureSelfAccent)),
@@ -588,204 +551,11 @@ class _StepIdentity extends StatelessWidget {
                   ))
               .toList(),
         ),
-      ],
-    );
-  }
-}
-
-class _StepGoals extends StatelessWidget {
-  final List<Goal> goals;
-  final Set<String> selectedIds;
-  final List<String> customGoals;
-  final TextEditingController customCtrl;
-  final ValueChanged<String> onToggle;
-  final VoidCallback onAddCustom;
-  final ValueChanged<int> onRemoveCustom;
-
-  const _StepGoals({
-    required this.goals,
-    required this.selectedIds,
-    required this.customGoals,
-    required this.customCtrl,
-    required this.onToggle,
-    required this.onAddCustom,
-    required this.onRemoveCustom,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _WizardHeading('Which goals have you achieved?',
-            'Select what is already done in this future, or skip if none yet'),
-        ...goals.map((g) {
-          final selected = selectedIds.contains(g.id);
-          return Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-            child: GestureDetector(
-              onTap: () => onToggle(g.id),
-              child: Container(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: AppColors.futureSelfSurface,
-                  border: Border.all(
-                    color: selected
-                        ? AppColors.success
-                        : AppColors.border,
-                  ),
-                  borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      selected
-                          ? Icons.check_circle_rounded
-                          : Icons.circle_outlined,
-                      color: selected
-                          ? AppColors.success
-                          : AppColors.textMuted,
-                      size: 20,
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                        child: Text(g.title,
-                            style: AppTextStyles.bodyMedium)),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }),
-        const SizedBox(height: AppSpacing.md),
-        Text('Add additional future goals',
-            style: AppTextStyles.labelLarge
-                .copyWith(color: AppColors.futureSelfAccent)),
-        const SizedBox(height: AppSpacing.sm),
-        Row(
-          children: [
-            Expanded(
-              child: _WarmField(
-                controller: customCtrl,
-                hint: 'e.g. Built a 7-figure business',
-                onChanged: () {},
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            IconButton.filled(
-              onPressed: onAddCustom,
-              style: IconButton.styleFrom(
-                backgroundColor: AppColors.futureSelfAccent,
-                foregroundColor: Colors.black,
-              ),
-              icon: const Icon(Icons.add_rounded),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        ...customGoals.asMap().entries.map((e) => Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-              child: Row(
-                children: [
-                  Expanded(
-                      child: Text(e.value,
-                          style: AppTextStyles.bodyMedium
-                              .copyWith(color: AppColors.textSecondary))),
-                  GestureDetector(
-                    onTap: () => onRemoveCustom(e.key),
-                    child: const Icon(Icons.close_rounded,
-                        size: 18, color: AppColors.textMuted),
-                  ),
-                ],
-              ),
-            )),
-      ],
-    );
-  }
-}
-
-class _StepSnapshot extends StatelessWidget {
-  final TextEditingController snapshotCtrl;
-  final TextEditingController envLocationCtrl;
-  final TextEditingController envFeelCtrl;
-  final VoidCallback onChanged;
-
-  const _StepSnapshot({
-    required this.snapshotCtrl,
-    required this.envLocationCtrl,
-    required this.envFeelCtrl,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _WizardHeading('A little about your future life',
-            'Optional. A few words help ground your scenes. You can skip this.'),
-        _WarmField(
-          controller: snapshotCtrl,
-          hint: 'I live in a calm, modern home. My days are focused and '
-              'unhurried. I work on what matters and train most nights…',
-          maxLines: 4,
-          onChanged: onChanged,
-        ),
         const SizedBox(height: AppSpacing.xl),
-        Text('Your environment (optional)',
+        Text('You spend most of your time… (optional)',
             style: AppTextStyles.labelLarge
                 .copyWith(color: AppColors.futureSelfAccent)),
         const SizedBox(height: AppSpacing.sm),
-        _WarmField(
-          controller: envLocationCtrl,
-          hint: 'Where do you live?',
-          onChanged: onChanged,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        _WarmField(
-          controller: envFeelCtrl,
-          hint: 'What does it feel like? (minimal, warm, high-end…)',
-          onChanged: onChanged,
-        ),
-      ],
-    );
-  }
-}
-
-class _StepScene extends StatelessWidget {
-  final FutureSelfScene? initial;
-  final ValueChanged<SceneDraft> onChanged;
-
-  const _StepScene({required this.initial, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _WizardHeading(
-          'Build your first scene',
-          'A vivid moment in your future where your goals are already real. You can add more later.',
-        ),
-        VisionSceneBuilder(initial: initial, onChanged: onChanged),
-      ],
-    );
-  }
-}
-
-class _StepWork extends StatelessWidget {
-  final TextEditingController workCtrl;
-  final VoidCallback onChanged;
-
-  const _StepWork({required this.workCtrl, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _WizardHeading('What do you spend most of your time doing?',
-            'Your main work, purpose, or role in this future'),
         _WarmField(
           controller: workCtrl,
           hint: 'e.g. Building my product and coaching creators… / Training '
@@ -798,41 +568,10 @@ class _StepWork extends StatelessWidget {
   }
 }
 
-class _StepEmotion extends StatelessWidget {
+class _StepFeelVoice extends StatelessWidget {
   final List<String> emotions;
-  final String selected;
-  final ValueChanged<String> onSelect;
-
-  const _StepEmotion({
-    required this.emotions,
-    required this.selected,
-    required this.onSelect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _WizardHeading('In this future, you mostly feel…',
-            'This drives the entire tone of your practice'),
-        Wrap(
-          spacing: AppSpacing.sm,
-          runSpacing: AppSpacing.sm,
-          children: emotions
-              .map((e) => _SelectChip(
-                    label: e,
-                    selected: e == selected,
-                    onTap: () => onSelect(e),
-                  ))
-              .toList(),
-        ),
-      ],
-    );
-  }
-}
-
-class _StepAmplifiersVoice extends StatelessWidget {
+  final String selectedEmotion;
+  final ValueChanged<String> onEmotion;
   final List<String> amplifierOptions;
   final List<String> selectedAmplifiers;
   final ValueChanged<String> onToggleAmplifier;
@@ -840,9 +579,14 @@ class _StepAmplifiersVoice extends StatelessWidget {
   final String voiceStyle;
   final ValueChanged<String> onVoice;
   final TextEditingController customVoiceCtrl;
+  final String preferredNarrationVoice;
+  final ValueChanged<String> onNarrationVoice;
   final VoidCallback onChanged;
 
-  const _StepAmplifiersVoice({
+  const _StepFeelVoice({
+    required this.emotions,
+    required this.selectedEmotion,
+    required this.onEmotion,
     required this.amplifierOptions,
     required this.selectedAmplifiers,
     required this.onToggleAmplifier,
@@ -850,6 +594,8 @@ class _StepAmplifiersVoice extends StatelessWidget {
     required this.voiceStyle,
     required this.onVoice,
     required this.customVoiceCtrl,
+    required this.preferredNarrationVoice,
+    required this.onNarrationVoice,
     required this.onChanged,
   });
 
@@ -858,8 +604,28 @@ class _StepAmplifiersVoice extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _WizardHeading('Pick up to 3 traits (optional)',
-            'These are woven in naturally, not stated outright'),
+        const _WizardHeading('In this future, you mostly feel…',
+            'This drives the entire tone of your practice.'),
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: emotions
+              .map((e) => _SelectChip(
+                    label: e,
+                    selected: e == selectedEmotion,
+                    onTap: () => onEmotion(e),
+                  ))
+              .toList(),
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        Text('Pick up to 3 traits (optional)',
+            style: AppTextStyles.labelLarge
+                .copyWith(color: AppColors.futureSelfAccent)),
+        const SizedBox(height: AppSpacing.xs),
+        Text('These are woven in naturally, not stated outright.',
+            style: AppTextStyles.bodySmall
+                .copyWith(color: AppColors.textMuted)),
+        const SizedBox(height: AppSpacing.sm),
         Wrap(
           spacing: AppSpacing.sm,
           runSpacing: AppSpacing.sm,
@@ -875,7 +641,12 @@ class _StepAmplifiersVoice extends StatelessWidget {
           }).toList(),
         ),
         const SizedBox(height: AppSpacing.xl),
-        Text('How do you naturally talk?',
+        NarrationVoicePicker(
+          selectedVoiceId: preferredNarrationVoice,
+          onSelected: onNarrationVoice,
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        Text(AppStrings.futureSelfWritingStyleLabel,
             style: AppTextStyles.labelLarge
                 .copyWith(color: AppColors.futureSelfAccent)),
         const SizedBox(height: AppSpacing.sm),
@@ -926,6 +697,27 @@ class _StepAmplifiersVoice extends StatelessWidget {
             onChanged: onChanged,
           ),
         ],
+      ],
+    );
+  }
+}
+
+class _StepScene extends StatelessWidget {
+  final FutureSelfScene? initial;
+  final ValueChanged<SceneDraft> onChanged;
+
+  const _StepScene({required this.initial, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _WizardHeading(
+          'Build your first scene',
+          'A vivid moment in your future where your goals are already real. You can add more later.',
+        ),
+        VisionSceneBuilder(initial: initial, onChanged: onChanged),
       ],
     );
   }

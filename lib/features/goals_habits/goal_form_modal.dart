@@ -32,7 +32,11 @@ class GoalFormModal {
     // how many goals they can create before upgrading.
     if (existing == null) {
       final profile = ref.read(currentUserProfileProvider).valueOrNull;
-      if (profile != null && profile.isPartnerAccount) {
+      // Gifted-premium partners get unlimited, gate-free access during their
+      // window; the setup/upgrade gates only apply once it lapses.
+      if (profile != null &&
+          profile.isPartnerAccount &&
+          !profile.hasGiftedPremium) {
         if (!profile.hasCompletedOnboarding) {
           showPartnerSetupSheet(
             context,

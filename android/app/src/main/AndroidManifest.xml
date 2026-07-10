@@ -1,14 +1,14 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Re-register scheduled local reminders after a device reboot -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <!-- Google Play in-app billing (RevenueCat subscriptions) -->
     <uses-permission android:name="com.android.vending.BILLING"/>
-    <!-- Background audio: keep the Future Self practice binaural beats playing
-         when the screen locks or the app is backgrounded (just_audio_background /
-         audio_service foreground media service). -->
+    <!-- Keep the screen awake during a Future Self practice session (wakelock_plus). -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- Background audio: Future Self practice continues when the screen locks. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <application
@@ -86,20 +86,22 @@
                 <action android:name="es.antonborri.home_widget.action.BACKGROUND" />
             </intent-filter>
         </receiver>
-        <!-- just_audio_background: foreground media service + media-button receiver
-             that keep the practice audio alive in the background and expose
-             lock-screen / notification play-pause controls. -->
+        <!-- audio_service: foreground media service + media-button receiver
+             that keep Future Self practice audio alive in the background and
+             expose lock-screen / notification play-pause controls. -->
         <service
             android:name="com.ryanheise.audioservice.AudioService"
             android:foregroundServiceType="mediaPlayback"
-            android:exported="true">
+            android:exported="true"
+            tools:ignore="Instantiatable">
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
         <receiver
             android:name="com.ryanheise.audioservice.MediaButtonReceiver"
-            android:exported="true">
+            android:exported="true"
+            tools:ignore="Instantiatable">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>

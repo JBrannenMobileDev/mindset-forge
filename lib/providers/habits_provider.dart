@@ -12,10 +12,12 @@ class HabitsNotifier extends StateNotifier<List<Habit>> {
   HabitsNotifier(this._ref) : super([]);
 
   void _loadFromProfile(UserProfile? profile) {
-    if (profile != null) {
-      state = profile.habits;
-      _syncDailyCompletion();
+    if (profile == null) {
+      state = [];
+      return;
     }
+    state = profile.habits;
+    _syncDailyCompletion();
   }
 
   void _syncDailyCompletion() {
@@ -29,7 +31,9 @@ class HabitsNotifier extends StateNotifier<List<Habit>> {
 
   Future<void> _persist(List<Habit> habits) async {
     final uid = _ref.read(authStateProvider).valueOrNull?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      throw StateError('HabitsNotifier._persist: no authenticated user');
+    }
     try {
       await _ref.read(firestoreServiceProvider).updateUserField(uid, {
         'habits': habits.map((h) => h.toJson()).toList(),
@@ -66,16 +70,19 @@ class HabitsNotifier extends StateNotifier<List<Habit>> {
     }
   }
 
-  Future<void> deleteHabit(String habitId) async {
+  Future<bool> deleteHabit(String habitId) async {
     final previous = state;
     final updated = state.where((h) => h.id != habitId).toList();
     state = updated;
     _syncDailyCompletion();
     try {
       await _persist(updated);
-    } catch (_) {
+      return true;
+    } catch (e) {
+      debugPrint('HabitsNotifier.deleteHabit failed: $e');
       state = previous;
       _syncDailyCompletion();
+      return false;
     }
   }
 

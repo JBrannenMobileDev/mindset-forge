@@ -16,7 +16,11 @@ class AccountabilityNotifier
   AccountabilityNotifier(this._ref) : super([]);
 
   void _loadFromProfile(UserProfile? profile) {
-    if (profile != null) state = profile.accountabilityRelationships;
+    if (profile == null) {
+      state = [];
+      return;
+    }
+    state = profile.accountabilityRelationships;
   }
 
   List<AccountabilityRelationship> get activeRelationships =>

@@ -25,6 +25,12 @@ class UserProfile {
   final String userType;
   final String subscriptionStatus;
   final DateTime? subscriptionExpiresAt;
+
+  /// ISO timestamp until which a free "partner" account has been gifted full,
+  /// card-free premium access — set when they accept a partner invite. While
+  /// this is in the future the account is treated as having an active
+  /// subscription (see [hasActiveSubscription]). Null for everyone else.
+  final String? premiumUntil;
   final int onboardingStep;
   final MindsetBlueprint mindsetBlueprint;
   final MindsetBlueprint originalMindsetBaseline;
@@ -130,6 +136,7 @@ class UserProfile {
     this.userType = 'user',
     this.subscriptionStatus = 'free',
     this.subscriptionExpiresAt,
+    this.premiumUntil,
     this.onboardingStep = 0,
     required this.mindsetBlueprint,
     required this.originalMindsetBaseline,
@@ -214,16 +221,42 @@ class UserProfile {
   /// user doc in Firestore to grant it.
   bool get isComped => subscriptionStatus == 'lifetime';
 
+  /// True while a gifted premium window (see [premiumUntil]) is still active.
+  /// Grants partner accounts full, unlimited access for a fixed period after
+  /// accepting an invite, without touching their store subscription. Access
+  /// lapses automatically once the timestamp passes — no expiry job needed.
+  bool get hasGiftedPremium {
+    final until = premiumUntil;
+    if (until == null) return false;
+    final parsed = DateTime.tryParse(until);
+    return parsed != null && DateTime.now().isBefore(parsed);
+  }
+
+  /// Whole days left in the gifted premium window, rounded up (so it reads as
+  /// "14 days" right after the grant and never shows 0 while still active).
+  /// Null when there is no active gift.
+  int? get giftedPremiumDaysRemaining {
+    final until = premiumUntil;
+    if (until == null) return null;
+    final parsed = DateTime.tryParse(until);
+    if (parsed == null) return null;
+    final diff = parsed.difference(DateTime.now());
+    if (diff.isNegative) return null;
+    return (diff.inHours / 24).ceil();
+  }
+
   /// True when the user has full, paid access (paying subscriber or in trial).
   // 'canceled' means auto-renew was turned off, not that access has ended —
   // the user keeps access until the period expires (status flips to 'expired'
   // via the webhook at that point). 'lifetime' is a manual comp grant that
-  // never expires.
+  // never expires. A gifted premium window (partner invitees) also counts as
+  // active for its duration.
   bool get hasActiveSubscription =>
       subscriptionStatus == 'active' ||
       subscriptionStatus == 'trialing' ||
       subscriptionStatus == 'canceled' ||
-      subscriptionStatus == 'lifetime';
+      subscriptionStatus == 'lifetime' ||
+      hasGiftedPremium;
 
   /// For a partner account, the name of the primary user they are supporting
   /// (used for social proof in upgrade prompts). Null if not applicable.
@@ -344,6 +377,7 @@ class UserProfile {
     String? userType,
     String? subscriptionStatus,
     DateTime? subscriptionExpiresAt,
+    String? premiumUntil,
     int? onboardingStep,
     MindsetBlueprint? mindsetBlueprint,
     MindsetBlueprint? originalMindsetBaseline,
@@ -408,6 +442,7 @@ class UserProfile {
       subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
       subscriptionExpiresAt:
           subscriptionExpiresAt ?? this.subscriptionExpiresAt,
+      premiumUntil: premiumUntil ?? this.premiumUntil,
       onboardingStep: onboardingStep ?? this.onboardingStep,
       mindsetBlueprint: mindsetBlueprint ?? this.mindsetBlueprint,
       originalMindsetBaseline:
@@ -502,6 +537,7 @@ class UserProfile {
       subscriptionStatus: json['subscriptionStatus'] as String? ?? 'free',
       subscriptionExpiresAt:
           DateTime.tryParse(json['subscriptionExpiresAt'] as String? ?? ''),
+      premiumUntil: json['premiumUntil'] as String?,
       onboardingStep: (json['onboardingStep'] as num?)?.toInt() ?? 0,
       mindsetBlueprint: json['mindsetBlueprint'] != null
           ? MindsetBlueprint.fromJson(
@@ -662,6 +698,7 @@ class UserProfile {
         'userType': userType,
         'subscriptionStatus': subscriptionStatus,
         'subscriptionExpiresAt': subscriptionExpiresAt?.toIso8601String(),
+        'premiumUntil': premiumUntil,
         'onboardingStep': onboardingStep,
         'mindsetBlueprint': mindsetBlueprint.toJson(),
         'originalMindsetBaseline': originalMindsetBaseline.toJson(),

@@ -1,3 +1,5 @@
+import '../core/constants/future_self_voices.dart';
+
 /// Catalog of the scene focuses a user can choose for a Future Self scene.
 /// A scene is anchored either to a time of day or to a specific moment-type
 /// (the moment where resistance normally shows up). Kept as pure data so both
@@ -27,131 +29,6 @@ class FutureSelfSceneCatalog {
     }
     return focus.isEmpty ? 'Scene' : focus;
   }
-}
-
-/// A starter template for the Vision Scene Builder. Pure data used to prefill
-/// the builder fields so users start from a concrete example instead of a
-/// blank page.
-class FutureSelfSceneTemplate {
-  final String key;
-  final String label;
-  final String setting;
-  final String people;
-  final List<String> beats;
-  final String sensory;
-
-  const FutureSelfSceneTemplate({
-    required this.key,
-    required this.label,
-    this.setting = '',
-    this.people = '',
-    this.beats = const [],
-    this.sensory = '',
-  });
-}
-
-/// The starter templates offered when creating a scene. Optional prefill only —
-/// users can also write a fully custom scene from scratch.
-class FutureSelfSceneTemplates {
-  static const List<FutureSelfSceneTemplate> all = [
-    FutureSelfSceneTemplate(
-      key: 'grounded_morning',
-      label: 'A grounded morning',
-      setting:
-          'Your home on a quiet morning — soft light through the windows, the space calm and unhurried',
-      people: 'Just you, or the people you share your life with',
-      beats: [
-        'Wake naturally, body rested and mind clear',
-        'A few quiet minutes to center yourself',
-        'Make something simple — coffee, tea, breakfast',
-        'Move through the morning without rushing',
-        'Step into the day already at ease',
-      ],
-      sensory:
-          'Warm morning light, the smell of fresh coffee, quiet calm in your chest',
-    ),
-    FutureSelfSceneTemplate(
-      key: 'flowing_workday',
-      label: 'A workday in flow',
-      setting:
-          'Your workspace — clean, organized, everything you need within reach',
-      people: 'Solo, then a few trusted collaborators',
-      beats: [
-        'Sit down and begin without hesitation',
-        'Drop into deep, focused work',
-        'Make a decision quickly and move on',
-        'A brief, sharp check-in with your team',
-        'Ship something that matters',
-        'Close the day satisfied',
-      ],
-      sensory:
-          'The hum of quiet focus, cool air, the satisfaction of progress',
-    ),
-    FutureSelfSceneTemplate(
-      key: 'celebrating_win',
-      label: 'Celebrating a win',
-      setting:
-          'Somewhere meaningful — a restaurant, your home, or a place you earned',
-      people: 'The people who matter most to you',
-      beats: [
-        'Arrive where the celebration is',
-        'Take in what you have accomplished',
-        'Share the moment with people you love',
-        'Raise a toast — the goal is already real',
-        'Let the feeling settle in',
-      ],
-      sensory:
-          'Laughter, clinking glasses, warmth in your chest, quiet pride',
-    ),
-    FutureSelfSceneTemplate(
-      key: 'calm_evening',
-      label: 'A calm evening at home',
-      setting:
-          'Your living space in the evening — lights low, the day winding down',
-      people: 'Yourself, or someone you love beside you',
-      beats: [
-        'Walk through the door and leave the day behind',
-        'Change into something comfortable',
-        'Make a simple meal or pour a drink',
-        'Settle in — read, talk, or simply be still',
-        'Feel the day complete and your body at rest',
-      ],
-      sensory:
-          'Soft lamplight, the smell of cooking, deep ease in your body',
-    ),
-    FutureSelfSceneTemplate(
-      key: 'recognized_work',
-      label: 'Sharing your work',
-      setting:
-          'A stage, a studio, a meeting room — wherever your work is seen',
-      people: 'An audience, clients, or peers who value what you do',
-      beats: [
-        'Step up and begin without nerves',
-        'Share your work with clarity and ease',
-        'Field questions without hesitation',
-        'See people respond — engaged, moved, inspired',
-        'Finish knowing you showed up fully',
-      ],
-      sensory:
-          'Bright lights, focused attention, the energy of being seen',
-    ),
-    FutureSelfSceneTemplate(
-      key: 'earned_trip',
-      label: 'A place you earned',
-      setting:
-          'Somewhere you always wanted to go — a coast, a city, a landscape',
-      people: 'Alone or with someone you chose to bring',
-      beats: [
-        'Arrive and take in the view',
-        'Walk through the place slowly, present',
-        'Try something new — food, an activity, a conversation',
-        'Sit somewhere beautiful and let it sink in',
-        'Know you belong here — you earned this',
-      ],
-      sensory:
-          'New smells, open sky, warm sun on your skin, a feeling of arrival',
-    ),
-  ];
 }
 
 /// A single, repeatable Future Self scene — a specific, vivid vision of your
@@ -236,6 +113,17 @@ class FutureSelfScene {
   bool get hasNarration =>
       narrationUrl != null && narrationUrl!.trim().isNotEmpty;
 
+  /// True when cached narration exists and can be used for [voiceId].
+  ///
+  /// Legacy scenes were cached before the TTS voice id was persisted, so a
+  /// non-empty [narrationUrl] with an empty [narrationVoice] is trusted as-is
+  /// (and back-filled elsewhere) rather than forcing a costly re-synthesis.
+  bool narrationMatchesVoice(String voiceId) {
+    if (!hasNarration) return false;
+    if (narrationVoice.isEmpty) return true;
+    return narrationVoice == voiceId;
+  }
+
   FutureSelfScene copyWith({
     String? id,
     String? title,
@@ -254,6 +142,8 @@ class FutureSelfScene {
     String? narrationUrl,
     String? narrationVoice,
     DateTime? createdAt,
+    bool clearScript = false,
+    bool clearNarration = false,
   }) {
     return FutureSelfScene(
       id: id ?? this.id,
@@ -269,10 +159,11 @@ class FutureSelfScene {
       focus: focus ?? this.focus,
       focusLabel: focusLabel ?? this.focusLabel,
       sceneNote: sceneNote ?? this.sceneNote,
-      script: script ?? this.script,
-      scriptHash: scriptHash ?? this.scriptHash,
-      narrationUrl: narrationUrl ?? this.narrationUrl,
-      narrationVoice: narrationVoice ?? this.narrationVoice,
+      script: clearScript ? null : (script ?? this.script),
+      scriptHash: clearNarration ? null : (scriptHash ?? this.scriptHash),
+      narrationUrl: clearNarration ? null : (narrationUrl ?? this.narrationUrl),
+      narrationVoice:
+          clearNarration ? '' : (narrationVoice ?? this.narrationVoice),
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -334,20 +225,26 @@ class FutureSelfSetup {
   /// How far into the future, e.g. "1 year", "3 years", "5 years", "10 years".
   final String futureTimeline;
 
-  /// Ids of existing goals the user treats as already achieved in this future.
+  /// Legacy: ids of goals treated as already achieved in this future. No longer
+  /// collected in setup — goals are now captured per-scene ([FutureSelfScene.goalIds]).
+  /// Retained for back-compat with accounts created before scene-level goals.
   final List<String> achievedGoalIds;
 
-  /// Free-text achieved goals not tied to an existing goal record.
+  /// Legacy free-text achieved goals not tied to a goal record. Superseded by
+  /// per-scene [FutureSelfScene.customAccomplishments]; kept for back-compat.
   final List<String> customGoals;
 
-  /// A normalized day in the future, morning to evening (shared context used to
-  /// ground scene generation).
+  /// Legacy free-text "normalized day" snapshot. No longer collected — the chat
+  /// persona now derives daily-life context from the scene library. Kept for
+  /// back-compat with older accounts.
   final String dailySnapshot;
 
-  /// Where the future self lives (optional).
+  /// Legacy: where the future self lives. No longer collected (the scene's
+  /// setting captures this); kept for back-compat.
   final String envLocation;
 
-  /// How the environment feels (optional).
+  /// Legacy: how the environment feels. No longer collected (the scene captures
+  /// this); kept for back-compat.
   final String envFeel;
 
   /// What the future self spends most of their time doing.
@@ -365,6 +262,9 @@ class FutureSelfSetup {
   /// Optional custom voice sample when [voiceStyle] is the custom option.
   final String customVoice;
 
+  /// Preferred Google TTS voice id for scene narration (e.g. Aoede or Charon).
+  final String preferredNarrationVoice;
+
   /// The user's library of short, repeatable scenes.
   final List<FutureSelfScene> scenes;
 
@@ -373,6 +273,12 @@ class FutureSelfSetup {
 
   /// Preferred binaural frequency in Hz (4 / 7 / 10 / 15 / 40).
   final int binauralHz;
+
+  /// Binaural beat bed volume (0.0–1.0) for the practice player.
+  final double beatsVolume;
+
+  /// Narration voice volume (0.0–1.0) for the practice player.
+  final double narrationVolume;
 
   /// Whether the user has seen the one-time "how to practice" primer.
   final bool hasSeenHowTo;
@@ -392,9 +298,12 @@ class FutureSelfSetup {
     this.amplifiers = const [],
     this.voiceStyle = '',
     this.customVoice = '',
+    this.preferredNarrationVoice = '',
     this.scenes = const [],
     this.beatsEnabled = true,
     this.binauralHz = 7,
+    this.beatsVolume = 0.3,
+    this.narrationVolume = 1.0,
     this.hasSeenHowTo = false,
     required this.createdAt,
   });
@@ -407,6 +316,10 @@ class FutureSelfSetup {
 
   /// True when the library still has room for another scene.
   bool get canAddScene => scenes.length < maxScenes;
+
+  /// The TTS voice used for narration, with a safe default for legacy setups.
+  String get resolvedNarrationVoice =>
+      FutureSelfVoices.resolve(preferredNarrationVoice);
 
   FutureSelfSetup copyWith({
     String? identityAnchor,
@@ -421,9 +334,12 @@ class FutureSelfSetup {
     List<String>? amplifiers,
     String? voiceStyle,
     String? customVoice,
+    String? preferredNarrationVoice,
     List<FutureSelfScene>? scenes,
     bool? beatsEnabled,
     int? binauralHz,
+    double? beatsVolume,
+    double? narrationVolume,
     bool? hasSeenHowTo,
     DateTime? createdAt,
   }) {
@@ -440,9 +356,13 @@ class FutureSelfSetup {
       amplifiers: amplifiers ?? this.amplifiers,
       voiceStyle: voiceStyle ?? this.voiceStyle,
       customVoice: customVoice ?? this.customVoice,
+      preferredNarrationVoice:
+          preferredNarrationVoice ?? this.preferredNarrationVoice,
       scenes: scenes ?? this.scenes,
       beatsEnabled: beatsEnabled ?? this.beatsEnabled,
       binauralHz: binauralHz ?? this.binauralHz,
+      beatsVolume: beatsVolume ?? this.beatsVolume,
+      narrationVolume: narrationVolume ?? this.narrationVolume,
       hasSeenHowTo: hasSeenHowTo ?? this.hasSeenHowTo,
       createdAt: createdAt ?? this.createdAt,
     );
@@ -492,9 +412,13 @@ class FutureSelfSetup {
           List<String>.from(json['amplifiers'] as List<dynamic>? ?? []),
       voiceStyle: json['voiceStyle'] as String? ?? '',
       customVoice: json['customVoice'] as String? ?? '',
+      preferredNarrationVoice: json['preferredNarrationVoice'] as String? ?? '',
       scenes: scenes,
       beatsEnabled: json['beatsEnabled'] as bool? ?? true,
       binauralHz: (json['binauralHz'] as num?)?.toInt() ?? 7,
+      beatsVolume: _clampVolume((json['beatsVolume'] as num?)?.toDouble() ?? 0.3),
+      narrationVolume:
+          _clampVolume((json['narrationVolume'] as num?)?.toDouble() ?? 1.0),
       hasSeenHowTo: json['hasSeenHowTo'] as bool? ?? false,
       createdAt:
           DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
@@ -514,10 +438,15 @@ class FutureSelfSetup {
         'amplifiers': amplifiers,
         'voiceStyle': voiceStyle,
         'customVoice': customVoice,
+        'preferredNarrationVoice': preferredNarrationVoice,
         'scenes': scenes.map((s) => s.toJson()).toList(),
         'beatsEnabled': beatsEnabled,
         'binauralHz': binauralHz,
+        'beatsVolume': beatsVolume,
+        'narrationVolume': narrationVolume,
         'hasSeenHowTo': hasSeenHowTo,
         'createdAt': createdAt.toIso8601String(),
       };
 }
+
+double _clampVolume(double value) => value.clamp(0.0, 1.0);

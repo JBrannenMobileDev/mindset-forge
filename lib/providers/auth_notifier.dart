@@ -47,6 +47,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         password: password,
       );
       _ref.read(analyticsServiceProvider).trackLogIn();
+      state = state.copyWith(isLoading: false);
       // Navigation is handled reactively by GoRouter's auth guard.
     } on FirebaseAuthException catch (e) {
       state = state.copyWith(
@@ -78,6 +79,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       await _firestoreService.createUserProfile(profile);
       _ref.read(analyticsServiceProvider).trackSignUp();
+      state = state.copyWith(isLoading: false);
     } on FirebaseAuthException catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -105,6 +107,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     analytics.trackLogOut();
     analytics.reset();
     await FirebaseAuth.instance.signOut();
+    state = const AuthState();
   }
 
   // ─── Error mapping ──────────────────────────────────────────────────────────

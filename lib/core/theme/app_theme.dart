@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_spacing.dart';
 import '../constants/app_text_styles.dart';
+import 'app_system_chrome.dart';
 
 abstract final class AppTheme {
   static ThemeData get dark => _buildDark();
@@ -51,7 +51,7 @@ abstract final class AppTheme {
         centerTitle: false,
         titleTextStyle: AppTextStyles.headlineMedium,
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
-        systemOverlayStyle: SystemUiOverlayStyle.light,
+        systemOverlayStyle: AppSystemChrome.dark,
       ),
       cardTheme: CardThemeData(
         color: AppColors.surfaceElevated,

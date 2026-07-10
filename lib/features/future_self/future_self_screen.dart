@@ -3,10 +3,12 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/services/scene_draft_store.dart';
 import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../models/future_self_setup.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/future_self_provider.dart';
 import 'future_self_wizard.dart';
 import 'future_self_player_screen.dart';
@@ -626,6 +628,8 @@ class _SceneEditorSheetState extends ConsumerState<_SceneEditorSheet> {
         sensory: draft.sensory,
         goalIds: draft.goalIds,
       );
+      final uid = ref.read(authStateProvider).valueOrNull?.uid;
+      if (uid != null) await SceneDraftStore.clear(uid);
     }
     if (!mounted) return;
     Navigator.of(context).pop();
@@ -640,8 +644,11 @@ class _SceneEditorSheetState extends ConsumerState<_SceneEditorSheet> {
         top: AppSpacing.lg,
         bottom: MediaQuery.of(context).viewInsets.bottom + AppSpacing.lg,
       ),
-      child: SingleChildScrollView(
-        child: Column(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -685,9 +692,19 @@ class _SceneEditorSheetState extends ConsumerState<_SceneEditorSheet> {
               const SizedBox(height: AppSpacing.lg),
               VisionSceneBuilder(
                 initial: widget.scene,
+                persistDraft: !_isRefine,
                 onChanged: (d) => setState(() => _draft = d),
               ),
               const SizedBox(height: AppSpacing.xl),
+              if (_draft != null && !_draft!.isValid) ...[
+                Text(
+                  _draft!.validationHint!,
+                  style: AppTextStyles.bodySmall
+                      .copyWith(color: AppColors.textMuted),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: AppSpacing.md),
+              ],
               SizedBox(
                 width: double.infinity,
                 height: AppSpacing.buttonHeight,
@@ -713,6 +730,7 @@ class _SceneEditorSheetState extends ConsumerState<_SceneEditorSheet> {
               ),
             ],
           ],
+          ),
         ),
       ),
     );

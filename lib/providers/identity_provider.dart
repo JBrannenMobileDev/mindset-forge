@@ -13,7 +13,11 @@ class IdentityNotifier extends StateNotifier<String> {
   IdentityNotifier(this._ref) : super('');
 
   void _loadFromProfile(UserProfile? profile) {
-    if (profile != null) state = profile.identityStatement;
+    if (profile == null) {
+      state = '';
+      return;
+    }
+    state = profile.identityStatement;
   }
 
   /// Saves [text] to Firestore. Optimistically updates local state; rolls back

@@ -219,6 +219,16 @@ Progress dots (animated): active dot widens to 20px, inactive = 6px, 250ms `Anim
 
 Always use `AppStrings.*` constants. Never hardcode user-facing strings directly in widgets. Add new strings to `lib/core/constants/app_strings.dart`.
 
+### Copy style
+
+- **Never use em dashes (`—`) in user-facing copy** (AppStrings, hints, subtitles, button labels, empty states, onboarding, etc.).
+- Use a colon, comma, period, or parentheses instead.
+  - Bad: `Calming audio bed — headphones recommended`
+  - Good: `Calming audio bed. Headphones recommended.`
+  - Good: `The more specific and vivid: what you see, hear, smell…`
+- Ellipsis (`…`) and middle dots (`·`) are fine when intentional.
+- Code comments and internal rule docs are exempt.
+
 ---
 
 ## Known Gaps to Fix (do not replicate these patterns)

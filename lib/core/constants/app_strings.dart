@@ -93,9 +93,24 @@ abstract final class AppStrings {
   static const String signupSubtitle = 'Turn what you know into who you are.';
   static const String partnerSignupTitle = 'Accept your partner invite';
   static const String partnerSignupSubtitle =
-      'Create your free account to support your friend and follow their progress.';
+      'Create your account to support your friend. You get 14 days of full Premium, then a free plan you can upgrade anytime.';
   static const String partnerSignupBanner =
-      "You've been invited to be an accountability partner. Partners join free, no subscription needed.";
+      "You've been invited as an accountability partner — 14 days of full Premium on us, then a free plan. No card to start.";
+
+  // Partner gift disclosure (14-day window + post-window free plan)
+  static const String partnerGiftDetailsTitle = 'What you get as a partner';
+  static const String partnerGiftDuringWindow =
+      '14 days of full Premium: unlimited coaching, journaling, habits, affirmations, and goals.';
+  static const String partnerGiftAfterWindow =
+      'After that, a free plan: 5 coach chats/week, 3 journals/week, 2 habits, 3 affirmations, and 1 goal. Extra items you created are saved and unlock when you upgrade.';
+  static const String partnerGiftUpgradeNote =
+      'Upgrade anytime to reactivate everything — start with a 7-day free trial, cancel anytime.';
+  static const String partnerGiftCompactTitle = '14 days of full Premium, then a free plan';
+  static const String partnerGiftCompactBody =
+      'Unlimited everything for 14 days. After that: 5 chats/wk, 3 journals/wk, 2 habits, 3 affirmations, 1 goal. Upgrade anytime.';
+  static const String partnerGiftAcceptSuccessAfter =
+      'After 14 days you move to the free plan — everything you create is saved.';
+  static const String partnerLockedItemLabel = 'Upgrade to unlock';
 
   // Partner dashboard
   static const String partnerWeekTitle = 'This week';
@@ -631,6 +646,26 @@ abstract final class AppStrings {
   static const String startSession = 'Start Session';
   static const String endSession = 'End Session';
   static const String binauralFrequency = 'Binaural Frequency';
+  static const String futureSelfBeatsToggleTitle = 'Binaural beats';
+  static const String futureSelfBeatsToggleSubtitle =
+      'Calming audio bed · headphones recommended';
+  static const String futureSelfHeadphonesHint =
+      'Headphones recommended for binaural beats';
+  static const String futureSelfBeatsVolumeLabel = 'Beat volume';
+  static const String futureSelfNarrationVolumeLabel = 'Voice volume';
+  static const String futureSelfWritingStyleLabel = 'Writing style';
+  static const String futureSelfNarrationVoiceTitle = 'Narration voice';
+  static const String futureSelfNarrationVoiceSubtitle =
+      'Pick the voice that feels natural when you close your eyes. You can change this later.';
+  static const String futureSelfNarrationVoiceLighter = 'Warm · light';
+  static const String futureSelfNarrationVoiceDeeper = 'Warm · deep';
+  static const String futureSelfNarrationVoiceSmooth = 'Smooth · calm';
+  static const String futureSelfNarrationVoiceGrounded = 'Steady · grounded';
+  static const String futureSelfNarrationVoiceLighterGroup = 'Lighter tone';
+  static const String futureSelfNarrationVoiceDeeperGroup = 'Deeper tone';
+  static const String futureSelfNarrationVoicePreview = 'Preview voice';
+  static const String futureSelfNarrationVoiceChangedNote =
+      'Your scenes will use the new voice next time you practice.';
 
   // Future Self practice (Subconscious / Foundation layer)
   static const String futureSelfPracticeTitle = 'Future Self Practice';
@@ -709,6 +744,8 @@ abstract final class AppStrings {
   static const String futureSelfPreparing = 'Preparing your scene...';
   static const String futureSelfPreparingNote =
       'Generating your narration. First play takes a little longer.';
+  static const String futureSelfLoading = 'Getting ready...';
+  static const String futureSelfLoadingNote = 'Loading your scene.';
 
   // Future Self scenes
   static const String futureSelfScenesTitle = 'Your scenes';
@@ -733,33 +770,29 @@ abstract final class AppStrings {
 
   // Vision Scene Builder
   static const String futureSelfBuilderIntro =
-      'Build a moment in your future where your goals are already real. The more specific and vivid — what you see, hear, smell, touch, taste, and feel — the more powerful it becomes.';
-  static const String futureSelfBuilderTemplatesLabel =
-      'Start from an idea (optional)';
-  static const String futureSelfBuilderTemplatesHint =
-      'Pick one to prefill the fields below, or write your own scene from scratch.';
+      'Build a moment in your future where your goals are already real. The more specific and vivid: what you see, hear, smell, touch, taste, and feel, the more powerful it becomes.';
   static const String futureSelfSceneTitleLabel = 'Name this scene';
   static const String futureSelfSceneTitleHint =
       'e.g. Morning in the life I built';
   static const String futureSelfSceneWhereLabel = 'Where are you?';
   static const String futureSelfSceneWhereHint =
-      'Describe the place in detail — what you see, hear, smell, and feel around you.\ne.g. sunlit kitchen, marble counters, smell of fresh coffee, warm tile under my feet';
+      'Describe the place in detail: what you see, hear, smell, and feel around you.\ne.g. sunlit kitchen, marble counters, smell of fresh coffee, warm tile under my feet';
   static const String futureSelfSceneWhereHelper =
       'Include sights, sounds, smells, textures, and temperature. The more specific, the more real it feels.';
   static const String futureSelfScenePeopleLabel = "Who's with you? (optional)";
   static const String futureSelfScenePeopleHint =
       'Who is there and how does it feel to be with them?\ne.g. my partner beside me, easy and unhurried; kids laughing in the next room';
   static const String futureSelfScenePeopleHelper =
-      'Describe who is present and the feeling of being together — warmth, ease, connection.';
+      'Describe who is present and the feeling of being together: warmth, ease, connection.';
   static const String futureSelfSceneFlowLabel = 'The flow of the scene';
   static const String futureSelfSceneFlowHint =
-      'One moment per line, in order. Include what you do and what you sense in each step:\nWake up rested, light on my face\nQuiet minutes of stillness\nMake coffee — rich smell, warm mug in my hands\nSomeone joins me, easy conversation\nStep into the day feeling alive';
+      'I wake up rested with light on my face. A few quiet minutes of stillness, then I make coffee and smell it brewing. My partner joins me and we talk easily before I step into the day feeling alive.';
   static const String futureSelfSceneFlowHelper =
-      'Write each moment step by step. Weave in what you see, hear, smell, touch, taste, and feel as you move through it.';
+      'Describe how the scene unfolds in your own words. Weave in what you see, hear, smell, touch, taste, and feel as you move through it.';
   static const String futureSelfSceneSensoryLabel =
       'Overall atmosphere (optional)';
   static const String futureSelfSceneSensoryHint =
-      'The overall mood and sensory backdrop — sight, sound, smell, touch, taste, and how your body feels.\ne.g. golden light, birds outside, smell of coffee, warm mug, deep calm in my chest';
+      'The overall mood and sensory backdrop: sight, sound, smell, touch, taste, and how your body feels.\ne.g. golden light, birds outside, smell of coffee, warm mug, deep calm in my chest';
   static const String futureSelfSceneGoalsLabel =
       'Goals already achieved here (optional)';
   static const String futureSelfSceneGoalsHint =
@@ -767,7 +800,7 @@ abstract final class AppStrings {
   static const String futureSelfBuilderNeedsTitle =
       'Give your scene a name to continue.';
   static const String futureSelfBuilderNeedsFlow =
-      'Add at least two moments to the flow.';
+      'Describe the flow of your scene to continue.';
 
   // Future Self seal / payoff moment
   static const String futureSelfSealHeadline = 'Sealed in.';
@@ -777,7 +810,6 @@ abstract final class AppStrings {
       'Carry it: move like someone who is $trait today.';
   static const String futureSelfSealCarryGeneric =
       'Carry the way that felt into your next action.';
-  static const String futureSelfSealLogEvidence = 'Log a piece of evidence';
   static const String futureSelfSealTalkToFutureSelf = 'Talk to your future self';
   static const String futureSelfSealDone = 'Done';
 

@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 /// A selectable binaural-beat frequency band.
@@ -22,7 +23,11 @@ class BinauralBand {
 /// and beat frequencies are integers, exactly whole cycles fit in one second so
 /// the loop is seamless (no click at the boundary).
 class BinauralBeatController {
-  final AudioPlayer _player = AudioPlayer();
+  // Interruptions are handled centrally in FutureSelfAudioHandler.
+  final AudioPlayer _player = AudioPlayer(
+    handleInterruptions: false,
+    handleAudioSessionActivation: false,
+  );
 
   static const int _sampleRate = 44100;
   static const int _baseHz = 200;
@@ -30,11 +35,12 @@ class BinauralBeatController {
 
   int _hz;
   double _volume;
-  bool _isPlaying = false;
   bool _disposed = false;
 
-  BinauralBeatController({int hz = 7, double volume = 0.3})
-      : _hz = hz,
+  BinauralBeatController({
+    int hz = 7,
+    double volume = 0.3,
+  })  : _hz = hz,
         _volume = volume;
 
   /// The bands offered in the UI (theta/alpha are the receptive defaults).
@@ -48,7 +54,10 @@ class BinauralBeatController {
 
   int get hz => _hz;
   double get volume => _volume;
-  bool get isPlaying => _isPlaying;
+  bool get isPlaying => _player.playing;
+
+  /// Actual (not intended) playing state of the underlying player.
+  Stream<bool> get playingStream => _player.playingStream;
 
   Future<void> _load() async {
     final wav = _generateWav(_baseHz, _baseHz + _hz);
@@ -59,30 +68,45 @@ class BinauralBeatController {
 
   Future<void> play() async {
     if (_disposed) return;
-    if (_player.audioSource == null) await _load();
-    await _player.setVolume(_volume);
-    await _player.play();
-    _isPlaying = true;
+    try {
+      if (_player.audioSource == null) await _load();
+      await _player.setVolume(_volume);
+      await _player.play();
+    } catch (e) {
+      // The beat bed is optional ambience; never let it break a session.
+      debugPrint('[FutureSelfAudio] BinauralBeatController play failed: $e');
+    }
   }
 
   Future<void> pause() async {
     if (_disposed) return;
-    await _player.pause();
-    _isPlaying = false;
+    try {
+      await _player.pause();
+    } catch (e) {
+      debugPrint('[FutureSelfAudio] BinauralBeatController pause failed: $e');
+    }
   }
 
   Future<void> setFrequency(int hz) async {
     if (_disposed || hz == _hz) return;
     _hz = hz;
-    final wasPlaying = _isPlaying;
-    await _load();
-    if (wasPlaying) await _player.play();
+    final wasPlaying = _player.playing;
+    try {
+      await _load();
+      if (wasPlaying) await _player.play();
+    } catch (e) {
+      debugPrint('[FutureSelfAudio] BinauralBeatController setFrequency failed: $e');
+    }
   }
 
   Future<void> setVolume(double value) async {
     if (_disposed) return;
     _volume = value.clamp(0.0, 1.0);
-    await _player.setVolume(_volume);
+    try {
+      await _player.setVolume(_volume);
+    } catch (e) {
+      debugPrint('[FutureSelfAudio] BinauralBeatController setVolume failed: $e');
+    }
   }
 
   Future<void> dispose() async {

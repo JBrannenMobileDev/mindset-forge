@@ -8,7 +8,15 @@ import 'accountability_provider.dart';
 import 'auth_provider.dart';
 
 /// High-intent moments at which we may ask the user to invite a partner.
-enum InviteTrigger { onboarding, perfectDay, streak3, streak7, streak30 }
+enum InviteTrigger {
+  onboarding,
+  perfectDay,
+  streak3,
+  streak7,
+  streak30,
+  streak60,
+  streak100,
+}
 
 /// Coordinates accountability-partner invite prompts: decides eligibility,
 /// shows the reusable sheet, and records "don't nag" state on the profile.
@@ -30,6 +38,10 @@ class InvitePromptController {
         return 'streak_7';
       case InviteTrigger.streak30:
         return 'streak_30';
+      case InviteTrigger.streak60:
+        return 'streak_60';
+      case InviteTrigger.streak100:
+        return 'streak_100';
     }
   }
 
@@ -41,6 +53,10 @@ class InvitePromptController {
         return 7;
       case InviteTrigger.streak30:
         return 30;
+      case InviteTrigger.streak60:
+        return 60;
+      case InviteTrigger.streak100:
+        return 100;
       default:
         return null;
     }
@@ -55,6 +71,8 @@ class InvitePromptController {
       case InviteTrigger.streak3:
       case InviteTrigger.streak7:
       case InviteTrigger.streak30:
+      case InviteTrigger.streak60:
+      case InviteTrigger.streak100:
         return AppStrings.invitePromptStreakTitle(_streakDays(t)!);
     }
   }
@@ -68,22 +86,27 @@ class InvitePromptController {
       case InviteTrigger.streak3:
       case InviteTrigger.streak7:
       case InviteTrigger.streak30:
+      case InviteTrigger.streak60:
+      case InviteTrigger.streak100:
         return AppStrings.invitePromptStreakBody(_streakDays(t)!);
     }
   }
 
   /// Whether [trigger] is currently eligible to show for [profile].
   bool shouldShow(UserProfile profile, InviteTrigger trigger) {
-    if (profile.isPartnerAccount) return false;
+    // Partner accounts can invite too — the loop propagates through them. They
+    // only reach streak/perfect-day triggers after onboarding + building a
+    // streak, so the same eligibility rules below apply uniformly.
+    //
+    // No "already has a partner" cap: each milestone fires at most once (via
+    // invitePromptsShown), so engaged users are re-nudged to invite additional
+    // partners as they hit higher streaks, without spamming.
+    //
     // Onboarding trigger fires exactly at completion; the others require it done.
     if (trigger != InviteTrigger.onboarding && !profile.hasCompletedOnboarding) {
       return false;
     }
     if (profile.invitePromptsDismissed) return false;
-
-    final hasPartner = profile.accountabilityRelationships
-        .any((r) => r.type == 'primary' && r.status == 'active');
-    if (hasPartner) return false;
 
     if (profile.invitePromptsShown.contains(_key(trigger))) return false;
 

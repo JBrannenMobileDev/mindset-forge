@@ -13,6 +13,7 @@ import 'package:home_widget/home_widget.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
+import 'core/audio/future_self_audio_handler.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_text_styles.dart';
 import 'core/firebase/firestore_service.dart';
@@ -24,6 +25,7 @@ import 'core/services/deep_link_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/pending_invite_store.dart';
 import 'core/services/widget_sync_service.dart';
+import 'core/theme/app_system_chrome.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/boot_log.dart';
 import 'core/widgets/cookie_consent_banner.dart';
@@ -104,7 +106,6 @@ void main() async {
         );
         bootLog('fcm background handler set');
       }
-
       // Wire the home-screen widget: register the background callback that the
       // "Mark done" action invokes (iOS App Intent / Android broadcast). The App
       // Group binding is iOS-only; Android stores widget data in SharedPreferences.
@@ -117,6 +118,18 @@ void main() async {
           widgetInteractiveCallback,
         );
         bootLog('home_widget setup done');
+      }
+
+      // Background audio for Future Self practice (narration + binaural beats).
+      // Must run before any AudioPlayer is created.
+      if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
+        try {
+          await initFutureSelfAudio();
+          bootLog('future_self audio_service init done');
+        } catch (e) {
+          bootLog('initFutureSelfAudio FAILED: $e');
+          futureSelfAudioHandler ??= FutureSelfAudioHandler();
+        }
       }
 
       bootLog('calling runApp');
@@ -202,8 +215,9 @@ class _InitAppState extends State<_InitApp> {
     await _guardStartupStep('localNotifications', _initLocalNotifications);
     await _guardStartupStep('analytics', _initAnalytics);
 
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
     if (!kIsWeb) {
+      await AppSystemChrome.setEdgeToEdge();
+      await AppSystemChrome.applyDark();
       SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     }
 

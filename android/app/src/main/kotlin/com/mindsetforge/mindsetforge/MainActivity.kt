@@ -1,5 +1,7 @@
 package com.mindsetforge.mindsetforge
 
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 
-class MainActivity : FlutterActivity()
+/// Extends [AudioServiceActivity] so Future Self practice audio continues
+/// when the screen locks or the app is backgrounded.
+class MainActivity : AudioServiceActivity()

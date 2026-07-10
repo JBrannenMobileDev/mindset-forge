@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mindsetforge/core/constants/future_self_voices.dart';
 import 'package:mindsetforge/models/future_self_setup.dart';
 
 void main() {
@@ -65,16 +66,56 @@ void main() {
       expect(base.copyWith(script: 'text').hasScript, isTrue);
       expect(base.copyWith(narrationUrl: 'https://a').hasNarration, isTrue);
     });
-  });
 
-  group('FutureSelfSceneTemplates', () {
-    test('all templates have a key, label, and at least a few beats', () {
-      expect(FutureSelfSceneTemplates.all, isNotEmpty);
-      for (final t in FutureSelfSceneTemplates.all) {
-        expect(t.key, isNotEmpty);
-        expect(t.label, isNotEmpty);
-        expect(t.beats.length, greaterThanOrEqualTo(3));
-      }
+    test('copyWith clearNarration removes cached audio fields', () {
+      final scene = FutureSelfScene(
+        id: 'x',
+        script: 'I am here.',
+        scriptHash: 'hash',
+        narrationUrl: 'https://example.com/a.mp3',
+        narrationVoice: FutureSelfVoices.aoede,
+        createdAt: DateTime(2026),
+      );
+
+      final cleared = scene.copyWith(clearNarration: true);
+
+      expect(cleared.narrationUrl, isNull);
+      expect(cleared.scriptHash, isNull);
+      expect(cleared.narrationVoice, '');
+      expect(cleared.hasNarration, isFalse);
+      expect(cleared.script, 'I am here.');
+    });
+
+    test('narrationMatchesVoice requires matching cached voice id', () {
+      final scene = FutureSelfScene(
+        id: 'x',
+        narrationUrl: 'https://example.com/a.mp3',
+        narrationVoice: FutureSelfVoices.aoede,
+        createdAt: DateTime(2026),
+      );
+
+      expect(scene.narrationMatchesVoice(FutureSelfVoices.aoede), isTrue);
+      expect(scene.narrationMatchesVoice(FutureSelfVoices.charon), isFalse);
+    });
+
+    test('narrationMatchesVoice trusts legacy narration with no voice id', () {
+      // Scenes cached before we stored the voice id keep working for any voice
+      // instead of forcing an unnecessary (and costly) re-synthesis.
+      final legacy = FutureSelfScene(
+        id: 'x',
+        narrationUrl: 'https://example.com/a.mp3',
+        createdAt: DateTime(2026),
+      );
+
+      expect(legacy.narrationVoice, '');
+      expect(legacy.hasNarration, isTrue);
+      expect(legacy.narrationMatchesVoice(FutureSelfVoices.charon), isTrue);
+      expect(legacy.narrationMatchesVoice(FutureSelfVoices.aoede), isTrue);
+    });
+
+    test('narrationMatchesVoice is false when there is no narration', () {
+      final scene = FutureSelfScene(id: 'x', createdAt: DateTime(2026));
+      expect(scene.narrationMatchesVoice(FutureSelfVoices.charon), isFalse);
     });
   });
 
@@ -155,6 +196,85 @@ void main() {
       final setup = FutureSelfSetup.fromJson({'identityAnchor': 'x'});
       expect(setup.scenes, isEmpty);
       expect(setup.hasPractice, isFalse);
+    });
+
+    test('round-trips beatsVolume and narrationVolume through json', () {
+      final setup = FutureSelfSetup(
+        beatsVolume: 0.45,
+        narrationVolume: 0.8,
+        createdAt: DateTime(2026),
+      );
+      final restored = FutureSelfSetup.fromJson(setup.toJson());
+      expect(restored.beatsVolume, 0.45);
+      expect(restored.narrationVolume, 0.8);
+    });
+
+    test('round-trips preferredNarrationVoice through json', () {
+      final setup = FutureSelfSetup(
+        preferredNarrationVoice: 'en-US-Chirp3-HD-Charon',
+        createdAt: DateTime(2026),
+      );
+      final restored = FutureSelfSetup.fromJson(setup.toJson());
+      expect(restored.preferredNarrationVoice, 'en-US-Chirp3-HD-Charon');
+      expect(restored.resolvedNarrationVoice, 'en-US-Chirp3-HD-Charon');
+    });
+
+    test('fromJson defaults preferredNarrationVoice to empty', () {
+      final setup = FutureSelfSetup.fromJson({'identityAnchor': 'x'});
+      expect(setup.preferredNarrationVoice, '');
+      expect(setup.resolvedNarrationVoice, FutureSelfVoices.charon);
+    });
+
+    test('FutureSelfVoices exposes four options across both tone groups', () {
+      expect(FutureSelfVoices.options.length, 4);
+      expect(FutureSelfVoices.defaultVoice, FutureSelfVoices.charon);
+      expect(
+        FutureSelfVoices.optionsForGroup(FutureSelfVoices.groupLighter).length,
+        2,
+      );
+      expect(
+        FutureSelfVoices.optionsForGroup(FutureSelfVoices.groupDeeper).length,
+        2,
+      );
+    });
+
+    test('fromJson defaults beatsVolume and narrationVolume when missing', () {
+      final setup = FutureSelfSetup.fromJson({'identityAnchor': 'x'});
+      expect(setup.beatsVolume, 0.3);
+      expect(setup.narrationVolume, 1.0);
+    });
+
+    test('fromJson clamps out-of-range volume values', () {
+      final setup = FutureSelfSetup.fromJson({
+        'beatsVolume': 1.5,
+        'narrationVolume': -0.2,
+      });
+      expect(setup.beatsVolume, 1.0);
+      expect(setup.narrationVolume, 0.0);
+    });
+
+    test('still deserializes legacy shared-context fields for old accounts', () {
+      final setup = FutureSelfSetup.fromJson({
+        'identityAnchor': 'builds calmly',
+        'dailySnapshot': 'A calm, focused day from morning to night',
+        'envLocation': 'A modern home by the coast',
+        'envFeel': 'minimal, warm, unhurried',
+        'achievedGoalIds': ['g1', 'g2'],
+        'customGoals': ['Ran a marathon'],
+        'createdAt': '2025-06-01T00:00:00.000Z',
+      });
+
+      expect(setup.dailySnapshot, 'A calm, focused day from morning to night');
+      expect(setup.envLocation, 'A modern home by the coast');
+      expect(setup.envFeel, 'minimal, warm, unhurried');
+      expect(setup.achievedGoalIds, ['g1', 'g2']);
+      expect(setup.customGoals, ['Ran a marathon']);
+
+      // Round-trips so legacy data is preserved on the next save.
+      final restored = FutureSelfSetup.fromJson(setup.toJson());
+      expect(restored.dailySnapshot, setup.dailySnapshot);
+      expect(restored.envLocation, setup.envLocation);
+      expect(restored.achievedGoalIds, ['g1', 'g2']);
     });
   });
 }

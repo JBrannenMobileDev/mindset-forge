@@ -13,7 +13,11 @@ class AffirmationsNotifier extends StateNotifier<List<Affirmation>> {
   AffirmationsNotifier(this._ref) : super([]);
 
   void _loadFromProfile(UserProfile? profile) {
-    if (profile != null) state = profile.affirmations;
+    if (profile == null) {
+      state = [];
+      return;
+    }
+    state = profile.affirmations;
   }
 
   Future<void> _persist(List<Affirmation> items) async {

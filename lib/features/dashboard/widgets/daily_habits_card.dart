@@ -9,8 +9,11 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/habit_completion_checkbox.dart';
+import '../../../core/widgets/partner_locked_overlay.dart';
 import '../../../models/habit.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/habits_provider.dart';
+import '../../../providers/partner_limits_provider.dart';
 
 /// Standalone daily habits card on the dashboard. Lists each active habit with
 /// its own checkbox and self-completes when all are done. The matching
@@ -21,6 +24,14 @@ class DailyHabitsCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(currentUserProfileProvider).valueOrNull;
+    final limits = ref.read(partnerLimitsProvider);
+    final lockedHabitIds = profile == null
+        ? const <String>{}
+        : limits.lockedIds(profile, PartnerFeature.habit);
+    final onLockedTap = () =>
+        limits.showLockedUpgrade(context, PartnerFeature.habit);
+
     final activeHabits =
         ref.watch(habitsProvider).where((h) => h.state == 'active').toList();
 
@@ -40,8 +51,12 @@ class DailyHabitsCard extends ConsumerWidget {
       ).animate().fadeIn(duration: 400.ms);
     }
 
-    final doneCount = activeHabits.where((h) => h.isCompletedToday).length;
-    final allDone = doneCount == activeHabits.length;
+    final unlockedHabits = activeHabits
+        .where((h) => !lockedHabitIds.contains(h.id))
+        .toList();
+    final doneCount = unlockedHabits.where((h) => h.isCompletedToday).length;
+    final allDone =
+        unlockedHabits.isNotEmpty && doneCount == unlockedHabits.length;
 
     return AppCard(
       padding: EdgeInsets.zero,
@@ -71,7 +86,7 @@ class DailyHabitsCard extends ConsumerWidget {
                 ),
                 const Spacer(),
                 Text(
-                  '$doneCount/${activeHabits.length}',
+                  '$doneCount/${unlockedHabits.length}',
                   style: AppTextStyles.labelSmall.copyWith(
                     color: allDone ? AppColors.success : AppColors.textMuted,
                   ),
@@ -84,9 +99,17 @@ class DailyHabitsCard extends ConsumerWidget {
             _HabitRow(
               habit: activeHabits[i],
               isLast: i == activeHabits.length - 1,
-              onComplete: () => ref
-                  .read(habitsProvider.notifier)
-                  .completeHabit(activeHabits[i].id),
+              isLocked: lockedHabitIds.contains(activeHabits[i].id),
+              onLockedTap: onLockedTap,
+              onComplete: () {
+                if (lockedHabitIds.contains(activeHabits[i].id)) {
+                  onLockedTap();
+                  return;
+                }
+                ref
+                    .read(habitsProvider.notifier)
+                    .completeHabit(activeHabits[i].id);
+              },
             ).animate().fadeIn(
                   delay: Duration(milliseconds: i * 60),
                   duration: 400.ms,
@@ -100,11 +123,15 @@ class DailyHabitsCard extends ConsumerWidget {
 class _HabitRow extends StatelessWidget {
   final Habit habit;
   final bool isLast;
+  final bool isLocked;
+  final VoidCallback onLockedTap;
   final VoidCallback onComplete;
 
   const _HabitRow({
     required this.habit,
     required this.isLast,
+    required this.isLocked,
+    required this.onLockedTap,
     required this.onComplete,
   });
 
@@ -112,60 +139,65 @@ class _HabitRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.cardPadding,
-            vertical: AppSpacing.md,
-          ),
-          child: Row(
-            children: [
-              HabitCompletionCheckbox(
-                isDone: habit.isCompletedToday,
-                onTap: onComplete,
-                size: 28,
-                iconSize: 16,
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      habit.name,
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        decoration: habit.isCompletedToday
-                            ? TextDecoration.lineThrough
-                            : null,
-                        color: habit.isCompletedToday
-                            ? AppColors.textMuted
-                            : AppColors.textPrimary,
-                      ),
-                    ),
-                    if (habit.identityReinforces.isNotEmpty)
+        PartnerLockedOverlay(
+          isLocked: isLocked,
+          onLockedTap: onLockedTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.cardPadding,
+              vertical: AppSpacing.md,
+            ),
+            child: Row(
+              children: [
+                HabitCompletionCheckbox(
+                  isDone: habit.isCompletedToday,
+                  enabled: !isLocked,
+                  onTap: onComplete,
+                  size: 28,
+                  iconSize: 16,
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        habit.identityReinforces,
-                        style: AppTextStyles.labelSmall.copyWith(
-                          color: AppColors.textMuted,
+                        habit.name,
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          decoration: habit.isCompletedToday
+                              ? TextDecoration.lineThrough
+                              : null,
+                          color: habit.isCompletedToday
+                              ? AppColors.textMuted
+                              : AppColors.textPrimary,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
+                      if (habit.identityReinforces.isNotEmpty)
+                        Text(
+                          habit.identityReinforces,
+                          style: AppTextStyles.labelSmall.copyWith(
+                            color: AppColors.textMuted,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+                Row(
+                  children: [
+                    const Icon(Icons.local_fire_department_rounded,
+                        color: AppColors.warning, size: 14),
+                    const SizedBox(width: 2),
+                    Text(
+                      '${habit.currentStreak}',
+                      style: AppTextStyles.labelSmall
+                          .copyWith(color: AppColors.warning),
+                    ),
                   ],
                 ),
-              ),
-              Row(
-                children: [
-                  const Icon(Icons.local_fire_department_rounded,
-                      color: AppColors.warning, size: 14),
-                  const SizedBox(width: 2),
-                  Text(
-                    '${habit.currentStreak}',
-                    style: AppTextStyles.labelSmall
-                        .copyWith(color: AppColors.warning),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         if (!isLast)

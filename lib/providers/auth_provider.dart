@@ -17,11 +17,11 @@ final currentUserProfileProvider = StreamProvider<UserProfile?>(
     final authAsync = ref.watch(authStateProvider);
     return authAsync.when(
       data: (user) {
-        if (user == null) return const Stream.empty();
+        if (user == null) return Stream.value(null);
         return ref.watch(firestoreServiceProvider).streamUserProfile(user.uid);
       },
-      loading: () => const Stream.empty(),
-      error: (_, __) => const Stream.empty(),
+      loading: () => Stream.value(null),
+      error: (_, __) => Stream.value(null),
     );
   },
 );
