@@ -7,6 +7,8 @@ class JournalSummary {
   final String mode; // 'reflect' | 'grow' | 'prime'
   final String snippet; // first 100 chars of journal content
   final String prompt; // AI-generated prompt question for this entry
+  final List<String> limitingBeliefsShifted;
+  final List<String> fearsOutwitted;
 
   const JournalSummary({
     required this.date,
@@ -14,6 +16,8 @@ class JournalSummary {
     required this.mode,
     required this.snippet,
     this.prompt = '',
+    this.limitingBeliefsShifted = const [],
+    this.fearsOutwitted = const [],
   });
 
   static const _moodScores = {
@@ -33,6 +37,8 @@ class JournalSummary {
     String? mode,
     String? snippet,
     String? prompt,
+    List<String>? limitingBeliefsShifted,
+    List<String>? fearsOutwitted,
   }) {
     return JournalSummary(
       date: date ?? this.date,
@@ -40,6 +46,9 @@ class JournalSummary {
       mode: mode ?? this.mode,
       snippet: snippet ?? this.snippet,
       prompt: prompt ?? this.prompt,
+      limitingBeliefsShifted:
+          limitingBeliefsShifted ?? this.limitingBeliefsShifted,
+      fearsOutwitted: fearsOutwitted ?? this.fearsOutwitted,
     );
   }
 
@@ -50,6 +59,12 @@ class JournalSummary {
       mode: json['mode'] as String? ?? 'reflect',
       snippet: json['snippet'] as String? ?? '',
       prompt: json['prompt'] as String? ?? '',
+      limitingBeliefsShifted: List<String>.from(
+        json['limitingBeliefsShifted'] as List<dynamic>? ?? [],
+      ),
+      fearsOutwitted: List<String>.from(
+        json['fearsOutwitted'] as List<dynamic>? ?? [],
+      ),
     );
   }
 
@@ -59,5 +74,7 @@ class JournalSummary {
         'mode': mode,
         'snippet': snippet,
         'prompt': prompt,
+        'limitingBeliefsShifted': limitingBeliefsShifted,
+        'fearsOutwitted': fearsOutwitted,
       };
 }

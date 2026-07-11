@@ -512,6 +512,71 @@ RULES — NEVER BREAK THESE:
     }
   }
 
+  /// Surfaces next-layer limiting beliefs and fears from accumulated journey
+  /// data after the user has overcome their initial set.
+  Future<Map<String, List<String>>> excavateDeeperMindset(
+    UserProfile profile,
+  ) async {
+    const empty = <String, List<String>>{'beliefs': [], 'fears': []};
+    try {
+      final overcomeBeliefs =
+          profile.overcomeBeliefs.map((i) => i.text).join('; ');
+      final overcomeFears =
+          profile.overcomeFears.map((i) => i.text).join('; ');
+      final journalLines = profile.recentJournalSummaries
+          .take(7)
+          .map((j) {
+            final tags = [
+              ...j.limitingBeliefsShifted.map((t) => 'belief shifted: $t'),
+              ...j.fearsOutwitted.map((t) => 'fear outwitted: $t'),
+            ];
+            final tagStr = tags.isNotEmpty ? ' [${tags.join('; ')}]' : '';
+            return '  • ${j.date}: mood=${j.mood} — ${j.snippet}$tagStr';
+          })
+          .join('\n');
+
+      final response = await complete(
+        systemPrompt:
+            'You are a mindset coach helping a user discover their NEXT layer of '
+            'limiting beliefs and fears. They have already overcome their initial set. '
+            'Surface subtler, deeper patterns from their accumulated data. '
+            'Beliefs: first person, under 8 words each (e.g. "I am not worthy"). '
+            'Fears: use the same 7-category labels when possible (Fear of Failure, '
+            'Fear of Judgment, Fear of Success, Fear of Rejection, Fear of Uncertainty, '
+            'Imposter Syndrome, Perfectionism). Return ONLY valid JSON with keys '
+            '"beliefs" (array of 3-5 strings) and "fears" (array of 1-2 strings). '
+            'No other text.',
+        userPrompt:
+            '${UserContextBuilder.coreBlock(profile)}\n\n'
+            'Beliefs already overcome: ${overcomeBeliefs.isEmpty ? 'None yet' : overcomeBeliefs}\n'
+            'Fears already overcome: ${overcomeFears.isEmpty ? 'None yet' : overcomeFears}\n\n'
+            '${UserContextBuilder.beliefHistoryBlock(profile)}\n\n'
+            'Coach memory: ${profile.coachMemory.longTermSummary.isEmpty ? 'None' : profile.coachMemory.longTermSummary}\n'
+            'Recurring patterns: ${profile.coachMemory.recurringPatterns.join('; ')}\n\n'
+            'Recent journal:\n${journalLines.isEmpty ? '  • None' : journalLines}\n\n'
+            'Infer the next-layer beliefs and fears this person is ready to face.',
+        maxTokens: 300,
+      );
+      final jsonStr = response.contains('{')
+          ? response.substring(
+              response.indexOf('{'), response.lastIndexOf('}') + 1)
+          : response;
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      return {
+        'beliefs': (data['beliefs'] as List<dynamic>? ?? [])
+            .map((e) => e.toString())
+            .where((s) => s.trim().isNotEmpty)
+            .toList(),
+        'fears': (data['fears'] as List<dynamic>? ?? [])
+            .map((e) => e.toString())
+            .where((s) => s.trim().isNotEmpty)
+            .toList(),
+      };
+    } catch (_) {
+      return empty;
+    }
+  }
+
   /// Infers a starting-point mindset blueprint (5 trait scores, 1-10) from
   /// what the user has already shared — situation, aspired qualities, goals,
   /// and the limiting beliefs they selected — so the trait sliders in the

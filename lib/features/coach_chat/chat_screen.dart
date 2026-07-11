@@ -19,10 +19,13 @@ import '../../core/utils/version_gate.dart';
 import '../../models/chat_session.dart';
 import '../../models/chat_message.dart';
 import '../../models/coach_reply.dart';
+import '../../models/coach_callback.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/claude_provider.dart';
 import '../../providers/coach_memory_provider.dart';
+import '../../providers/coach_callback_provider.dart';
+import '../../core/services/analytics_service.dart';
 import '../../providers/daily_completion_provider.dart';
 import '../../providers/partner_limits_provider.dart';
 import '../goals_habits/goal_form_modal.dart';
@@ -386,19 +389,15 @@ class _ChatViewState extends ConsumerState<_ChatView> {
   String? _openerText;
   List<String> _quickPrompts = [];
   bool _loadingOpener = false;
+  bool _callbackInjectedThisSession = false;
+  bool _callbackResponseTracked = false;
+  bool _coachInitTriggered = false;
+  CoachCallback? _injectedCallback;
 
   @override
   void initState() {
     super.initState();
-    if (widget.mode == 'coach') {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (widget.journalContext != null) {
-          _autoStartFromJournal();
-        } else {
-          _loadOpener();
-        }
-      });
-    } else if (widget.mode == 'future_self') {
+    if (widget.mode == 'future_self') {
       WidgetsBinding.instance
           .addPostFrameCallback((_) => _loadFutureSelfOpener());
     }
@@ -424,6 +423,50 @@ class _ChatViewState extends ConsumerState<_ChatView> {
     } catch (_) {
       if (mounted) setState(() => _loadingOpener = false);
     }
+  }
+
+  /// Injects an unseen proactive coach callback as the first persisted message.
+  Future<bool> _tryInjectPendingCallback() async {
+    final profile = widget.profile;
+    if (profile == null || !profile.hasPendingCallback) return false;
+    final callback = profile.pendingCallback;
+    if (callback == null) return false;
+
+    var active = ref.read(activeChatProvider);
+    if (active == null || active.mode != widget.mode || active.messages.isNotEmpty) {
+      widget.onNewSession();
+      await Future.delayed(Duration.zero);
+      if (!mounted) return false;
+      active = ref.read(activeChatProvider);
+      if (active == null || active.mode != widget.mode) return false;
+    }
+
+    final msg = ChatMessage(
+      id: const Uuid().v4(),
+      role: 'assistant',
+      content: callback.message,
+      timestamp: DateTime.now(),
+      mode: 'Callback',
+      safety: 'none',
+    );
+
+    await ref.read(activeChatProvider.notifier).addMessage(msg);
+    if (!mounted) return false;
+
+    ref.read(analyticsServiceProvider).trackCallbackFired(
+          valence: callback.valence,
+          triggerType: callback.triggerType,
+        );
+    await ref.read(coachCallbackBusyProvider.notifier).markSeen(callback);
+    await ref.read(coachCallbackBusyProvider.notifier).clearPending();
+    if (!mounted) return false;
+
+    setState(() {
+      _callbackInjectedThisSession = true;
+      _injectedCallback = callback;
+    });
+    _scrollToBottom();
+    return true;
   }
 
   Future<void> _loadFutureSelfOpener() async {
@@ -568,6 +611,15 @@ class _ChatViewState extends ConsumerState<_ChatView> {
       timestamp: DateTime.now(),
     );
 
+    if (_callbackInjectedThisSession &&
+        !_callbackResponseTracked &&
+        _injectedCallback != null) {
+      _callbackResponseTracked = true;
+      await ref
+          .read(coachCallbackBusyProvider.notifier)
+          .markResponded(_injectedCallback!);
+    }
+
     _inputCtrl.clear();
     // Collapse the keyboard so the full coach response is visible.
     FocusManager.instance.primaryFocus?.unfocus();
@@ -708,6 +760,24 @@ class _ChatViewState extends ConsumerState<_ChatView> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.mode == 'coach' &&
+        !_coachInitTriggered &&
+        widget.profile != null) {
+      _coachInitTriggered = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        if (widget.journalContext != null) {
+          _autoStartFromJournal();
+          return;
+        }
+        final injected = await _tryInjectPendingCallback();
+        if (!mounted) return;
+        if (!injected) {
+          await _loadOpener();
+        }
+      });
+    }
+
     final session = ref.watch(activeChatProvider);
 
     if (session == null || session.mode != widget.mode) {

@@ -273,6 +273,10 @@ class NotificationService {
             : '/dashboard';
       case 'weekly_insight':
         return '/progress';
+      case 'coach_callback':
+        return '/chat';
+      case 'blueprint_evolution':
+        return '/blueprint-evolution';
       default:
         return '/dashboard';
     }
@@ -287,6 +291,8 @@ class NotificationService {
         return 'partner';
       case 'low_activity_alert':
       case 'weekly_insight':
+      case 'coach_callback':
+      case 'blueprint_evolution':
         return 'lifecycle';
       default:
         return 'routine';

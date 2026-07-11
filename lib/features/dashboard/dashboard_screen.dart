@@ -28,6 +28,8 @@ import 'widgets/progress_overview_card.dart';
 import 'widgets/getting_started_checklist.dart';
 import 'widgets/accountability_banner.dart';
 import 'widgets/weekly_insight_banner.dart';
+import 'widgets/coach_callback_banner.dart';
+import 'widgets/blueprint_evolution_banner.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   /// When true (deep link `mindsetforge://focus` → `/dashboard?focus=plan`,
@@ -276,6 +278,12 @@ List<_DashSection> _dashboardSections({
       if (profile.hasUnreadWeeklyInsight)
         _DashSection(
             _DashGroup.top, (_) => WeeklyInsightBanner(profile: profile)),
+      if (profile.hasBlueprintEvolutionReady)
+        _DashSection(_DashGroup.top,
+            (_) => BlueprintEvolutionBanner(profile: profile)),
+      if (profile.hasPendingCallback && !profile.hasBlueprintEvolutionReady)
+        _DashSection(
+            _DashGroup.top, (_) => CoachCallbackBanner(profile: profile)),
       if (showAccountabilityBanner)
         _DashSection(
             _DashGroup.top, (_) => AccountabilityBanner(profile: profile)),

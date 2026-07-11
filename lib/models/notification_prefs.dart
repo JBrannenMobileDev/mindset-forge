@@ -22,6 +22,9 @@ class NotificationPrefs {
   /// Sunday weekly review ready push notifications.
   final bool weeklyInsightEnabled;
 
+  /// Proactive coach callback push notifications.
+  final bool coachCallbackEnabled;
+
   /// Reminder times (minutes since local midnight).
   final int morningReminderMinutes;
   final int eveningReminderMinutes;
@@ -44,6 +47,7 @@ class NotificationPrefs {
     this.partnerEnabled = true,
     this.lifecycleEnabled = true,
     this.weeklyInsightEnabled = true,
+    this.coachCallbackEnabled = true,
     this.morningReminderMinutes = defaultMorningMinutes,
     this.eveningReminderMinutes = defaultEveningMinutes,
     this.streakReminderMinutes = defaultStreakMinutes,
@@ -75,6 +79,7 @@ class NotificationPrefs {
     bool? partnerEnabled,
     bool? lifecycleEnabled,
     bool? weeklyInsightEnabled,
+    bool? coachCallbackEnabled,
     int? morningReminderMinutes,
     int? eveningReminderMinutes,
     int? streakReminderMinutes,
@@ -89,6 +94,7 @@ class NotificationPrefs {
       partnerEnabled: partnerEnabled ?? this.partnerEnabled,
       lifecycleEnabled: lifecycleEnabled ?? this.lifecycleEnabled,
       weeklyInsightEnabled: weeklyInsightEnabled ?? this.weeklyInsightEnabled,
+      coachCallbackEnabled: coachCallbackEnabled ?? this.coachCallbackEnabled,
       morningReminderMinutes:
           morningReminderMinutes ?? this.morningReminderMinutes,
       eveningReminderMinutes:
@@ -109,6 +115,7 @@ class NotificationPrefs {
       partnerEnabled: json['partnerEnabled'] as bool? ?? true,
       lifecycleEnabled: json['lifecycleEnabled'] as bool? ?? true,
       weeklyInsightEnabled: json['weeklyInsightEnabled'] as bool? ?? true,
+      coachCallbackEnabled: json['coachCallbackEnabled'] as bool? ?? true,
       morningReminderMinutes:
           (json['morningReminderMinutes'] as num?)?.toInt() ??
               defaultMorningMinutes,
@@ -133,6 +140,7 @@ class NotificationPrefs {
         'partnerEnabled': partnerEnabled,
         'lifecycleEnabled': lifecycleEnabled,
         'weeklyInsightEnabled': weeklyInsightEnabled,
+        'coachCallbackEnabled': coachCallbackEnabled,
         'morningReminderMinutes': morningReminderMinutes,
         'eveningReminderMinutes': eveningReminderMinutes,
         'streakReminderMinutes': streakReminderMinutes,

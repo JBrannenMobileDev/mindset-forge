@@ -218,6 +218,57 @@ class AnalyticsService {
   void trackAiFeatureUsed(String feature) =>
       _track('ai_feature_used', {'feature': feature});
 
+  void trackCallbackFired({
+    required String valence,
+    required String triggerType,
+  }) =>
+      _track('callback_fired', {
+        'valence': valence,
+        'trigger_type': triggerType,
+      });
+
+  void trackCallbackSeen({
+    required String valence,
+    required String triggerType,
+  }) =>
+      _track('callback_seen', {
+        'valence': valence,
+        'trigger_type': triggerType,
+      });
+
+  void trackCallbackResponded({
+    required String valence,
+    required String triggerType,
+  }) =>
+      _track('callback_responded', {
+        'valence': valence,
+        'trigger_type': triggerType,
+      });
+
+  void trackEvolutionOffered() => _track('evolution_offered');
+
+  void trackEvolutionOpened() => _track('evolution_opened');
+
+  void trackEvolutionCompleted({
+    required int beliefCount,
+    required int fearCount,
+    required int generation,
+  }) =>
+      _track('evolution_completed', {
+        'belief_count': beliefCount,
+        'fear_count': fearCount,
+        'generation': generation,
+      });
+
+  void trackItemGraduated({
+    required String kind,
+    required String text,
+  }) =>
+      _track('item_graduated', {
+        'kind': kind,
+        'text': text,
+      });
+
   // ─── Internal ───────────────────────────────────────────────────────────────
 
   void _track(String event, [Map<String, dynamic>? properties]) {

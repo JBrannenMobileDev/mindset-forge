@@ -133,6 +133,8 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
           mode: _mode,
           snippet: content.length > 100 ? content.substring(0, 100) : content,
           prompt: _prompt,
+          limitingBeliefsShifted: _beliefsShifted,
+          fearsOutwitted: _fearsOutwitted,
         );
         final updated = [newSummary, ...profile.recentJournalSummaries]
             .take(14)

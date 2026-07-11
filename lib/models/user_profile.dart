@@ -17,6 +17,9 @@ import 'coach_memory.dart';
 import 'notification_prefs.dart';
 import 'weekly_insight.dart';
 import 'blueprint_snapshot.dart';
+import 'coach_callback.dart';
+import 'alignment_snapshot.dart';
+import 'mindset_item_progress.dart';
 
 class UserProfile {
   final String uid;
@@ -127,6 +130,30 @@ class UserProfile {
   /// Prior weekly reviews, newest first (max 12).
   final List<WeeklyInsight> weeklyInsightHistory;
 
+  /// Unseen proactive coach callback waiting in chat.
+  final CoachCallback? pendingCallback;
+
+  /// ISO timestamp of the last delivered callback.
+  final DateTime? lastCallbackAt;
+
+  /// `positive` or `regression` for the last delivered callback.
+  final String? lastCallbackValence;
+
+  /// Periodic alignment score snapshots, newest first (max 12).
+  final List<AlignmentSnapshot> alignmentSnapshotHistory;
+
+  /// Lifecycle tracking for limiting beliefs (active, softening, overcome).
+  final List<MindsetItemProgress> beliefProgress;
+
+  /// Lifecycle tracking for fears to outwit.
+  final List<MindsetItemProgress> fearProgress;
+
+  /// ISO timestamp of the last deeper excavation (generation 2+ beliefs/fears).
+  final String? lastExcavationAt;
+
+  /// True when the user has earned a deeper excavation offer.
+  final bool blueprintEvolutionReady;
+
   final DateTime createdAt;
 
   const UserProfile({
@@ -191,6 +218,14 @@ class UserProfile {
     this.notificationPrefs = const NotificationPrefs(),
     this.weeklyInsight,
     this.weeklyInsightHistory = const [],
+    this.pendingCallback,
+    this.lastCallbackAt,
+    this.lastCallbackValence,
+    this.alignmentSnapshotHistory = const [],
+    this.beliefProgress = const [],
+    this.fearProgress = const [],
+    this.lastExcavationAt,
+    this.blueprintEvolutionReady = false,
     required this.createdAt,
   });
 
@@ -204,6 +239,21 @@ class UserProfile {
   /// True when a weekly review exists and the user has not opened it yet.
   bool get hasUnreadWeeklyInsight =>
       weeklyInsight != null && weeklyInsight!.isUnread;
+
+  /// True when a proactive coach callback is waiting to be seen.
+  bool get hasPendingCallback =>
+      pendingCallback != null && pendingCallback!.isUnseen;
+
+  /// Archived limiting beliefs the user has genuinely overcome.
+  List<MindsetItemProgress> get overcomeBeliefs =>
+      beliefProgress.where((i) => i.isOvercome).toList();
+
+  /// Archived fears the user has genuinely overcome.
+  List<MindsetItemProgress> get overcomeFears =>
+      fearProgress.where((i) => i.isOvercome).toList();
+
+  /// True when a deeper excavation offer is waiting.
+  bool get hasBlueprintEvolutionReady => blueprintEvolutionReady;
 
   /// The #1 focus is complete iff it appears in the authoritative completed
   /// list. Single source of truth so the dashboard and Priorities tab can
@@ -432,6 +482,14 @@ class UserProfile {
     NotificationPrefs? notificationPrefs,
     WeeklyInsight? weeklyInsight,
     List<WeeklyInsight>? weeklyInsightHistory,
+    CoachCallback? pendingCallback,
+    DateTime? lastCallbackAt,
+    String? lastCallbackValence,
+    List<AlignmentSnapshot>? alignmentSnapshotHistory,
+    List<MindsetItemProgress>? beliefProgress,
+    List<MindsetItemProgress>? fearProgress,
+    String? lastExcavationAt,
+    bool? blueprintEvolutionReady,
     DateTime? createdAt,
   }) {
     return UserProfile(
@@ -508,6 +566,16 @@ class UserProfile {
       notificationPrefs: notificationPrefs ?? this.notificationPrefs,
       weeklyInsight: weeklyInsight ?? this.weeklyInsight,
       weeklyInsightHistory: weeklyInsightHistory ?? this.weeklyInsightHistory,
+      pendingCallback: pendingCallback ?? this.pendingCallback,
+      lastCallbackAt: lastCallbackAt ?? this.lastCallbackAt,
+      lastCallbackValence: lastCallbackValence ?? this.lastCallbackValence,
+      alignmentSnapshotHistory:
+          alignmentSnapshotHistory ?? this.alignmentSnapshotHistory,
+      beliefProgress: beliefProgress ?? this.beliefProgress,
+      fearProgress: fearProgress ?? this.fearProgress,
+      lastExcavationAt: lastExcavationAt ?? this.lastExcavationAt,
+      blueprintEvolutionReady:
+          blueprintEvolutionReady ?? this.blueprintEvolutionReady,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -687,6 +755,34 @@ class UserProfile {
               ?.map((e) => WeeklyInsight.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
+      pendingCallback: json['pendingCallback'] != null
+          ? CoachCallback.fromJson(
+              json['pendingCallback'] as Map<String, dynamic>,
+            )
+          : null,
+      lastCallbackAt: json['lastCallbackAt'] != null
+          ? DateTime.tryParse(json['lastCallbackAt'] as String)
+          : null,
+      lastCallbackValence: json['lastCallbackValence'] as String?,
+      alignmentSnapshotHistory:
+          (json['alignmentSnapshotHistory'] as List<dynamic>?)
+                  ?.map((e) =>
+                      AlignmentSnapshot.fromJson(e as Map<String, dynamic>))
+                  .toList() ??
+              [],
+      beliefProgress: (json['beliefProgress'] as List<dynamic>?)
+              ?.map((e) =>
+                  MindsetItemProgress.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      fearProgress: (json['fearProgress'] as List<dynamic>?)
+              ?.map((e) =>
+                  MindsetItemProgress.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      lastExcavationAt: json['lastExcavationAt'] as String?,
+      blueprintEvolutionReady:
+          json['blueprintEvolutionReady'] as bool? ?? false,
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
     );
   }
@@ -765,6 +861,17 @@ class UserProfile {
         if (weeklyInsight != null) 'weeklyInsight': weeklyInsight!.toJson(),
         'weeklyInsightHistory':
             weeklyInsightHistory.map((e) => e.toJson()).toList(),
+        if (pendingCallback != null) 'pendingCallback': pendingCallback!.toJson(),
+        if (lastCallbackAt != null)
+          'lastCallbackAt': lastCallbackAt!.toIso8601String(),
+        if (lastCallbackValence != null)
+          'lastCallbackValence': lastCallbackValence,
+        'alignmentSnapshotHistory':
+            alignmentSnapshotHistory.map((e) => e.toJson()).toList(),
+        'beliefProgress': beliefProgress.map((e) => e.toJson()).toList(),
+        'fearProgress': fearProgress.map((e) => e.toJson()).toList(),
+        if (lastExcavationAt != null) 'lastExcavationAt': lastExcavationAt,
+        'blueprintEvolutionReady': blueprintEvolutionReady,
         'createdAt': createdAt.toIso8601String(),
       };
 }

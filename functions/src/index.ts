@@ -7,6 +7,11 @@ import Anthropic from '@anthropic-ai/sdk';
 import { defineSecret } from 'firebase-functions/params';
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
 import { timingSafeEqual, randomUUID, createHash } from 'crypto';
+import {
+  evaluateMindsetProgress,
+  MINDSET_PROGRESS_DEFAULTS,
+  type MindsetProgressConfig,
+} from './mindset_progress';
 
 admin.initializeApp();
 
@@ -2747,6 +2752,926 @@ export const weeklyPartnerDigest = onSchedule(
         body: `${activeDays}/7 active days and a ${streak}-day streak. Send some encouragement.`,
         type: 'partner_digest',
       });
+    });
+  },
+);
+
+// ─── Coach callback engine ───────────────────────────────────────────────────
+
+const ALIGNMENT_SNAPSHOT_HISTORY_MAX = 12;
+const CALLBACK_ACTIVE_DAY_THRESHOLD = 3;
+
+interface CallbackConfig {
+  confidenceThreshold: number;
+  cooldownDays: number;
+  positiveBiasMargin: number;
+  warmupMinAccountAgeDays: number;
+  warmupMinActiveDays: number;
+  targetLocalHour: number;
+}
+
+const CALLBACK_CONFIG_DEFAULTS: CallbackConfig = {
+  confidenceThreshold: 0.72,
+  cooldownDays: 5,
+  positiveBiasMargin: 0.08,
+  warmupMinAccountAgeDays: 7,
+  warmupMinActiveDays: 5,
+  targetLocalHour: 11,
+};
+
+interface AlignmentSnapshotDoc {
+  overall: number;
+  subconscious: number;
+  thought: number;
+  action: number;
+  results: number;
+  date: string;
+}
+
+interface CoachCallbackDoc {
+  id: string;
+  message: string;
+  valence: 'positive' | 'regression';
+  triggerType: string;
+  referenceLabel: string;
+  referenceDate: string;
+  measurableChange: string;
+  confidence: number;
+  generatedAt: string;
+  deliveredAt?: string;
+  seenAt?: string;
+  respondedAt?: string;
+}
+
+interface JournalSummaryDoc {
+  date?: string;
+  mood?: string;
+  mode?: string;
+  snippet?: string;
+  prompt?: string;
+  limitingBeliefsShifted?: string[];
+  fearsOutwitted?: string[];
+}
+
+interface CallbackCandidate {
+  valence: 'positive' | 'regression';
+  triggerType: string;
+  summary: string;
+}
+
+let cachedCallbackConfig: CallbackConfig | null = null;
+let cachedCallbackConfigAt = 0;
+
+async function getCallbackConfig(): Promise<CallbackConfig> {
+  const now = Date.now();
+  if (cachedCallbackConfig && now - cachedCallbackConfigAt < 300000) {
+    return cachedCallbackConfig;
+  }
+  try {
+    const snap = await db.collection('app_config').doc('callback').get();
+    const data = snap.data() ?? {};
+    cachedCallbackConfig = {
+      confidenceThreshold:
+        typeof data.confidenceThreshold === 'number'
+          ? data.confidenceThreshold
+          : CALLBACK_CONFIG_DEFAULTS.confidenceThreshold,
+      cooldownDays:
+        typeof data.cooldownDays === 'number'
+          ? data.cooldownDays
+          : CALLBACK_CONFIG_DEFAULTS.cooldownDays,
+      positiveBiasMargin:
+        typeof data.positiveBiasMargin === 'number'
+          ? data.positiveBiasMargin
+          : CALLBACK_CONFIG_DEFAULTS.positiveBiasMargin,
+      warmupMinAccountAgeDays:
+        typeof data.warmupMinAccountAgeDays === 'number'
+          ? data.warmupMinAccountAgeDays
+          : CALLBACK_CONFIG_DEFAULTS.warmupMinAccountAgeDays,
+      warmupMinActiveDays:
+        typeof data.warmupMinActiveDays === 'number'
+          ? data.warmupMinActiveDays
+          : CALLBACK_CONFIG_DEFAULTS.warmupMinActiveDays,
+      targetLocalHour:
+        typeof data.targetLocalHour === 'number'
+          ? data.targetLocalHour
+          : CALLBACK_CONFIG_DEFAULTS.targetLocalHour,
+    };
+  } catch {
+    cachedCallbackConfig = { ...CALLBACK_CONFIG_DEFAULTS };
+  }
+  cachedCallbackConfigAt = now;
+  return cachedCallbackConfig!;
+}
+
+let cachedMindsetProgressConfig: MindsetProgressConfig | null = null;
+let cachedMindsetProgressConfigAt = 0;
+
+async function getMindsetProgressConfig(): Promise<MindsetProgressConfig> {
+  const now = Date.now();
+  if (cachedMindsetProgressConfig && now - cachedMindsetProgressConfigAt < 300000) {
+    return cachedMindsetProgressConfig;
+  }
+  try {
+    const snap = await db.collection('app_config').doc('mindset_progress').get();
+    const data = snap.data() ?? {};
+    cachedMindsetProgressConfig = {
+      minItemAgeDays:
+        typeof data.minItemAgeDays === 'number'
+          ? data.minItemAgeDays
+          : MINDSET_PROGRESS_DEFAULTS.minItemAgeDays,
+      beliefJournalDistinctDays:
+        typeof data.beliefJournalDistinctDays === 'number'
+          ? data.beliefJournalDistinctDays
+          : MINDSET_PROGRESS_DEFAULTS.beliefJournalDistinctDays,
+      fearJournalDistinctDays:
+        typeof data.fearJournalDistinctDays === 'number'
+          ? data.fearJournalDistinctDays
+          : MINDSET_PROGRESS_DEFAULTS.fearJournalDistinctDays,
+      readinessOvercomeShare:
+        typeof data.readinessOvercomeShare === 'number'
+          ? data.readinessOvercomeShare
+          : MINDSET_PROGRESS_DEFAULTS.readinessOvercomeShare,
+      readinessMinOvercome:
+        typeof data.readinessMinOvercome === 'number'
+          ? data.readinessMinOvercome
+          : MINDSET_PROGRESS_DEFAULTS.readinessMinOvercome,
+      excavationCooldownDays:
+        typeof data.excavationCooldownDays === 'number'
+          ? data.excavationCooldownDays
+          : MINDSET_PROGRESS_DEFAULTS.excavationCooldownDays,
+      readinessMinActiveDaysPastWeek:
+        typeof data.readinessMinActiveDaysPastWeek === 'number'
+          ? data.readinessMinActiveDaysPastWeek
+          : MINDSET_PROGRESS_DEFAULTS.readinessMinActiveDaysPastWeek,
+    };
+  } catch {
+    cachedMindsetProgressConfig = { ...MINDSET_PROGRESS_DEFAULTS };
+  }
+  cachedMindsetProgressConfigAt = now;
+  return cachedMindsetProgressConfig!;
+}
+
+function isCallbackDeliveryWindow(
+  d: Date,
+  tz: string | undefined,
+  targetHour: number,
+): boolean {
+  const { hour } = getLocalTimeInfo(d, tz);
+  return hour === targetHour;
+}
+
+function daysSinceIso(iso?: string, nowMs = Date.now()): number {
+  if (!iso) return 0;
+  const parsed = Date.parse(iso);
+  if (isNaN(parsed)) return 0;
+  return Math.floor((nowMs - parsed) / 86400000);
+}
+
+function countLifetimeActiveDays(completions: CompletionDoc[]): number {
+  return completions.filter((c) => completedCount(c) >= CALLBACK_ACTIVE_DAY_THRESHOLD)
+    .length;
+}
+
+function countActiveDaysInWindow(
+  completions: CompletionDoc[],
+  startDaysAgo: number,
+  windowDays: number,
+  tz?: string,
+  nowMs = Date.now(),
+): number {
+  const byDate = new Map<string, CompletionDoc>();
+  for (const c of completions) {
+    if (c.date) byDate.set(c.date, c);
+  }
+  let active = 0;
+  for (let i = startDaysAgo; i < startDaysAgo + windowDays; i++) {
+    const key = localDateKeyInTz(new Date(nowMs - i * 86400000), tz);
+    const c = byDate.get(key);
+    if (c && completedCount(c) >= STREAK_THRESHOLD) active++;
+  }
+  return active;
+}
+
+function moodScore(mood?: string): number {
+  switch (mood) {
+    case 'amazing': return 10;
+    case 'good': return 8;
+    case 'okay': return 6;
+    case 'struggling': return 3;
+    case 'low': return 1;
+    default: return 5;
+  }
+}
+
+function goalDerivedProgress(goal: GoalDoc): number {
+  const steps = goal.actionSteps ?? [];
+  if (steps.length > 0) {
+    const done = steps.filter((s) => s.isCompleted).length;
+    return (done / steps.length) * 100;
+  }
+  return goal.progressPercent ?? 0;
+}
+
+function computeAlignmentSnapshot(
+  profile: {
+    dailyCompletions?: CompletionDoc[];
+    goals?: GoalDoc[];
+    habits?: HabitDoc[];
+    createdAt?: string;
+  },
+  dateKey: string,
+): AlignmentSnapshotDoc {
+  const window = 10;
+  const dates: string[] = [];
+  const anchor = new Date();
+  for (let i = 0; i < window; i++) {
+    const d = new Date(anchor.getTime() - i * 86400000);
+    dates.push(localDateKey(d));
+  }
+
+  const byDate = new Map<string, CompletionDoc>();
+  for (const c of profile.dailyCompletions ?? []) {
+    if (c.date) byDate.set(c.date, c);
+  }
+
+  let affirmationDays = 0;
+  let visualizationDays = 0;
+  let journalDays = 0;
+  let chatDays = 0;
+  let priorityDays = 0;
+  let habitCredit = 0;
+
+  const activeHabits = (profile.habits ?? []).filter((h) => h.state === 'active');
+  for (const date of dates) {
+    const c = byDate.get(date);
+    if (!c) continue;
+    if (c.affirmationsMorning && c.affirmationsEvening) affirmationDays++;
+    if (c.futureSelfCompleted) visualizationDays++;
+    if (c.journalCompleted) journalDays++;
+    if (c.chatCompleted) chatDays++;
+    if (c.priorityActionsCompleted) priorityDays++;
+    if (activeHabits.length > 0 && c.habitsCompleted) {
+      habitCredit += 1;
+    } else if (activeHabits.length > 0) {
+      habitCredit += completedCount(c) >= STREAK_THRESHOLD ? 0.7 : 0;
+    }
+  }
+
+  const denom = window * 2;
+  const subconscious = Math.min(
+    100,
+    ((affirmationDays + visualizationDays) / Math.max(denom, 1)) * 100,
+  );
+  const thought = Math.min(
+    100,
+    ((journalDays + chatDays) / Math.max(denom, 1)) * 100,
+  );
+  const action = Math.min(
+    100,
+    ((habitCredit + priorityDays) / Math.max(window, 1)) * 100,
+  );
+
+  const contributions: number[] = [];
+  for (const g of profile.goals ?? []) {
+    if (g.status === 'active') contributions.push(goalDerivedProgress(g));
+    else if (g.status === 'completed') contributions.push(100);
+  }
+  const results = contributions.length === 0
+    ? 0
+    : contributions.reduce((a, b) => a + b, 0) / contributions.length;
+
+  const overall =
+    subconscious * 0.35 +
+    thought * 0.25 +
+    action * 0.25 +
+    results * 0.15;
+
+  return {
+    overall: Math.round(overall * 10) / 10,
+    subconscious: Math.round(subconscious * 10) / 10,
+    thought: Math.round(thought * 10) / 10,
+    action: Math.round(action * 10) / 10,
+    results: Math.round(results * 10) / 10,
+    date: dateKey,
+  };
+}
+
+function rotateAlignmentSnapshotHistory(
+  snapshot: AlignmentSnapshotDoc,
+  history: AlignmentSnapshotDoc[],
+): AlignmentSnapshotDoc[] {
+  if (history.length > 0 && history[0].date === snapshot.date) {
+    return [snapshot, ...history.slice(1)].slice(0, ALIGNMENT_SNAPSHOT_HISTORY_MAX);
+  }
+  return [snapshot, ...history].slice(0, ALIGNMENT_SNAPSHOT_HISTORY_MAX);
+}
+
+function maybeWriteAlignmentSnapshot(
+  profile: {
+    dailyCompletions?: CompletionDoc[];
+    goals?: GoalDoc[];
+    habits?: HabitDoc[];
+    createdAt?: string;
+    alignmentSnapshotHistory?: AlignmentSnapshotDoc[];
+  },
+  dateKey: string,
+): AlignmentSnapshotDoc[] {
+  const history = profile.alignmentSnapshotHistory ?? [];
+  if (history.length > 0 && history[0].date === dateKey) return history;
+  const snapshot = computeAlignmentSnapshot(profile, dateKey);
+  return rotateAlignmentSnapshotHistory(snapshot, history);
+}
+
+function detectStreakBreakCandidate(
+  completions: CompletionDoc[],
+  tz?: string,
+  nowMs = Date.now(),
+): CallbackCandidate | null {
+  const byDate = new Map<string, CompletionDoc>();
+  for (const c of completions) {
+    if (c.date) byDate.set(c.date, c);
+  }
+
+  let gapDays = 0;
+  for (let i = 1; i <= 4; i++) {
+    const key = localDateKeyInTz(new Date(nowMs - i * 86400000), tz);
+    const c = byDate.get(key);
+    if (!c || completedCount(c) < STREAK_THRESHOLD) {
+      gapDays++;
+    } else {
+      break;
+    }
+  }
+  if (gapDays < 2) return null;
+
+  const priorStreak = computeStreak(
+    completions.filter((c) => {
+      if (!c.date) return false;
+      const key = localDateKeyInTz(new Date(nowMs), tz);
+      return c.date < key;
+    }),
+  );
+  if (priorStreak < 3) return null;
+
+  return {
+    valence: 'regression',
+    triggerType: 'streak_break_belief',
+    summary:
+      `Regression signal: ${gapDays}-day check-in gap after a ${priorStreak}-day streak. `
+      + 'Connect this slip to a specific limiting belief or fear if one fits.',
+  };
+}
+
+function findDatedAnchor(
+  beliefPatterns: BeliefPatternDoc[],
+  goals: GoalDoc[],
+  nowMs = Date.now(),
+): { label: string; date: string } | null {
+  for (const bp of beliefPatterns) {
+    if (!bp.identifiedAt || !bp.belief) continue;
+    const days = daysSinceIso(bp.identifiedAt, nowMs);
+    if (days >= 7 && days <= 45) {
+      return {
+        label: bp.reframe ? `reframed belief "${bp.belief}"` : `belief "${bp.belief}"`,
+        date: bp.identifiedAt.slice(0, 10),
+      };
+    }
+  }
+  for (const g of goals) {
+    const createdAt = (g as { createdAt?: string }).createdAt;
+    if (!createdAt || !g.title) continue;
+    const days = daysSinceIso(createdAt, nowMs);
+    if (days >= 7 && days <= 45) {
+      return { label: `goal "${g.title}"`, date: createdAt.slice(0, 10) };
+    }
+  }
+  return null;
+}
+
+function detectConsistencyBreakthroughCandidate(
+  profile: {
+    dailyCompletions?: CompletionDoc[];
+    beliefPatternHistory?: BeliefPatternDoc[];
+    goals?: GoalDoc[];
+    timezone?: string;
+    alignmentSnapshotHistory?: AlignmentSnapshotDoc[];
+  },
+  nowMs = Date.now(),
+): CallbackCandidate | null {
+  const completions = profile.dailyCompletions ?? [];
+  const recent = countActiveDaysInWindow(completions, 1, 7, profile.timezone, nowMs);
+  const prior = countActiveDaysInWindow(completions, 8, 7, profile.timezone, nowMs);
+  if (recent < prior + 2 || recent < 4) return null;
+
+  const anchor = findDatedAnchor(
+    profile.beliefPatternHistory ?? [],
+    profile.goals ?? [],
+    nowMs,
+  );
+  if (!anchor) return null;
+
+  const history = profile.alignmentSnapshotHistory ?? [];
+  const deltaLine = history.length >= 2
+    ? `Alignment overall moved from ${history[1].overall} to ${history[0].overall}.`
+    : `Active days rose from ${prior}/7 to ${recent}/7.`;
+
+  return {
+    valence: 'positive',
+    triggerType: 'consistency_breakthrough',
+    summary:
+      `Positive signal: consistency jumped (${prior}/7 → ${recent}/7 active days). `
+      + `Possible anchor: ${anchor.label} on ${anchor.date}. ${deltaLine}`,
+  };
+}
+
+function detectFearOutwittedCandidate(
+  fearsDrift: string[],
+  journalSummaries: JournalSummaryDoc[],
+): CallbackCandidate | null {
+  if (fearsDrift.length === 0) return null;
+  for (const j of journalSummaries.slice(0, 7)) {
+    const outwitted = j.fearsOutwitted ?? [];
+    if (outwitted.length === 0) continue;
+    const matched = outwitted.find((f) => fearsDrift.includes(f)) ?? outwitted[0];
+    return {
+      valence: 'positive',
+      triggerType: 'fear_outwitted',
+      summary:
+        `Positive signal: journal on ${j.date ?? 'recently'} tagged fear outwitted: `
+        + `"${matched}". User previously logged fears: ${fearsDrift.join(', ')}.`,
+    };
+  }
+  return null;
+}
+
+function detectMoodUptrendCandidate(
+  journalSummaries: JournalSummaryDoc[],
+  completions: CompletionDoc[],
+): CallbackCandidate | null {
+  const recent = journalSummaries.slice(0, 5);
+  if (recent.length < 3) return null;
+  const scores = recent.map((j) => moodScore(j.mood)).reverse();
+  const firstHalf = scores.slice(0, Math.floor(scores.length / 2));
+  const secondHalf = scores.slice(Math.floor(scores.length / 2));
+  const avg = (arr: number[]) =>
+    arr.reduce((a, b) => a + b, 0) / Math.max(arr.length, 1);
+  const uplift = avg(secondHalf) - avg(firstHalf);
+  if (uplift < 2) return null;
+
+  const affirmDays = completions.filter(
+    (c) => c.affirmationsMorning && c.affirmationsEvening,
+  ).length;
+  const fsDays = completions.filter((c) => c.futureSelfCompleted).length;
+  if (affirmDays < 3 && fsDays < 2) return null;
+
+  return {
+    valence: 'positive',
+    triggerType: 'mood_uptrend',
+    summary:
+      `Positive signal: journal mood trend improving (avg +${uplift.toFixed(1)}). `
+      + `Affirmation days: ${affirmDays}, Future Self days: ${fsDays}.`,
+  };
+}
+
+function detectCallbackCandidates(profile: {
+  limitingBeliefs?: string[];
+  fearsDrift?: string[];
+  dailyCompletions?: CompletionDoc[];
+  beliefPatternHistory?: BeliefPatternDoc[];
+  goals?: GoalDoc[];
+  recentJournalSummaries?: JournalSummaryDoc[];
+  timezone?: string;
+  alignmentSnapshotHistory?: AlignmentSnapshotDoc[];
+}, nowMs = Date.now()): CallbackCandidate[] {
+  const candidates: CallbackCandidate[] = [];
+  const completions = profile.dailyCompletions ?? [];
+  const journals = profile.recentJournalSummaries ?? [];
+
+  const regression = detectStreakBreakCandidate(
+    completions,
+    profile.timezone,
+    nowMs,
+  );
+  if (
+    regression &&
+    ((profile.limitingBeliefs?.length ?? 0) > 0 ||
+      (profile.fearsDrift?.length ?? 0) > 0)
+  ) {
+    candidates.push(regression);
+  }
+
+  const breakthrough = detectConsistencyBreakthroughCandidate(profile, nowMs);
+  if (breakthrough) candidates.push(breakthrough);
+
+  const fearOutwitted = detectFearOutwittedCandidate(
+    profile.fearsDrift ?? [],
+    journals,
+  );
+  if (fearOutwitted) candidates.push(fearOutwitted);
+
+  const mood = detectMoodUptrendCandidate(journals, completions);
+  if (mood) candidates.push(mood);
+
+  return candidates;
+}
+
+function buildCallbackUserPrompt(
+  profile: {
+    displayName?: string;
+    identityStatement?: string;
+    limitingBeliefs?: string[];
+    fearsDrift?: string[];
+    beliefPatternHistory?: BeliefPatternDoc[];
+    goals?: GoalDoc[];
+    habits?: HabitDoc[];
+    dailyCompletions?: CompletionDoc[];
+    recentJournalSummaries?: JournalSummaryDoc[];
+    alignmentSnapshotHistory?: AlignmentSnapshotDoc[];
+    coachMemory?: { longTermSummary?: string; recurringPatterns?: string[] };
+  },
+  candidates: CallbackCandidate[],
+): string {
+  const beliefLines = (profile.beliefPatternHistory ?? [])
+    .slice(-5)
+    .map((b) =>
+      `  • ${b.identifiedAt?.slice(0, 10) ?? ''}: "${b.belief ?? ''}" → "${b.reframe ?? ''}"`,
+    )
+    .join('\n');
+
+  const journalLines = (profile.recentJournalSummaries ?? [])
+    .slice(0, 7)
+    .map((j) => {
+      const tags = [
+        ...(j.limitingBeliefsShifted ?? []).map((t) => `belief shifted: ${t}`),
+        ...(j.fearsOutwitted ?? []).map((t) => `fear outwitted: ${t}`),
+      ];
+      const tagStr = tags.length > 0 ? ` [${tags.join('; ')}]` : '';
+      return `  • ${j.date ?? ''}: mood=${j.mood ?? 'okay'} — ${(j.snippet ?? '').slice(0, 80)}${tagStr}`;
+    })
+    .join('\n');
+
+  const alignmentLines = (profile.alignmentSnapshotHistory ?? [])
+    .slice(0, 3)
+    .map((s) =>
+      `  • ${s.date}: overall=${s.overall}, subconscious=${s.subconscious}, `
+      + `thought=${s.thought}, action=${s.action}, results=${s.results}`,
+    )
+    .join('\n');
+
+  const candidateBlock = candidates
+    .map((c, i) => `  ${i + 1}. [${c.valence}] ${c.triggerType}: ${c.summary}`)
+    .join('\n');
+
+  const streak = computeStreak(profile.dailyCompletions ?? []);
+
+  return `USER CONTEXT:
+Name: ${profile.displayName ?? 'User'}
+Identity: "${profile.identityStatement ?? ''}"
+Limiting Beliefs: ${(profile.limitingBeliefs ?? []).join('; ') || 'None'}
+Fears to outwit: ${(profile.fearsDrift ?? []).join('; ') || 'None'}
+Current streak: ${streak} days
+
+Belief reframes (dated):
+${beliefLines || '  • None'}
+
+Recent journal:
+${journalLines || '  • None'}
+
+Alignment snapshots:
+${alignmentLines || '  • None'}
+
+Coach memory summary: ${profile.coachMemory?.longTermSummary ?? 'None'}
+Recurring patterns: ${(profile.coachMemory?.recurringPatterns ?? []).join('; ') || 'None'}
+
+DETECTED CANDIDATES (evaluate these only):
+${candidateBlock}
+
+Pick at most ONE callback. Prefer positive when confidence is close.
+
+Write the message in plain coach language. The data above is for your reasoning only. Do not quote scores, dates, percentages, or app terminology in the message.`;
+}
+
+interface ParsedCallbackResponse {
+  should_fire: boolean;
+  confidence: number;
+  valence: 'positive' | 'regression';
+  trigger_type: string;
+  reference_label: string;
+  reference_date: string;
+  measurable_change: string;
+  message: string;
+}
+
+function parseCallbackResponse(text: string): ParsedCallbackResponse | null {
+  try {
+    const jsonStr = text.includes('{')
+      ? text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1)
+      : text;
+    const data = JSON.parse(jsonStr) as Record<string, unknown>;
+    const message = String(data.message ?? '').trim();
+    if (!message) return null;
+    const valence = data.valence === 'positive' ? 'positive' : 'regression';
+    return {
+      should_fire: data.should_fire === true,
+      confidence: typeof data.confidence === 'number' ? data.confidence : 0,
+      valence,
+      trigger_type: String(data.trigger_type ?? ''),
+      reference_label: String(data.reference_label ?? ''),
+      reference_date: String(data.reference_date ?? ''),
+      measurable_change: String(data.measurable_change ?? ''),
+      message,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function selectCallbackResponse(
+  parsed: ParsedCallbackResponse,
+  candidates: CallbackCandidate[],
+  config: CallbackConfig,
+): ParsedCallbackResponse | null {
+  if (!parsed.should_fire || parsed.confidence < config.confidenceThreshold) {
+    return null;
+  }
+  if (!parsed.reference_label || !parsed.measurable_change) return null;
+
+  const positiveCandidates = candidates.filter((c) => c.valence === 'positive');
+  const regressionCandidates = candidates.filter((c) => c.valence === 'regression');
+
+  if (
+    parsed.valence === 'regression' &&
+    positiveCandidates.length > 0 &&
+    regressionCandidates.length > 0
+  ) {
+    const margin = config.positiveBiasMargin;
+    if (parsed.confidence < config.confidenceThreshold + margin) {
+      return {
+        ...parsed,
+        valence: 'positive',
+        trigger_type: positiveCandidates[0].triggerType,
+      };
+    }
+  }
+  return parsed;
+}
+
+function passesCallbackWarmup(
+  profile: { createdAt?: string; dailyCompletions?: CompletionDoc[] },
+  config: CallbackConfig,
+  nowMs = Date.now(),
+): boolean {
+  if (daysSinceIso(profile.createdAt, nowMs) < config.warmupMinAccountAgeDays) {
+    return false;
+  }
+  return countLifetimeActiveDays(profile.dailyCompletions ?? [])
+    >= config.warmupMinActiveDays;
+}
+
+function callbackCooldownElapsed(
+  lastCallbackAt?: string,
+  cooldownDays = 5,
+  nowMs = Date.now(),
+): boolean {
+  if (!lastCallbackAt) return true;
+  return daysSinceIso(lastCallbackAt, nowMs) >= cooldownDays;
+}
+
+/**
+ * callbackDelivery — runs every hour. For each user whose local time is the
+ * configured target hour (~11am), deterministically detects callback candidates,
+ * calls Claude only when a real signal exists, and writes a pending coach
+ * callback for in-app delivery. Server-initiated: does not count against the
+ * user's daily AI limit.
+ */
+export const callbackDelivery = onSchedule(
+  { schedule: '0 * * * *', secrets: [anthropicKey], timeoutSeconds: 540 },
+  async () => {
+    const now = new Date();
+    const nowMs = now.getTime();
+    const apiKey = anthropicKey.value().trim();
+    const config = await getCallbackConfig();
+    const mindsetConfig = await getMindsetProgressConfig();
+
+    const usersQuery = db
+      .collection('users')
+      .where('onboardingStep', '>=', 5)
+      .orderBy('onboardingStep');
+
+    await forEachDocPaged(usersQuery, 200, async (userDoc) => {
+      const profile = userDoc.data() as {
+        displayName?: string;
+        identityStatement?: string;
+        limitingBeliefs?: string[];
+        fearsDrift?: string[];
+        goals?: GoalDoc[];
+        habits?: HabitDoc[];
+        dailyCompletions?: CompletionDoc[];
+        beliefPatternHistory?: BeliefPatternDoc[];
+        recentJournalSummaries?: JournalSummaryDoc[];
+        alignmentSnapshotHistory?: AlignmentSnapshotDoc[];
+        coachMemory?: { longTermSummary?: string; recurringPatterns?: string[] };
+        timezone?: string;
+        fcmToken?: string;
+        createdAt?: string;
+        pendingCallback?: CoachCallbackDoc;
+        lastCallbackAt?: string;
+        beliefProgress?: Array<Record<string, unknown>>;
+        fearProgress?: Array<Record<string, unknown>>;
+        lastExcavationAt?: string;
+        blueprintEvolutionReady?: boolean;
+        blueprintCompleted?: boolean;
+        blueprintCalibrationStartedAt?: string;
+        notificationPrefs?: {
+          masterEnabled?: boolean;
+          lifecycleEnabled?: boolean;
+          coachCallbackEnabled?: boolean;
+        };
+      };
+
+      if (!isCallbackDeliveryWindow(now, profile.timezone, config.targetLocalHour)) {
+        return;
+      }
+
+      const { dateKey } = getLocalTimeInfo(now, profile.timezone);
+
+      const updatedHistory = maybeWriteAlignmentSnapshot(profile, dateKey);
+      if (updatedHistory !== (profile.alignmentSnapshotHistory ?? [])) {
+        try {
+          await userDoc.ref.update({ alignmentSnapshotHistory: updatedHistory });
+          profile.alignmentSnapshotHistory = updatedHistory;
+        } catch (err) {
+          console.error(`Failed alignment snapshot for user ${userDoc.id}:`, err);
+        }
+      }
+
+      const progressResult = evaluateMindsetProgress(
+        {
+          limitingBeliefs: profile.limitingBeliefs,
+          fearsDrift: profile.fearsDrift,
+          beliefProgress: profile.beliefProgress as never,
+          fearProgress: profile.fearProgress as never,
+          beliefPatternHistory: profile.beliefPatternHistory,
+          recentJournalSummaries: profile.recentJournalSummaries,
+          dailyCompletions: profile.dailyCompletions,
+          blueprintCompleted: profile.blueprintCompleted,
+          blueprintCalibrationStartedAt: profile.blueprintCalibrationStartedAt,
+          createdAt: profile.createdAt,
+          lastExcavationAt: profile.lastExcavationAt,
+          blueprintEvolutionReady: profile.blueprintEvolutionReady,
+          timezone: profile.timezone,
+        },
+        mindsetConfig,
+        nowMs,
+      );
+
+      const progressChanged =
+        progressResult.graduatedItems.length > 0 ||
+        progressResult.blueprintEvolutionReady !==
+          (profile.blueprintEvolutionReady ?? false) ||
+        progressResult.beliefProgress.length !==
+          (profile.beliefProgress?.length ?? 0) ||
+        progressResult.fearProgress.length !==
+          (profile.fearProgress?.length ?? 0);
+
+      if (progressChanged) {
+        try {
+          await userDoc.ref.update({
+            beliefProgress: progressResult.beliefProgress,
+            fearProgress: progressResult.fearProgress,
+            limitingBeliefs: progressResult.limitingBeliefs,
+            fearsDrift: progressResult.fearsDrift,
+            blueprintEvolutionReady: progressResult.blueprintEvolutionReady,
+          });
+          profile.limitingBeliefs = progressResult.limitingBeliefs;
+          profile.fearsDrift = progressResult.fearsDrift;
+          profile.blueprintEvolutionReady = progressResult.blueprintEvolutionReady;
+        } catch (err) {
+          console.error(`Failed mindset progress for user ${userDoc.id}:`, err);
+        }
+      }
+
+      if (progressResult.newlyReady) {
+        const prefs = profile.notificationPrefs;
+        const pushAllowed =
+          prefs?.masterEnabled !== false &&
+          prefs?.lifecycleEnabled !== false;
+        if (profile.fcmToken && pushAllowed) {
+          const firstName = (profile.displayName ?? 'there').split(' ')[0];
+          await sendPush({
+            token: profile.fcmToken,
+            title: 'You have outgrown your old blueprint',
+            body: `${firstName}, you are ready to dig deeper. See what you have overcome.`,
+            type: 'blueprint_evolution',
+            category: 'lifecycle',
+            route: '/blueprint-evolution',
+            recipientUid: userDoc.id,
+          });
+        }
+        console.log(`Blueprint evolution ready for user: ${userDoc.id}`);
+        return;
+      }
+
+      if (profile.pendingCallback && !profile.pendingCallback.seenAt) return;
+      if (!passesCallbackWarmup(profile, config, nowMs)) return;
+      if (!callbackCooldownElapsed(profile.lastCallbackAt, config.cooldownDays, nowMs)) {
+        return;
+      }
+
+      const candidates = detectCallbackCandidates(profile, nowMs);
+      if (candidates.length === 0) return;
+
+      try {
+        const userPrompt = buildCallbackUserPrompt(profile, candidates);
+        const response = await callAnthropicInternal(
+          'You are a mindset coach writing a proactive callback message. '
+            + 'The user did NOT ask for this message. Sound like a real human coach who already knows them, '
+            + 'never like an AI or a data analyst. '
+            + 'Base the callback on REAL logged data only. Never invent details. '
+            + 'Translate data into plain language: reference the moment (a journal feeling, belief shift, '
+            + 'fear they named, showing up consistently), not the metric. '
+            + 'Frame correlations honestly ("I noticed X, and around the same time Y"). '
+            + 'For regression: name the slip without shaming. For positive: celebrate a specific, traceable win. '
+            + 'The message must be 2-3 short sentences, first-person coach voice, under 70 words, '
+            + 'starting with the user\'s first name. '
+            + 'NEVER in the message field: alignment score, action layer, subconscious, measurable, '
+            + 'in your data, random noise, baseline, compounding, raw numbers, percentages, '
+            + 'specific calendar dates, or quoting mood labels verbatim. '
+            + 'Use relative time instead (this week, a few days ago, last week). '
+            + 'BAD: "Jonathan, I\'m noticing something real in your data. You logged three straight days '
+            + 'as \'amazing\' (July 8-10), and your alignment score hit 77% with action at 100%." '
+            + 'GOOD: "Jonathan, something real shifted this week. You\'ve been showing up consistently '
+            + 'and your journal has had a lighter tone. That lines up with what you wrote about your '
+            + 'identity a few days back. Keep riding it." '
+            + 'Return ONLY valid JSON with keys: '
+            + 'should_fire (boolean), confidence (0.0-1.0), valence ("positive" or "regression"), '
+            + 'trigger_type (string), reference_label (string), reference_date (yyyy-MM-dd), '
+            + 'measurable_change (string, internal audit only, may cite metrics), '
+            + 'message (string, user-facing plain coach language). '
+            + 'If nothing is genuinely traceable, return should_fire=false and confidence=0.',
+          userPrompt,
+          400,
+          apiKey,
+        );
+
+        const parsed = parseCallbackResponse(response);
+        if (!parsed) {
+          console.error(`Failed to parse callback for user ${userDoc.id}`);
+          return;
+        }
+
+        const selected = selectCallbackResponse(parsed, candidates, config);
+        if (!selected) return;
+
+        const callbackDoc: CoachCallbackDoc = {
+          id: `cb_${Date.now()}`,
+          message: selected.message,
+          valence: selected.valence,
+          triggerType: selected.trigger_type || candidates[0].triggerType,
+          referenceLabel: selected.reference_label,
+          referenceDate: selected.reference_date,
+          measurableChange: selected.measurable_change,
+          confidence: selected.confidence,
+          generatedAt: new Date().toISOString(),
+          deliveredAt: new Date().toISOString(),
+        };
+
+        await userDoc.ref.update({
+          pendingCallback: callbackDoc,
+          lastCallbackAt: callbackDoc.generatedAt,
+          lastCallbackValence: callbackDoc.valence,
+        });
+
+        const prefs = profile.notificationPrefs;
+        const pushAllowed =
+          prefs?.masterEnabled !== false &&
+          prefs?.lifecycleEnabled !== false &&
+          prefs?.coachCallbackEnabled !== false;
+        if (profile.fcmToken && pushAllowed) {
+          const firstName = (profile.displayName ?? 'there').split(' ')[0];
+          const title = selected.valence === 'positive'
+            ? 'Your coach noticed something you did'
+            : 'Your coach wants to check in';
+          const body = selected.valence === 'positive'
+            ? `${firstName}, your coach connected the dots on something you did.`
+            : `${firstName}, your coach connected the dots on something you logged.`;
+          await sendPush({
+            token: profile.fcmToken,
+            title,
+            body,
+            type: 'coach_callback',
+            category: 'lifecycle',
+            route: '/chat',
+            recipientUid: userDoc.id,
+          });
+        }
+
+        console.log(
+          `Coach callback delivered for user ${userDoc.id} (${selected.valence})`,
+        );
+      } catch (err) {
+        console.error(`Failed callback for user ${userDoc.id}:`, err);
+      }
     });
   },
 );

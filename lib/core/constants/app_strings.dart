@@ -988,6 +988,51 @@ abstract final class AppStrings {
   static const String weeklyInsightNotificationTitle = 'Weekly review';
   static const String weeklyInsightNotificationSubtitle =
       'Get a push when your Sunday review is ready';
+  static const String coachCallbackPositiveTitle =
+      'Your coach noticed something you did';
+  static const String coachCallbackPositiveSubtitle =
+      'Tap to see what your coach connected across your journey.';
+  static const String coachCallbackRegressionTitle =
+      'Your coach wants to check in';
+  static const String coachCallbackRegressionSubtitle =
+      'Tap to see what your coach connected to something you logged.';
+  static const String coachCallbackNotificationTitle = 'Coach callbacks';
+  static const String coachCallbackNotificationSubtitle =
+      'Get a push when your coach surfaces a cross-feature insight';
+
+  // Blueprint evolution
+  static const String blueprintEvolutionTitle = 'Dig deeper';
+  static const String blueprintEvolutionBannerTitle =
+      'You are ready to dig deeper';
+  static const String blueprintEvolutionBannerSubtitle =
+      'See what you have overcome and uncover your next layer.';
+  static const String blueprintEvolutionCelebrateHeadline =
+      'Look how far you have come';
+  static const String blueprintEvolutionCelebrateBody =
+      'You have genuinely shifted beliefs and fears from your first blueprint. '
+      'That is real progress. Now we can look at what is underneath.';
+  static const String blueprintEvolutionArchiveTitle = 'What you have overcome';
+  static const String blueprintEvolutionArchiveEmpty =
+      'Your overcome archive will appear here as you progress.';
+  static const String blueprintEvolutionContinue = 'Uncover my next layer';
+  static const String blueprintEvolutionExcavateHeadline =
+      'Your next layer';
+  static const String blueprintEvolutionExcavateBody =
+      'Tap the beliefs and fears that resonate. These are subtler patterns '
+      'surfaced from your journal, coaching, and progress so far.';
+  static const String blueprintEvolutionFearsTitle = 'Next fears to outwit';
+  static const String blueprintEvolutionAddBeliefHint = 'Add your own belief';
+  static const String blueprintEvolutionAddFearHint = 'Add your own fear';
+  static const String blueprintEvolutionSave = 'Save my next layer';
+  static const String blueprintEvolutionCtaTitle = 'Dig deeper';
+  static const String blueprintEvolutionCtaReady =
+      'You have outgrown enough of your first blueprint to go deeper.';
+  static const String blueprintEvolutionCtaNotReady =
+      'Keep showing up. When you genuinely overcome enough of your first '
+      'blueprint, we will invite you to dig deeper.';
+  static const String blueprintEvolutionOvercomeTitle = 'Overcome archive';
+  static const String blueprintEvolutionOvercomeEmpty =
+      'Beliefs and fears you overcome will appear here.';
   static const String milestones = 'Milestones';
 
   // Alignment dimensions

@@ -108,6 +108,8 @@ class BlueprintTab extends ConsumerWidget {
           }),
         ],
         const SizedBox(height: AppSpacing.xl),
+        _BlueprintEvolutionSection(profile: profile),
+        const SizedBox(height: AppSpacing.xl),
         Row(
           children: [
             Text(AppStrings.limitingBeliefs, style: AppTextStyles.headlineSmall),
@@ -841,6 +843,94 @@ class _BeliefChip extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _BlueprintEvolutionSection extends StatelessWidget {
+  final UserProfile profile;
+
+  const _BlueprintEvolutionSection({required this.profile});
+
+  @override
+  Widget build(BuildContext context) {
+    final overcome = [
+      ...profile.overcomeBeliefs.map((e) => e.text),
+      ...profile.overcomeFears.map((e) => e.text),
+    ];
+    final ready = profile.hasBlueprintEvolutionReady;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(AppStrings.blueprintEvolutionOvercomeTitle,
+            style: AppTextStyles.headlineSmall),
+        const SizedBox(height: AppSpacing.md),
+        if (overcome.isEmpty)
+          AppCard(
+            child: Text(
+              AppStrings.blueprintEvolutionOvercomeEmpty,
+              style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted),
+            ),
+          )
+        else
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: overcome
+                .map(
+                  (item) => Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.sm,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: 0.12),
+                      borderRadius:
+                          BorderRadius.circular(AppSpacing.radiusFull),
+                      border: Border.all(
+                        color: AppColors.success.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Text(
+                      item,
+                      style: AppTextStyles.labelLarge.copyWith(
+                        color: AppColors.success,
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        const SizedBox(height: AppSpacing.lg),
+        AppGlowCard(
+          glowColor: ready
+              ? AppColors.secondary.withValues(alpha: 0.2)
+              : AppColors.primaryGlow,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(AppStrings.blueprintEvolutionCtaTitle,
+                  style: AppTextStyles.headlineSmall),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                ready
+                    ? AppStrings.blueprintEvolutionCtaReady
+                    : AppStrings.blueprintEvolutionCtaNotReady,
+                style: AppTextStyles.bodySmall
+                    .copyWith(color: AppColors.textSecondary),
+              ),
+              if (ready) ...[
+                const SizedBox(height: AppSpacing.md),
+                AppPrimaryButton(
+                  label: AppStrings.blueprintEvolutionContinue,
+                  onPressed: () => context.push('/blueprint-evolution'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

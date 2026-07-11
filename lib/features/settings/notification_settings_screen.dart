@@ -235,6 +235,15 @@ class _NotificationSettingsScreenState
                 onChanged: (v) =>
                     _save(prefs.copyWith(weeklyInsightEnabled: v)),
               ),
+              const _CardDivider(),
+              _SwitchRow(
+                label: AppStrings.coachCallbackNotificationTitle,
+                subtitle: AppStrings.coachCallbackNotificationSubtitle,
+                value: prefs.coachCallbackEnabled,
+                enabled: on,
+                onChanged: (v) =>
+                    _save(prefs.copyWith(coachCallbackEnabled: v)),
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
