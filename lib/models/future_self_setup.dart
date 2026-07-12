@@ -271,6 +271,9 @@ class FutureSelfSetup {
   /// Whether binaural beats are enabled by default in the player.
   final bool beatsEnabled;
 
+  /// Whether guided narration plays during practice (default on).
+  final bool narrationEnabled;
+
   /// Preferred binaural frequency in Hz (4 / 7 / 10 / 15 / 40).
   final int binauralHz;
 
@@ -301,6 +304,7 @@ class FutureSelfSetup {
     this.preferredNarrationVoice = '',
     this.scenes = const [],
     this.beatsEnabled = true,
+    this.narrationEnabled = true,
     this.binauralHz = 7,
     this.beatsVolume = 0.3,
     this.narrationVolume = 1.0,
@@ -337,6 +341,7 @@ class FutureSelfSetup {
     String? preferredNarrationVoice,
     List<FutureSelfScene>? scenes,
     bool? beatsEnabled,
+    bool? narrationEnabled,
     int? binauralHz,
     double? beatsVolume,
     double? narrationVolume,
@@ -360,6 +365,7 @@ class FutureSelfSetup {
           preferredNarrationVoice ?? this.preferredNarrationVoice,
       scenes: scenes ?? this.scenes,
       beatsEnabled: beatsEnabled ?? this.beatsEnabled,
+      narrationEnabled: narrationEnabled ?? this.narrationEnabled,
       binauralHz: binauralHz ?? this.binauralHz,
       beatsVolume: beatsVolume ?? this.beatsVolume,
       narrationVolume: narrationVolume ?? this.narrationVolume,
@@ -415,6 +421,7 @@ class FutureSelfSetup {
       preferredNarrationVoice: json['preferredNarrationVoice'] as String? ?? '',
       scenes: scenes,
       beatsEnabled: json['beatsEnabled'] as bool? ?? true,
+      narrationEnabled: json['narrationEnabled'] as bool? ?? true,
       binauralHz: (json['binauralHz'] as num?)?.toInt() ?? 7,
       beatsVolume: _clampVolume((json['beatsVolume'] as num?)?.toDouble() ?? 0.3),
       narrationVolume:
@@ -441,6 +448,7 @@ class FutureSelfSetup {
         'preferredNarrationVoice': preferredNarrationVoice,
         'scenes': scenes.map((s) => s.toJson()).toList(),
         'beatsEnabled': beatsEnabled,
+        'narrationEnabled': narrationEnabled,
         'binauralHz': binauralHz,
         'beatsVolume': beatsVolume,
         'narrationVolume': narrationVolume,

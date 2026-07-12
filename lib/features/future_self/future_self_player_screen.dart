@@ -48,6 +48,7 @@ class _FutureSelfPlayerScreenState
   FutureSelfScene? _scene;
   bool _preparing = true;
   bool _beatsEnabled = true;
+  bool _narrationEnabled = true;
   int _binauralHz = 7;
   double _beatsVolume = 0.3;
   double _narrationVolume = 1.0;
@@ -74,6 +75,7 @@ class _FutureSelfPlayerScreenState
     _handler = ref.read(futureSelfAudioHandlerProvider);
     final setup = ref.read(futureSelfProvider);
     _beatsEnabled = setup?.beatsEnabled ?? true;
+    _narrationEnabled = setup?.narrationEnabled ?? true;
     _binauralHz = setup?.binauralHz ?? 7;
     _beatsVolume = setup?.beatsVolume ?? 0.3;
     _narrationVolume = setup?.narrationVolume ?? 1.0;
@@ -137,6 +139,7 @@ class _FutureSelfPlayerScreenState
     await ref.read(futureSelfProvider.notifier).saveSetup(
           setup.copyWith(
             beatsEnabled: _beatsEnabled,
+            narrationEnabled: _narrationEnabled,
             binauralHz: _binauralHz,
             beatsVolume: _beatsVolume,
             narrationVolume: _narrationVolume,
@@ -205,26 +208,31 @@ class _FutureSelfPlayerScreenState
             orElse: () => throw StateError('scene not found'),
           );
 
-      final notifier = ref.read(futureSelfProvider.notifier);
-      final needsSynthesis =
-          scene != null && notifier.sceneNeedsNarrationRefresh(scene);
-      // Only surface the slower "generating narration" copy when we actually
-      // have to call TTS. A cache hit loads instantly and shouldn't imply a
-      // wait, so it keeps the lighter "getting ready" state.
-      if (needsSynthesis && mounted) {
-        setState(() => _synthesizing = true);
-      }
-      if (needsSynthesis) {
-        scene = await notifier
-            .ensureSceneReady(widget.sceneId)
-            .timeout(const Duration(seconds: 90));
-      }
+      if (_narrationEnabled) {
+        final notifier = ref.read(futureSelfProvider.notifier);
+        final needsSynthesis =
+            scene != null && notifier.sceneNeedsNarrationRefresh(scene);
+        // Only surface the slower "generating narration" copy when we actually
+        // have to call TTS. A cache hit loads instantly and shouldn't imply a
+        // wait, so it keeps the lighter "getting ready" state.
+        if (needsSynthesis && mounted) {
+          setState(() => _synthesizing = true);
+        }
+        if (needsSynthesis) {
+          scene = await notifier
+              .ensureSceneReady(widget.sceneId)
+              .timeout(const Duration(seconds: 90));
+        }
 
-      _scene = scene;
-      _hasAudio = scene?.hasNarration ?? false;
+        _scene = scene;
+        _hasAudio = scene?.hasNarration ?? false;
 
-      if (_hasAudio && scene != null) {
-        await _loadNarrationFromScene(scene);
+        if (_hasAudio && scene != null) {
+          await _loadNarrationFromScene(scene);
+        }
+      } else {
+        _scene = scene;
+        _hasAudio = false;
       }
     } catch (e) {
       // Fall through — text-only practice is still usable.
@@ -257,15 +265,27 @@ class _FutureSelfPlayerScreenState
     _arriveTimer?.cancel();
     if (!mounted) return;
 
-    while (_regeneratingVoice) {
+    while (_regeneratingVoice && _narrationEnabled) {
       await Future.delayed(const Duration(milliseconds: 100));
       if (!mounted) return;
     }
 
-    await _refreshSceneAudioIfNeeded();
+    if (_narrationEnabled) {
+      await _refreshSceneAudioIfNeeded();
+    }
     if (!mounted) return;
 
-    setState(() => _phase = _FsPhase.embody);
+    setState(() {
+      _phase = _FsPhase.embody;
+      if (!_narrationEnabled) _showText = true;
+    });
+
+    if (!_narrationEnabled) {
+      if (_beatsEnabled) {
+        unawaited(_handler.playBeatsIfEnabled());
+      }
+      return;
+    }
 
     if (_hasAudio) {
       _narrationSub = _handler.narration.processingStateStream.listen((state) {
@@ -312,6 +332,22 @@ class _FutureSelfPlayerScreenState
       _daysEmbodied = dates.length;
       _phase = _FsPhase.seal;
     });
+  }
+
+  Future<void> _toggleNarration(bool value) async {
+    setState(() {
+      _narrationEnabled = value;
+      if (!value) {
+        _beatsEnabled = true;
+        _showText = true;
+      } else {
+        _showText = false;
+      }
+    });
+    if (!value) {
+      await _handler.setBeatsEnabled(true);
+    }
+    _schedulePersistAudioPrefs();
   }
 
   Future<void> _toggleBeats(bool value) async {
@@ -415,7 +451,11 @@ class _FutureSelfPlayerScreenState
             : Column(
                 children: [
                   const SizedBox(height: AppSpacing.sm),
-                  if (_phase != _FsPhase.seal) _PhaseProgress(phase: _phase),
+                  if (_phase != _FsPhase.seal)
+                    _PhaseProgress(
+                      phase: _phase,
+                      narrationEnabled: _narrationEnabled,
+                    ),
                   Expanded(
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 350),
@@ -435,11 +475,13 @@ class _FutureSelfPlayerScreenState
           key: const ValueKey('arrive'),
           remaining: _arriveRemaining,
           beatsEnabled: _beatsEnabled,
+          narrationEnabled: _narrationEnabled,
           binauralHz: _binauralHz,
           beatsVolume: _beatsVolume,
           preferredNarrationVoice: _preferredNarrationVoice,
           regeneratingVoice: _regeneratingVoice,
           onToggleBeats: _toggleBeats,
+          onToggleNarration: _toggleNarration,
           onFrequency: _setBinauralHz,
           onBeatsVolume: _setBeatsVolume,
           onBeatsVolumeEnd: _onBeatsVolumeEnd,
@@ -451,8 +493,10 @@ class _FutureSelfPlayerScreenState
           key: const ValueKey('embody'),
           player: _handler.narration,
           hasAudio: _hasAudio,
+          narrationEnabled: _narrationEnabled,
           showText: _showText,
           script: _scene?.script ?? '',
+          sessionStartedAt: _start,
           narrationVolume: _narrationVolume,
           onNarrationVolume: _setNarrationVolume,
           onNarrationVolumeEnd: _onNarrationVolumeEnd,
@@ -463,6 +507,7 @@ class _FutureSelfPlayerScreenState
               await _handler.play();
             }
           },
+          onFinish: _complete,
         );
       case _FsPhase.carry:
         return _CarryPhase(
@@ -525,13 +570,18 @@ class _PreparingView extends StatelessWidget {
 
 class _PhaseProgress extends StatelessWidget {
   final _FsPhase phase;
+  final bool narrationEnabled;
 
-  const _PhaseProgress({required this.phase});
+  const _PhaseProgress({
+    required this.phase,
+    required this.narrationEnabled,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // Three user-facing steps; seal isn't shown.
-    const steps = [_FsPhase.arrive, _FsPhase.embody, _FsPhase.carry];
+    final steps = narrationEnabled
+        ? const [_FsPhase.arrive, _FsPhase.embody, _FsPhase.carry]
+        : const [_FsPhase.arrive, _FsPhase.embody];
     final index = steps.indexOf(phase);
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -559,11 +609,13 @@ class _PhaseProgress extends StatelessWidget {
 class _ArrivePhase extends StatelessWidget {
   final int remaining;
   final bool beatsEnabled;
+  final bool narrationEnabled;
   final int binauralHz;
   final double beatsVolume;
   final String preferredNarrationVoice;
   final bool regeneratingVoice;
   final ValueChanged<bool> onToggleBeats;
+  final ValueChanged<bool> onToggleNarration;
   final ValueChanged<int> onFrequency;
   final ValueChanged<double> onBeatsVolume;
   final ValueChanged<double> onBeatsVolumeEnd;
@@ -574,11 +626,13 @@ class _ArrivePhase extends StatelessWidget {
     super.key,
     required this.remaining,
     required this.beatsEnabled,
+    required this.narrationEnabled,
     required this.binauralHz,
     required this.beatsVolume,
     required this.preferredNarrationVoice,
     required this.regeneratingVoice,
     required this.onToggleBeats,
+    required this.onToggleNarration,
     required this.onFrequency,
     required this.onBeatsVolume,
     required this.onBeatsVolumeEnd,
@@ -622,19 +676,36 @@ class _ArrivePhase extends StatelessWidget {
             onBeatsVolumeEnd: onBeatsVolumeEnd,
           ),
           const SizedBox(height: AppSpacing.lg),
-          NarrationVoicePicker(
-            selectedVoiceId: preferredNarrationVoice,
-            onSelected: onNarrationVoice,
+          _NarrationTogglePanel(
+            enabled: narrationEnabled,
+            onToggle: onToggleNarration,
           ),
-          if (regeneratingVoice) ...[
+          if (!narrationEnabled) ...[
             const SizedBox(height: AppSpacing.sm),
             Text(
-              AppStrings.futureSelfPreparingNote,
+              AppStrings.futureSelfBeatsOnlyNote,
               style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.futureSelfAccent,
+                color: AppColors.textMuted,
               ),
               textAlign: TextAlign.center,
             ),
+          ],
+          if (narrationEnabled) ...[
+            const SizedBox(height: AppSpacing.lg),
+            NarrationVoicePicker(
+              selectedVoiceId: preferredNarrationVoice,
+              onSelected: onNarrationVoice,
+            ),
+            if (regeneratingVoice) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                AppStrings.futureSelfPreparingNote,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.futureSelfAccent,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ],
           const SizedBox(height: AppSpacing.xl),
           TextButton(
@@ -659,34 +730,108 @@ class _ArrivePhase extends StatelessWidget {
 class _EmbodyPhase extends StatelessWidget {
   final AudioPlayer player;
   final bool hasAudio;
+  final bool narrationEnabled;
   final bool showText;
   final String script;
+  final DateTime sessionStartedAt;
   final double narrationVolume;
   final ValueChanged<double> onNarrationVolume;
   final ValueChanged<double> onNarrationVolumeEnd;
   final Future<void> Function() onTogglePlayback;
+  final VoidCallback onFinish;
 
   const _EmbodyPhase({
     super.key,
     required this.player,
     required this.hasAudio,
+    required this.narrationEnabled,
     required this.showText,
     required this.script,
+    required this.sessionStartedAt,
     required this.narrationVolume,
     required this.onNarrationVolume,
     required this.onNarrationVolumeEnd,
     required this.onTogglePlayback,
+    required this.onFinish,
   });
 
   @override
   Widget build(BuildContext context) {
+    final beatsOnly = !narrationEnabled;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.screenPaddingH,
           AppSpacing.lg, AppSpacing.screenPaddingH, AppSpacing.lg),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          if (showText)
+          if (beatsOnly && showText) ...[
+            Expanded(
+              child: SingleChildScrollView(
+                child: Text(
+                  script,
+                  style: AppTextStyles.bodyLarge
+                      .copyWith(height: 1.9, color: AppColors.textPrimary),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            SizedBox(
+              width: double.infinity,
+              height: AppSpacing.buttonHeight,
+              child: ElevatedButton(
+                onPressed: onFinish,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.futureSelfAccent,
+                  foregroundColor: Colors.black,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                  ),
+                ),
+                child: Text(
+                  AppStrings.futureSelfFinishSession,
+                  style: AppTextStyles.button.copyWith(color: Colors.black),
+                ),
+              ),
+            ),
+          ] else if (beatsOnly) ...[
+            const Spacer(),
+            const _BreathingOrb(size: 150),
+            const SizedBox(height: AppSpacing.xl),
+            Text(AppStrings.futureSelfPhaseEmbodyTitle,
+                style: AppTextStyles.headlineMedium
+                    .copyWith(color: AppColors.futureSelfAccent),
+                textAlign: TextAlign.center),
+            const SizedBox(height: AppSpacing.sm),
+            Text(AppStrings.futureSelfBeatsOnlyBody,
+                style: AppTextStyles.bodyMedium
+                    .copyWith(color: AppColors.textSecondary, height: 1.6),
+                textAlign: TextAlign.center),
+            const SizedBox(height: AppSpacing.xl),
+            _SessionElapsedTimer(startedAt: sessionStartedAt),
+            const Spacer(),
+            SizedBox(
+              width: double.infinity,
+              height: AppSpacing.buttonHeight,
+              child: ElevatedButton(
+                onPressed: onFinish,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.futureSelfAccent,
+                  foregroundColor: Colors.black,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+                  ),
+                ),
+                child: Text(
+                  AppStrings.futureSelfFinishSession,
+                  style: AppTextStyles.button.copyWith(color: Colors.black),
+                ),
+              ),
+            ),
+          ] else if (showText)
             Expanded(
               child: SingleChildScrollView(
                 child: Text(
@@ -712,7 +857,7 @@ class _EmbodyPhase extends StatelessWidget {
                 textAlign: TextAlign.center),
             const Spacer(),
           ],
-          if (hasAudio)
+          if (!beatsOnly && hasAudio)
             _NarrationControls(
               player: player,
               volume: narrationVolume,
@@ -722,6 +867,60 @@ class _EmbodyPhase extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _SessionElapsedTimer extends StatefulWidget {
+  final DateTime startedAt;
+
+  const _SessionElapsedTimer({required this.startedAt});
+
+  @override
+  State<_SessionElapsedTimer> createState() => _SessionElapsedTimerState();
+}
+
+class _SessionElapsedTimerState extends State<_SessionElapsedTimer> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _format(Duration elapsed) {
+    final minutes = elapsed.inMinutes;
+    final seconds = elapsed.inSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final elapsed = DateTime.now().difference(widget.startedAt);
+    return Column(
+      children: [
+        Text(
+          AppStrings.futureSelfSessionTimerLabel,
+          style: AppTextStyles.labelSmall.copyWith(color: AppColors.textMuted),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          _format(elapsed),
+          style: AppTextStyles.statNumber.copyWith(
+            color: AppColors.futureSelfAccent,
+            fontSize: 32,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1041,6 +1240,58 @@ class _BreathingOrb extends StatelessWidget {
 }
 
 // ─── Audio settings (Arrive) ──────────────────────────────────────────────────
+
+class _NarrationTogglePanel extends StatelessWidget {
+  final bool enabled;
+  final ValueChanged<bool> onToggle;
+
+  const _NarrationTogglePanel({
+    required this.enabled,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.futureSelfSurface,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        border:
+            Border.all(color: AppColors.futureSelfAccent.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            enabled ? Icons.record_voice_over_rounded : Icons.volume_off_rounded,
+            color: AppColors.futureSelfAccent,
+            size: 20,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(AppStrings.futureSelfNarrationToggleTitle,
+                    style: AppTextStyles.labelLarge
+                        .copyWith(color: AppColors.futureSelfAccent)),
+                Text(AppStrings.futureSelfNarrationToggleSubtitle,
+                    style: AppTextStyles.bodySmall
+                        .copyWith(color: AppColors.textMuted)),
+              ],
+            ),
+          ),
+          Switch(
+            value: enabled,
+            activeThumbColor: AppColors.futureSelfAccent,
+            onChanged: onToggle,
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _AudioSettingsPanel extends StatelessWidget {
   final bool enabled;

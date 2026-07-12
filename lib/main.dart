@@ -257,6 +257,9 @@ class _InitAppState extends State<_InitApp> {
     try {
       await Purchases.setLogLevel(LogLevel.error);
       await Purchases.configure(PurchasesConfiguration(apiKey));
+      // Collect Apple Search Ads install attribution token (AdServices API) and
+      // send to RevenueCat. Standard attribution does not require ATT consent.
+      await Purchases.enableAdServicesAttributionTokenCollection();
       _syncRevenueCatIdentity();
       // Reconcile Firestore whenever RevenueCat's view of the customer changes
       // (purchase, restore, renewal, expiration, app foreground). Keeps the

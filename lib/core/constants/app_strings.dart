@@ -653,6 +653,15 @@ abstract final class AppStrings {
       'Headphones recommended for binaural beats';
   static const String futureSelfBeatsVolumeLabel = 'Beat volume';
   static const String futureSelfNarrationVolumeLabel = 'Voice volume';
+  static const String futureSelfNarrationToggleTitle = 'Guided narration';
+  static const String futureSelfNarrationToggleSubtitle =
+      'A voice guides the scene. Turn off for beats only.';
+  static const String futureSelfBeatsOnlyNote =
+      'The beats will play until you finish.';
+  static const String futureSelfBeatsOnlyBody =
+      'Stay with the beats. Finish whenever you feel complete.';
+  static const String futureSelfFinishSession = "I'm finished";
+  static const String futureSelfSessionTimerLabel = 'Session time';
   static const String futureSelfWritingStyleLabel = 'Writing style';
   static const String futureSelfNarrationVoiceTitle = 'Narration voice';
   static const String futureSelfNarrationVoiceSubtitle =

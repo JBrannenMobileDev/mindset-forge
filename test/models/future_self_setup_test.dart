@@ -242,6 +242,16 @@ void main() {
       final setup = FutureSelfSetup.fromJson({'identityAnchor': 'x'});
       expect(setup.beatsVolume, 0.3);
       expect(setup.narrationVolume, 1.0);
+      expect(setup.narrationEnabled, isTrue);
+    });
+
+    test('round-trips narrationEnabled through json', () {
+      final setup = FutureSelfSetup(
+        narrationEnabled: false,
+        createdAt: DateTime(2026),
+      );
+      final restored = FutureSelfSetup.fromJson(setup.toJson());
+      expect(restored.narrationEnabled, isFalse);
     });
 
     test('fromJson clamps out-of-range volume values', () {
