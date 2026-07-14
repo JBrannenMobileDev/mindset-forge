@@ -22,6 +22,7 @@ because they are designed to ship inside the client app:
 | RevenueCat **public** SDK key (`appl_…`) | `lib/main.dart` | **No** | RevenueCat public SDK key, designed for client embedding. |
 | `ANTHROPIC_API_KEY` | Firebase Secret Manager | **Yes** | Server-only. Never in client code or source. Loaded via `defineSecret`. |
 | `REVENUECAT_WEBHOOK_SECRET` | Firebase Secret Manager | **Yes** | Server-only shared secret authenticating inbound RevenueCat webhooks. |
+| `MIXPANEL_TOKEN` | Firebase Secret Manager | **No** (public project token) | Same Mixpanel project token as the client SDK; used server-side for `trial_converted` webhook events. |
 
 Real secrets are **never** committed. The following are git-ignored and must be
 provided out of band: `.env`, `google-services.json`, `GoogleService-Info.plist`,
@@ -59,6 +60,8 @@ firebase functions:secrets:set ANTHROPIC_API_KEY
 # Shared secret for the RevenueCat webhook. Generate a strong random value:
 #   openssl rand -hex 32
 firebase functions:secrets:set REVENUECAT_WEBHOOK_SECRET
+# Mixpanel project token (same value as lib/core/services/analytics_service.dart):
+firebase functions:secrets:set MIXPANEL_TOKEN
 
 firebase deploy --only functions
 ```

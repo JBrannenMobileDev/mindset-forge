@@ -39,8 +39,22 @@ service cloud.firestore {
     // and pre-update users) at startup to detect forced/feature update
     // requirements. Written only via the Firebase console / admin scripts.
     match /app_config/{docId} {
-      allow read: if true;
+      allow read: if docId == 'blog'
+        ? request.auth != null
+        : true;
       allow write: if false;
+    }
+
+    function isBlogAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/app_config/blog) &&
+        request.auth.uid in get(/databases/$(database)/documents/app_config/blog).data.adminUids;
+    }
+
+    // Blog CMS — admin-only. Public site reads posts at build time via Admin SDK.
+    match /blog_posts/{slug} {
+      allow read, write: if isBlogAdmin();
+      allow create: if isBlogAdmin();
     }
   }
 }

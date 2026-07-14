@@ -7,6 +7,7 @@ import '../../core/constants/app_spacing.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/utils/blueprint_scoring.dart';
+import '../../core/utils/identity_evolution.dart';
 import '../../core/utils/manifestation_scoring.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/empty_state.dart';
@@ -20,7 +21,10 @@ import '../../providers/future_self_provider.dart';
 import '../../providers/identity_provider.dart';
 import '../../providers/partner_limits_provider.dart';
 import '../../providers/streak_provider.dart';
+import '../dashboard/widgets/identity_evolve_banner.dart';
 import 'affirmations_tab.dart';
+import 'widgets/identity_evolve_sheet.dart';
+import 'widgets/identity_history_sheet.dart';
 
 /// The Mindset hub — a practice-first surface with one resolved "do this now"
 /// hero, compact management rows for affirmations and future self, identity,
@@ -126,7 +130,11 @@ class _HubBody extends ConsumerWidget {
               ),
             ).animate().fadeIn(delay: 120.ms, duration: 350.ms),
             const SizedBox(height: AppSpacing.sectionGap),
-            _IdentityRow(statement: profile.identityStatement)
+            if (IdentityEvolution.shouldShowNudge(profile))
+              IdentityEvolveBanner(profile: profile),
+            if (IdentityEvolution.shouldShowNudge(profile))
+              const SizedBox(height: AppSpacing.sm),
+            _IdentityRow(profile: profile)
                 .animate()
                 .fadeIn(delay: 160.ms, duration: 350.ms),
             if (profile.blueprintCompleted) ...[
@@ -222,7 +230,11 @@ class _DesktopHub extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AppSpacing.sectionGap),
-            _IdentityRow(statement: profile.identityStatement),
+            if (IdentityEvolution.shouldShowNudge(profile)) ...[
+              IdentityEvolveBanner(profile: profile),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+            _IdentityRow(profile: profile),
             if (profile.blueprintCompleted) ...[
               const SizedBox(height: AppSpacing.sm),
               _PracticeRow(
@@ -501,9 +513,11 @@ class _PracticeRow extends StatelessWidget {
 // ─── Identity (demoted) ───────────────────────────────────────────────────────
 
 class _IdentityRow extends ConsumerStatefulWidget {
-  final String statement;
+  final UserProfile profile;
 
-  const _IdentityRow({required this.statement});
+  const _IdentityRow({required this.profile});
+
+  String get statement => profile.identityStatement;
 
   @override
   ConsumerState<_IdentityRow> createState() => _IdentityRowState();
@@ -518,6 +532,14 @@ class _IdentityRowState extends ConsumerState<_IdentityRow> {
   void initState() {
     super.initState();
     _ctrl = TextEditingController(text: widget.statement);
+  }
+
+  @override
+  void didUpdateWidget(covariant _IdentityRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.statement != widget.statement && !_editing) {
+      _ctrl.text = widget.statement;
+    }
   }
 
   @override
@@ -575,6 +597,45 @@ class _IdentityRowState extends ConsumerState<_IdentityRow> {
                     .copyWith(color: AppColors.textMuted),
               ),
               const Spacer(),
+              if (!_editing && hasStatement) ...[
+                GestureDetector(
+                  onTap: () => showIdentityEvolveSheet(
+                    context,
+                    ref,
+                    profile: widget.profile,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.auto_awesome_rounded,
+                        color: AppColors.primary,
+                        size: 16,
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Text(
+                        AppStrings.identityEvolveAction,
+                        style: AppTextStyles.labelSmall.copyWith(
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                GestureDetector(
+                  onTap: () => showIdentityHistorySheet(
+                    context,
+                    profile: widget.profile,
+                  ),
+                  child: const Icon(
+                    Icons.history_rounded,
+                    color: AppColors.textSecondary,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+              ],
               if (!_editing)
                 GestureDetector(
                   onTap: () => setState(() => _editing = true),

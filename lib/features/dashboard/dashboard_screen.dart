@@ -12,6 +12,7 @@ import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/hover_builder.dart';
 import '../../core/utils/breakpoints.dart';
 import '../../core/utils/app_date_utils.dart';
+import '../../core/utils/identity_evolution.dart';
 import '../../models/daily_completion.dart';
 import '../../models/user_profile.dart';
 import '../../providers/auth_provider.dart';
@@ -30,6 +31,7 @@ import 'widgets/accountability_banner.dart';
 import 'widgets/weekly_insight_banner.dart';
 import 'widgets/coach_callback_banner.dart';
 import 'widgets/blueprint_evolution_banner.dart';
+import 'widgets/identity_evolve_banner.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   /// When true (deep link `mindsetforge://focus` → `/dashboard?focus=plan`,
@@ -210,6 +212,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
             final showDeepDiveNudge =
                 profile.blueprintCompleted && !deepDiveComplete;
+            final showIdentityEvolveNudge =
+                IdentityEvolution.shouldShowNudge(profile);
 
             // Evening "last call": the evening routine owns the hero after 5 PM,
             // so surface an incomplete #1 Focus as its own card beneath the hero
@@ -230,6 +234,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               showGettingStarted: !allOnboardingDone,
               showOpenFocusCard: showOpenFocusCard,
               showDeepDiveNudge: showDeepDiveNudge,
+              showIdentityEvolveNudge: showIdentityEvolveNudge,
             );
 
             // Web small screens never reach here (the shell shows the download
@@ -273,6 +278,7 @@ List<_DashSection> _dashboardSections({
   required bool showGettingStarted,
   required bool showOpenFocusCard,
   required bool showDeepDiveNudge,
+  required bool showIdentityEvolveNudge,
 }) =>
     [
       if (profile.hasUnreadWeeklyInsight)
@@ -287,6 +293,9 @@ List<_DashSection> _dashboardSections({
       if (showAccountabilityBanner)
         _DashSection(
             _DashGroup.top, (_) => AccountabilityBanner(profile: profile)),
+      if (showIdentityEvolveNudge)
+        _DashSection(
+            _DashGroup.top, (_) => IdentityEvolveBanner(profile: profile)),
       if (showGettingStarted)
         _DashSection(
             _DashGroup.top, (_) => GettingStartedChecklist(profile: profile)),

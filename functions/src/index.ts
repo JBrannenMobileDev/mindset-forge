@@ -47,6 +47,7 @@ const anthropicKey = defineSecret('ANTHROPIC_API_KEY');
 // Shared secret used to authenticate inbound RevenueCat webhook requests.
 // Set the same value as the Authorization header in the RevenueCat dashboard.
 const revenueCatWebhookSecret = defineSecret('REVENUECAT_WEBHOOK_SECRET');
+const mixpanelToken = defineSecret('MIXPANEL_TOKEN');
 const db = admin.firestore();
 
 // Per-user daily ceiling on AI calls. Bounds cost/abuse from any single account
@@ -779,6 +780,39 @@ export const synthesizeFutureSelfNarration = onCall(
 
 // ─── RevenueCat webhook ────────────────────────────────────────────────────
 
+/** Fire-and-forget Mixpanel event from server-side webhook handlers. */
+async function trackMixpanelEvent(
+  distinctId: string,
+  eventName: string,
+  properties: Record<string, unknown> = {},
+): Promise<void> {
+  const token = mixpanelToken.value();
+  if (!token) return;
+
+  const payload = [
+    {
+      event: eventName,
+      properties: {
+        distinct_id: distinctId,
+        token,
+        ...properties,
+      },
+    },
+  ];
+  const data = Buffer.from(JSON.stringify(payload)).toString('base64');
+
+  try {
+    const response = await fetch(`https://api.mixpanel.com/track?data=${data}`);
+    if (!response.ok) {
+      console.error(
+        `Mixpanel track(${eventName}) failed: HTTP ${response.status}`,
+      );
+    }
+  } catch (err) {
+    console.error(`Mixpanel track(${eventName}) error:`, err);
+  }
+}
+
 /**
  * revenueCatWebhook — HTTP function that receives RevenueCat webhook events.
  * Syncs subscriptionStatus on the user's Firestore doc.
@@ -791,7 +825,7 @@ export const synthesizeFutureSelfNarration = onCall(
 // our handler runs. Public ingress is safe here because the handler enforces
 // the REVENUECAT_WEBHOOK_SECRET check below.
 export const revenueCatWebhook = onRequest(
-  { secrets: [revenueCatWebhookSecret], invoker: 'public' },
+  { secrets: [revenueCatWebhookSecret, mixpanelToken], invoker: 'public' },
   async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
@@ -814,6 +848,11 @@ export const revenueCatWebhook = onRequest(
     app_user_id: string;
     period_type?: string;
     expiration_at_ms?: number;
+    is_trial_conversion?: boolean;
+    product_id?: string;
+    price?: number;
+    store?: string;
+    renewal_number?: number;
   } | undefined;
 
   if (!event?.app_user_id) {
@@ -879,6 +918,24 @@ export const revenueCatWebhook = onRequest(
     }
 
     await userRef.update(update);
+
+    if (event.type === 'RENEWAL' && event.is_trial_conversion === true) {
+      await trackMixpanelEvent(uid, 'trial_converted', {
+        plan: event.product_id ?? 'unknown',
+        price_usd: event.price ?? 0,
+        store: event.store ?? 'unknown',
+        renewal_number: event.renewal_number ?? 1,
+      });
+    } else if (
+      event.type === 'CANCELLATION' &&
+      event.period_type === 'TRIAL'
+    ) {
+      await trackMixpanelEvent(uid, 'trial_cancelled', {
+        plan: event.product_id ?? 'unknown',
+        store: event.store ?? 'unknown',
+      });
+    }
+
     res.status(200).send('OK');
   } catch (err) {
     console.error('RevenueCat webhook error:', err);
@@ -3675,3 +3732,11 @@ export const callbackDelivery = onSchedule(
     });
   },
 );
+
+export {
+  generateBlogDraft,
+  createBlogDraft,
+  regenerateBlogDraft,
+  triggerBlogDeploy,
+  onBlogPostPublished,
+} from './blog';

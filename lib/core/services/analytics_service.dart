@@ -90,6 +90,8 @@ class AnalyticsService {
     'ai_summary',
   ];
 
+  void trackOnboardingStarted() => _track('onboarding_started');
+
   void trackOnboardingStepCompleted(int stepIndex) {
     final name =
         stepIndex < _stepNames.length ? _stepNames[stepIndex] : 'unknown';
@@ -117,8 +119,13 @@ class AnalyticsService {
   void trackSubscriptionStarted({
     required String plan,
     required double priceUsd,
+    required bool isTrial,
   }) =>
-      _track('subscription_started', {'plan': plan, 'price_usd': priceUsd});
+      _track('subscription_started', {
+        'plan': plan,
+        'price_usd': priceUsd,
+        'is_trial': isTrial,
+      });
 
   void trackSubscriptionRestored() => _track('subscription_restored');
 
@@ -132,6 +139,9 @@ class AnalyticsService {
 
   void trackStreakMilestoneReached(int days) =>
       _track('streak_milestone_reached', {'days': days});
+
+  void trackIdentityEvolved({required String source}) =>
+      _track('identity_evolved', {'source': source});
 
   // ─── Feature Engagement ─────────────────────────────────────────────────────
 

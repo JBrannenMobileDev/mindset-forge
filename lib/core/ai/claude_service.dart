@@ -9,6 +9,7 @@ import '../../models/future_self_setup.dart';
 import '../../models/goal.dart';
 import '../../models/mindset_blueprint.dart';
 import '../utils/habit_suggestion_guard.dart';
+import '../utils/identity_evolution.dart';
 import 'user_context_builder.dart';
 
 /// All Claude AI calls route through the Firebase Cloud Function `callClaude`.
@@ -951,29 +952,84 @@ Voice style: $voiceGuidance''',
     }
   }
 
-  Future<String> generateIdentityStatement(UserProfile profile) async {
-    final b = profile.mindsetBlueprint;
+  /// Proposes an evolved identity statement grounded in recent growth evidence.
+  /// Returns the current statement unchanged on failure (never generic boilerplate).
+  Future<IdentityEvolutionProposal> generateIdentityStatement(
+      UserProfile profile) async {
+    final current = profile.identityStatement.trim();
     try {
       final deepDive = UserContextBuilder.deepDiveBlock(profile);
       final deepDiveContext = deepDive.isNotEmpty ? '$deepDive\n\n' : '';
-      return await complete(
+      final coachMemory = UserContextBuilder.coachMemoryBlock(profile);
+      final coachMemoryContext =
+          coachMemory.isNotEmpty ? '$coachMemory\n\n' : '';
+      final futureSelf = UserContextBuilder.futureSelfBlock(profile);
+      final futureSelfContext = futureSelf.isNotEmpty ? '$futureSelf\n\n' : '';
+
+      final evidenceLines = profile.evidenceLog.reversed
+          .take(5)
+          .map((e) => '  • ${e.content}')
+          .join('\n');
+      final evidenceBlock = evidenceLines.isNotEmpty
+          ? 'Recent Evidence of Growth:\n$evidenceLines\n\n'
+          : '';
+
+      final response = await complete(
         systemPrompt:
-            'You write powerful identity statements for mindset coaching. '
-            'Write in first person, present tense. One sentence, 15-30 words. '
-            'Bold, specific, emotionally resonant. No preamble.',
+            'You evolve identity statements for mindset coaching. Return ONLY valid JSON '
+            'with two keys and no other text:\n'
+            '"identityStatement": a first-person, present-tense identity statement '
+            '(one sentence, 15-30 words). It must be specific and vivid: reference a '
+            'concrete domain, behavior, or scene, not abstract traits like focused or '
+            'resilient. Calibrate it one believable step BEYOND who the evidence says '
+            'they already are: a vivid future self they are growing into, not a '
+            'description of their present and not fantasy. Avoid generic coaching '
+            'language.\n'
+            '"rationale": 1-2 sentences explaining what has changed or grown since their '
+            'last statement and why the new wording fits who they are becoming now.',
         userPrompt:
             '${UserContextBuilder.coreBlock(profile)}\n\n'
             '${UserContextBuilder.goalsBlock(profile)}\n\n'
             '${UserContextBuilder.recentActivityBlock(profile)}\n\n'
+            '${UserContextBuilder.baselineDeltaBlock(profile)}\n\n'
+            '${UserContextBuilder.beliefHistoryBlock(profile)}\n\n'
+            '$evidenceBlock'
             '$deepDiveContext'
-            'All 5 traits: Confidence ${b.confidence}, Discipline ${b.discipline}, '
-            'Abundance ${b.abundanceThinking}, Resilience ${b.resilience}, '
-            'Decisiveness ${b.decisiveness}\n\n'
-            'Write a single identity statement that reflects who this person is becoming.',
-        maxTokens: 60,
+            '$coachMemoryContext'
+            '$futureSelfContext'
+            'Current identity statement: "${current.isEmpty ? '(none yet)' : current}"\n\n'
+            'Write an evolved identity statement that reflects who this person is '
+            'becoming next, grounded in their real growth.',
+        maxTokens: 300,
+      );
+      final jsonStr = response.contains('{')
+          ? response.substring(
+              response.indexOf('{'), response.lastIndexOf('}') + 1)
+          : response;
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      final statement = (data['identityStatement'] as String?)?.trim();
+      final rationale = (data['rationale'] as String?)?.trim();
+      if (statement == null ||
+          statement.isEmpty ||
+          statement == current) {
+        return IdentityEvolutionProposal(
+          statement: current.isNotEmpty
+              ? current
+              : 'I am becoming the person my daily actions are proving I can be.',
+          rationale: rationale ?? '',
+        );
+      }
+      return IdentityEvolutionProposal(
+        statement: statement,
+        rationale: rationale ?? '',
       );
     } catch (_) {
-      return 'I am a focused, resilient person who takes consistent action toward my most important goals.';
+      return IdentityEvolutionProposal(
+        statement: current.isNotEmpty
+            ? current
+            : 'I am becoming the person my daily actions are proving I can be.',
+        rationale: '',
+      );
     }
   }
 

@@ -10,6 +10,7 @@ import 'deep_dive.dart';
 import 'evidence_entry.dart';
 import 'gratitude_entry.dart';
 import 'identity_read_log.dart';
+import 'identity_version.dart';
 import 'encouragement_message.dart';
 import 'accountability_relationship.dart';
 import 'journal_summary.dart';
@@ -41,6 +42,9 @@ class UserProfile {
   final String identitySituation;
   final List<String> identityQualities;
   final List<IdentityReadLog> identityReadLog;
+  final List<IdentityVersion> identityHistory;
+  final String? lastIdentityEvolvedAt;
+  final String? identityEvolveNudgeDismissedAt;
   final List<Goal> goals;
 
   /// Id of the goal the user marked as their #1 focus during onboarding. Empty
@@ -171,6 +175,9 @@ class UserProfile {
     this.identitySituation = '',
     this.identityQualities = const [],
     this.identityReadLog = const [],
+    this.identityHistory = const [],
+    this.lastIdentityEvolvedAt,
+    this.identityEvolveNudgeDismissedAt,
     this.goals = const [],
     this.primaryGoalId = '',
     this.habits = const [],
@@ -435,6 +442,9 @@ class UserProfile {
     String? identitySituation,
     List<String>? identityQualities,
     List<IdentityReadLog>? identityReadLog,
+    List<IdentityVersion>? identityHistory,
+    String? lastIdentityEvolvedAt,
+    String? identityEvolveNudgeDismissedAt,
     List<Goal>? goals,
     String? primaryGoalId,
     List<Habit>? habits,
@@ -509,6 +519,10 @@ class UserProfile {
       identitySituation: identitySituation ?? this.identitySituation,
       identityQualities: identityQualities ?? this.identityQualities,
       identityReadLog: identityReadLog ?? this.identityReadLog,
+      identityHistory: identityHistory ?? this.identityHistory,
+      lastIdentityEvolvedAt: lastIdentityEvolvedAt ?? this.lastIdentityEvolvedAt,
+      identityEvolveNudgeDismissedAt:
+          identityEvolveNudgeDismissedAt ?? this.identityEvolveNudgeDismissedAt,
       goals: goals ?? this.goals,
       primaryGoalId: primaryGoalId ?? this.primaryGoalId,
       habits: habits ?? this.habits,
@@ -624,6 +638,14 @@ class UserProfile {
                   IdentityReadLog.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
+      identityHistory: (json['identityHistory'] as List<dynamic>?)
+              ?.map((e) =>
+                  IdentityVersion.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      lastIdentityEvolvedAt: json['lastIdentityEvolvedAt'] as String?,
+      identityEvolveNudgeDismissedAt:
+          json['identityEvolveNudgeDismissedAt'] as String?,
       goals: (json['goals'] as List<dynamic>?)
               ?.map((e) => Goal.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -802,6 +824,11 @@ class UserProfile {
         'identitySituation': identitySituation,
         'identityQualities': identityQualities,
         'identityReadLog': identityReadLog.map((e) => e.toJson()).toList(),
+        'identityHistory': identityHistory.map((e) => e.toJson()).toList(),
+        if (lastIdentityEvolvedAt != null)
+          'lastIdentityEvolvedAt': lastIdentityEvolvedAt,
+        if (identityEvolveNudgeDismissedAt != null)
+          'identityEvolveNudgeDismissedAt': identityEvolveNudgeDismissedAt,
         'goals': goals.map((g) => g.toJson()).toList(),
         'primaryGoalId': primaryGoalId,
         'habits': habits.map((h) => h.toJson()).toList(),

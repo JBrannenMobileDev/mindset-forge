@@ -6,13 +6,16 @@ import '../../../core/constants/app_spacing.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/utils/app_date_utils.dart';
+import '../../../core/utils/identity_evolution.dart';
 import '../../../core/widgets/adaptive_sheet.dart';
+import '../../../core/widgets/app_button.dart';
 import '../../../models/user_profile.dart';
 import '../../../models/daily_completion.dart';
 import '../../../providers/affirmations_provider.dart';
 import '../../../providers/daily_completion_provider.dart';
 import '../../../providers/partner_limits_provider.dart';
 import '../../mindset/affirmations_tab.dart';
+import '../../mindset/widgets/identity_evolve_sheet.dart';
 import 'evidence_log_widget.dart';
 import 'gratitude_log_widget.dart';
 import 'plan_day_bottom_sheet.dart';
@@ -475,6 +478,10 @@ void showIdentitySheet(BuildContext context, UserProfile profile) {
       builder: (sheetCtx, sheetRef, _) {
         final completion = sheetRef.watch(dailyCompletionProvider);
         final alreadyRead = completion.identityRead;
+        final proofLine = IdentityEvolution.dailyProofLine(profile);
+        final framing = AppStrings.identityReadFramings[
+            IdentityEvolution.dailyFramingIndex()];
+        final evolveDue = IdentityEvolution.shouldShowNudge(profile);
 
         return DraggableScrollableSheet(
           initialChildSize: 0.65,
@@ -502,9 +509,13 @@ void showIdentitySheet(BuildContext context, UserProfile profile) {
                   size: 48,
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                Text('Your Identity', style: AppTextStyles.headlineMedium),
+                Text(
+                  AppStrings.identityReadTitle,
+                  style: AppTextStyles.headlineMedium,
+                ),
                 const SizedBox(height: AppSpacing.lg),
                 Container(
+                  width: double.infinity,
                   padding: const EdgeInsets.all(AppSpacing.xl),
                   decoration: BoxDecoration(
                     color: AppColors.surfaceElevated,
@@ -514,7 +525,7 @@ void showIdentitySheet(BuildContext context, UserProfile profile) {
                   child: Text(
                     profile.identityStatement.isNotEmpty
                         ? profile.identityStatement
-                        : 'No identity statement set yet.',
+                        : AppStrings.identityReadEmpty,
                     style: AppTextStyles.headlineSmall.copyWith(
                       fontStyle: FontStyle.italic,
                       height: 1.8,
@@ -523,27 +534,54 @@ void showIdentitySheet(BuildContext context, UserProfile profile) {
                     textAlign: TextAlign.center,
                   ),
                 ),
+                if (proofLine.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  Text(
+                    AppStrings.identityReadProofLabel,
+                    style: AppTextStyles.labelSmall
+                        .copyWith(color: AppColors.textMuted),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    proofLine,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: AppColors.textSecondary,
+                      height: 1.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.lg),
                 Text(
-                  'Read this slowly. Let it sink in. This is who you are.',
+                  framing,
                   style: AppTextStyles.bodyMedium
                       .copyWith(color: AppColors.textSecondary),
                   textAlign: TextAlign.center,
                 ),
+                if (evolveDue) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  AppTextButton(
+                    label: AppStrings.identityReadStalePrompt,
+                    onPressed: () {
+                      Navigator.pop(sheetCtx);
+                      showIdentityEvolveSheet(
+                        context,
+                        sheetRef,
+                        profile: profile,
+                      );
+                    },
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.xxl),
                 if (!alreadyRead)
-                  SizedBox(
-                    width: double.infinity,
-                    height: AppSpacing.buttonHeight,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        sheetRef
-                            .read(dailyCompletionProvider.notifier)
-                            .toggle('identityRead', true);
-                        Navigator.pop(sheetCtx);
-                      },
-                      child: const Text('Done, I\'ve read this'),
-                    ),
+                  AppPrimaryButton(
+                    label: AppStrings.identityReadDone,
+                    onPressed: () {
+                      sheetRef
+                          .read(dailyCompletionProvider.notifier)
+                          .toggle('identityRead', true);
+                      Navigator.pop(sheetCtx);
+                    },
                   )
                 else
                   Row(
@@ -555,7 +593,7 @@ void showIdentitySheet(BuildContext context, UserProfile profile) {
                       ),
                       const SizedBox(width: AppSpacing.sm),
                       Text(
-                        'Identity read for today',
+                        AppStrings.identityReadCompleted,
                         style: AppTextStyles.labelLarge
                             .copyWith(color: AppColors.primary),
                       ),

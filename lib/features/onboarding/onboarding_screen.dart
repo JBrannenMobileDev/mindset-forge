@@ -10,6 +10,7 @@ import '../../models/affirmation.dart';
 import '../../models/mindset_blueprint.dart';
 import '../../models/goal.dart';
 import '../../models/user_profile.dart';
+import '../../models/identity_version.dart';
 import '../../core/constants/app_strings.dart';
 import '../../providers/analytics_provider.dart';
 import '../../providers/auth_notifier.dart';
@@ -78,6 +79,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   void initState() {
     super.initState();
     _restoreStep();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final profile = ref.read(currentUserProfileProvider).valueOrNull;
+      if (profile == null ||
+          profile.hasCompletedOnboarding ||
+          profile.isPartnerAccount) {
+        return;
+      }
+      ref.read(analyticsServiceProvider).trackOnboardingStarted();
+    });
   }
 
   void _restoreStep() {
@@ -177,6 +188,19 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           displayName: authUser?.displayName ?? '',
         );
 
+    final now = DateTime.now().toIso8601String();
+    final trimmedIdentity = _identityStatement.trim();
+    final initialHistory = trimmedIdentity.isNotEmpty
+        ? [
+            IdentityVersion(
+              statement: trimmedIdentity,
+              createdAt: now,
+              source: 'onboarding',
+              rationale: AppStrings.identityHistoryOnboardingRationale,
+            ),
+          ]
+        : <IdentityVersion>[];
+
     final updated = base.copyWith(
       onboardingStep: _kTotalSteps,
       // Seeded neutral defaults — refined later via in-app blueprint setup.
@@ -188,6 +212,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       identityStatement: _identityStatement,
       identitySituation: _identitySituation,
       identityQualities: _identityQualities,
+      identityHistory: initialHistory,
+      lastIdentityEvolvedAt: trimmedIdentity.isNotEmpty ? now : null,
       goals: _goals,
       primaryGoalId: _primaryGoalId,
       fearsDrift: _fearsDrift,

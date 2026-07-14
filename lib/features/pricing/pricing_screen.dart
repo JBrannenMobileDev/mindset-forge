@@ -149,6 +149,7 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
       ref.read(analyticsServiceProvider).trackSubscriptionStarted(
             plan: planType,
             priceUsd: _selectedPackage!.storeProduct.price,
+            isTrial: isTrial,
           );
       context.go('/dashboard');
     } on PurchasesErrorCode catch (e) {
