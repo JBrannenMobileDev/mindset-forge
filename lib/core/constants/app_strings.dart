@@ -28,9 +28,8 @@ abstract final class AppStrings {
   static const String welcomeFormSubtitle =
       'Create your account and start your 7-day free trial.';
 
-  // App store links — TODO: replace the iOS placeholder with the live App Store URL.
   static const String iosAppStoreUrl =
-      'https://apps.apple.com/app/idYOUR_APP_ID';
+      'https://apps.apple.com/app/id6784144678';
   static const String androidPlayStoreUrl =
       'https://play.google.com/store/apps/details?id=com.mindsetforge.mindsetforge';
 
@@ -356,6 +355,10 @@ abstract final class AppStrings {
   static const String gratitudeLog = 'Gratitude';
   static const String gratitudePrompt = 'What are you grateful for today?';
   static const String weeklyActivity = 'Weekly Activity';
+  static const String gettingStartedTitle = 'Getting Started';
+  static const String gettingStartedProgress = '{done} of {total} steps complete';
+  static const String gettingStartedViewAll = 'View all steps';
+  static const String gettingStartedCollapse = 'Show less';
   static const String groupToday = 'Today';
   static const String groupProgress = 'Your Progress';
   static const String progressTabAlignment = 'Alignment';
@@ -933,6 +936,49 @@ abstract final class AppStrings {
       'I am a disciplined, focused person who follows through';
   static const String identityStatementEmpty =
       'Set your identity statement, the person you are becoming.';
+  static const String identityEvolveAction = 'Evolve';
+  static const String identityEvolveTitle = 'Evolve Your Identity';
+  static const String identityEvolveLoading =
+      'Reading your growth and shaping who you are becoming next…';
+  static const String identityEvolveCurrentLabel = 'Current';
+  static const String identityEvolveProposedLabel = 'Proposed';
+  static const String identityEvolveRationaleLabel = 'What\'s changed';
+  static const String identityEvolveUseThis = 'Use this';
+  static const String identityEvolveKeepCurrent = 'Keep current';
+  static const String identityEvolveTryAgain = 'Try again';
+  static const String identityEvolveEdit = 'Edit before saving';
+  static const String identityEvolveNudgeTitle =
+      'You\'ve outgrown your identity statement';
+  static const String identityEvolveNudgeSubtitle =
+      'Refresh it with proof from your journey.';
+  static const String identityEvolveNudgeAction = 'Evolve with your history';
+  static const String identityHistoryTitle = 'How You\'ve Grown';
+  static const String identityHistoryEmpty =
+      'Your identity journey will appear here as you evolve.';
+  static const String identityHistoryOnboardingRationale =
+      'Your starting identity from onboarding.';
+  static const String identityReadProofLabel =
+      'Proof you\'re already becoming this';
+  static const String identityReadStalePrompt =
+      'Your identity statement is out of date. Refresh it to match who you are now.';
+  static const String identityReadFraming1 =
+      'Read this slowly. Let it sink in. This is who you are becoming.';
+  static const String identityReadFraming2 =
+      'Feel it, don\'t just read it. Your future self is already forming.';
+  static const String identityReadFraming3 =
+      'Say it out loud if you can. Emotion is what programs the subconscious.';
+  static const String identityReadFraming4 =
+      'Picture the scene behind these words. Make it vivid.';
+  static const String identityReadDone = 'Done, I\'ve read this';
+  static const String identityReadCompleted = 'Identity read for today';
+  static const String identityReadTitle = 'Your Identity';
+  static const String identityReadEmpty = 'No identity statement set yet.';
+  static const List<String> identityReadFramings = [
+    identityReadFraming1,
+    identityReadFraming2,
+    identityReadFraming3,
+    identityReadFraming4,
+  ];
 
   // Mindset hub — card copy
   static const String mindsetCompleteBlueprintTitle = 'Complete your Blueprint';

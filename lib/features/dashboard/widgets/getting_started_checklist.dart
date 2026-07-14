@@ -3,20 +3,56 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/services/getting_started_expand_store.dart';
+import '../../../core/utils/breakpoints.dart';
 import '../../../core/widgets/widget_education_sheet.dart';
 import '../../../models/user_profile.dart';
 
-class GettingStartedChecklist extends StatelessWidget {
+class GettingStartedChecklist extends StatefulWidget {
   final UserProfile profile;
 
   const GettingStartedChecklist({super.key, required this.profile});
 
   @override
+  State<GettingStartedChecklist> createState() =>
+      _GettingStartedChecklistState();
+}
+
+class _GettingStartedChecklistState extends State<GettingStartedChecklist> {
+  bool _expanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExpandedPref();
+  }
+
+  Future<void> _loadExpandedPref() async {
+    final stored = await GettingStartedExpandStore.isExpanded();
+    if (!mounted) return;
+    setState(() => _expanded = stored);
+  }
+
+  void _setExpanded(bool value) {
+    setState(() => _expanded = value);
+    GettingStartedExpandStore.setExpanded(value);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final items = _buildItems(context, profile);
+    final items = _buildItems(context, widget.profile);
     final done = items.where((i) => i.isDone).length;
     final progress = done / items.length;
+    final incomplete = items.where((i) => !i.isDone).toList();
+    final isCompact = !Breakpoints.isWide(context);
+    final forceExpanded = isCompact && incomplete.length <= 2;
+    final isExpanded = !isCompact || forceExpanded || _expanded;
+    final nextItem = _nextIncompleteItem(items);
+    final progressLabel = AppStrings.gettingStartedProgress
+        .replaceAll('{done}', '$done')
+        .replaceAll('{total}', '${items.length}');
 
     return Container(
       decoration: BoxDecoration(
@@ -37,10 +73,11 @@ class GettingStartedChecklist extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Getting Started', style: AppTextStyles.labelLarge),
+                      Text(AppStrings.gettingStartedTitle,
+                          style: AppTextStyles.labelLarge),
                       const SizedBox(height: 2),
                       Text(
-                        '$done of ${items.length} steps complete',
+                        progressLabel,
                         style: AppTextStyles.bodySmall
                             .copyWith(color: AppColors.textSecondary),
                       ),
@@ -68,17 +105,45 @@ class GettingStartedChecklist extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
-          ...items.asMap().entries.map((e) => _ChecklistRow(
-                item: e.value,
-                isLast: e.key == items.length - 1,
-              ).animate().fadeIn(
-                    delay: Duration(milliseconds: e.key * 60),
-                    duration: 350.ms,
-                  )),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            alignment: Alignment.topCenter,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isExpanded)
+                  ...incomplete.asMap().entries.map(
+                        (e) => _ChecklistRow(
+                          item: e.value,
+                          isLast: e.key == incomplete.length - 1 &&
+                              (!isCompact || forceExpanded),
+                        ),
+                      )
+                else if (nextItem != null)
+                  _ChecklistRow(item: nextItem, isLast: false),
+                if (isCompact && !forceExpanded)
+                  _ExpandToggle(
+                    expanded: isExpanded,
+                    onTap: () => _setExpanded(!isExpanded),
+                  ),
+              ],
+            ),
+          ),
           const SizedBox(height: AppSpacing.sm),
         ],
       ),
     ).animate().fadeIn(duration: 400.ms);
+  }
+
+  static _ChecklistItem? _nextIncompleteItem(List<_ChecklistItem> items) {
+    for (final item in items) {
+      if (!item.isDone && !item.locked) return item;
+    }
+    for (final item in items) {
+      if (!item.isDone) return item;
+    }
+    return null;
   }
 
   static List<_ChecklistItem> _buildItems(
@@ -133,6 +198,48 @@ class GettingStartedChecklist extends StatelessWidget {
         onTap: () => showWidgetEducationSheet(context),
       ),
     ];
+  }
+}
+
+class _ExpandToggle extends StatelessWidget {
+  final bool expanded;
+  final VoidCallback onTap;
+
+  const _ExpandToggle({required this.expanded, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.xs,
+          AppSpacing.lg,
+          AppSpacing.xs,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              expanded
+                  ? AppStrings.gettingStartedCollapse
+                  : AppStrings.gettingStartedViewAll,
+              style: AppTextStyles.labelSmall.copyWith(color: AppColors.primary),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Icon(
+              expanded
+                  ? Icons.expand_less_rounded
+                  : Icons.expand_more_rounded,
+              size: 16,
+              color: AppColors.primary,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
