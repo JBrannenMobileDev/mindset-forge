@@ -4,6 +4,7 @@ import '../../models/journal_entry.dart';
 import '../../models/chat_session.dart';
 import '../../models/chat_message.dart';
 import '../../models/app_version_config.dart';
+import '../../models/team_daily_prompt.dart';
 
 class FirestoreService {
   FirestoreService() {
@@ -22,6 +23,8 @@ class FirestoreService {
       _db.collection('journals');
   CollectionReference<Map<String, dynamic>> get _chatSessions =>
       _db.collection('chat_sessions');
+  CollectionReference<Map<String, dynamic>> get _teams =>
+      _db.collection('teams');
 
   // ─── UserProfile ──────────────────────────────────────────────────────────
 
@@ -103,6 +106,23 @@ class FirestoreService {
 
   Future<void> deleteChatSession(String sessionId) async {
     await _chatSessions.doc(sessionId).delete();
+  }
+
+  // ─── Team ─────────────────────────────────────────────────────────────────
+
+  /// Streams the coach-assigned prompt for [date] (`YYYY-MM-DD`) on [teamId].
+  /// Emits null while the coach has assigned nothing for that day. Only ever
+  /// called for accounts that belong to a team.
+  Stream<TeamDailyPrompt?> streamTeamDailyPrompt(String teamId, String date) {
+    return _teams
+        .doc(teamId)
+        .collection('schedule')
+        .doc(date)
+        .snapshots()
+        .map((snap) {
+      if (!snap.exists || snap.data() == null) return null;
+      return TeamDailyPrompt.fromJson({'date': date, ...snap.data()!});
+    });
   }
 
   // ─── AppVersionConfig ─────────────────────────────────────────────────────

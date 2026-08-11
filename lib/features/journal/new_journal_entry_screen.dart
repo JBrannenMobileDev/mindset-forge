@@ -12,12 +12,14 @@ import '../../core/widgets/personalize_nudge.dart';
 import '../../core/utils/app_date_utils.dart';
 import '../../models/journal_entry.dart';
 import '../../models/journal_summary.dart';
+import '../../models/team_daily_prompt.dart';
 import '../../models/user_profile.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/claude_provider.dart';
 import '../../providers/journal_provider.dart';
 import '../../providers/daily_completion_provider.dart';
 import '../../providers/partner_limits_provider.dart';
+import '../../providers/team_prompt_provider.dart';
 
 class NewJournalEntryScreen extends ConsumerStatefulWidget {
   const NewJournalEntryScreen({super.key});
@@ -32,6 +34,7 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
   String _mode = '';
   String _mood = '';
   String _prompt = '';
+  String? _teamPromptId;
   final List<String> _beliefsShifted = [];
   final List<String> _fearsOutwitted = [];
   bool _isGeneratingPrompt = false;
@@ -60,7 +63,37 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
     super.dispose();
   }
 
-  Future<void> _generatePrompt() async {
+  /// The coach-assigned prompt to write from right now, or null when there is
+  /// none. [dailyCompletionProvider] is only consulted once a team prompt
+  /// actually exists, so accounts without a team never reach it.
+  TeamDailyPrompt? _firstEntryTeamPrompt(TeamPromptState teamPromptState) {
+    final prompt = teamPromptState.usablePrompt;
+    if (prompt == null) return null;
+    // The coach's prompt is for the first entry of the day only, using the same
+    // signal JournalScreen uses to decide whether to open this screen at all.
+    if (ref.read(dailyCompletionProvider).journalCompleted) return null;
+    return prompt;
+  }
+
+  /// Fetches the prompt for the writing step. Prefers the coach-assigned prompt
+  /// when there is one for today; [allowTeamPrompt] is false only for the
+  /// generated-prompt tile, which is itself hidden while a coach prompt exists.
+  Future<void> _generatePrompt({bool allowTeamPrompt = true}) async {
+    if (allowTeamPrompt) {
+      final teamPrompt =
+          _firstEntryTeamPrompt(ref.read(teamPromptStateProvider));
+      if (teamPrompt != null) {
+        setState(() {
+          _prompt = teamPrompt.promptText;
+          _teamPromptId = teamPrompt.promptId;
+          _isGeneratingPrompt = false;
+          _isFreeWrite = false;
+          _step = 2;
+        });
+        return;
+      }
+    }
+
     setState(() {
       _isGeneratingPrompt = true;
       _step = 2;
@@ -81,6 +114,7 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
       if (!mounted) return;
       setState(() {
         _prompt = result;
+        _teamPromptId = null;
         _isGeneratingPrompt = false;
         _isFreeWrite = false;
       });
@@ -88,6 +122,7 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
       if (!mounted) return;
       setState(() {
         _prompt = 'What is on your mind today? Write freely.';
+        _teamPromptId = null;
         _isGeneratingPrompt = false;
         _isFreeWrite = false;
       });
@@ -116,6 +151,7 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
         content: _contentCtrl.text.trim(),
         limitingBeliefsShifted: _beliefsShifted,
         fearsOutwitted: _fearsOutwitted,
+        teamPromptId: _teamPromptId,
         createdAt: DateTime.now(),
       );
 
@@ -158,6 +194,10 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Accounts without a teamId get the shared const "no team" state here: no
+    // Firestore subscription and no rebuilds from it.
+    final teamPromptState = ref.watch(teamPromptStateProvider);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -215,7 +255,9 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
                 },
               ),
             10 => _PromptChoiceStep(
-                onCoachPrompt: _generatePrompt,
+                teamPrompt: _firstEntryTeamPrompt(teamPromptState),
+                onTeamPrompt: _generatePrompt,
+                onCoachPrompt: () => _generatePrompt(allowTeamPrompt: false),
                 onFreeWrite: () => setState(() {
                   _isFreeWrite = true;
                   _step = 2;
@@ -228,7 +270,10 @@ class _NewJournalEntryScreenState extends ConsumerState<NewJournalEntryScreen> {
                 controller: _contentCtrl,
                 onChanged: (_) => setState(() {}),
                 onNext: () => setState(() => _step = 3),
-                onGetCoachPrompt: _generatePrompt,
+                // A player who started a blank page and then wants a prompt
+                // should get their coach's if one is assigned for today, and
+                // otherwise a generated one.
+                onGetCoachPrompt: () => _generatePrompt(),
               ),
             _ => _TagsStep(
                 profile: ref.watch(currentUserProfileProvider).valueOrNull,
@@ -395,10 +440,15 @@ class _MoodSelector extends StatelessWidget {
 }
 
 class _PromptChoiceStep extends StatelessWidget {
+  /// Today's coach-assigned prompt, or null for everyone not on a team.
+  final TeamDailyPrompt? teamPrompt;
+  final VoidCallback onTeamPrompt;
   final VoidCallback onCoachPrompt;
   final VoidCallback onFreeWrite;
 
   const _PromptChoiceStep({
+    this.teamPrompt,
+    required this.onTeamPrompt,
     required this.onCoachPrompt,
     required this.onFreeWrite,
   });
@@ -417,15 +467,24 @@ class _PromptChoiceStep extends StatelessWidget {
             style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
           ),
           const Spacer(),
-          _buildTile(
-            icon: Icons.auto_awesome_rounded,
-            color: AppColors.primary,
-            title: 'Coach Prompt',
-            subtitle: 'Personalized to your goals & mood',
-            onTap: onCoachPrompt,
-            animationDelay: 0,
-          ),
-          const SizedBox(height: AppSpacing.md),
+          // When the coach has assigned today's prompt, that IS the coach
+          // prompt: the choice is between it and a blank page. Offering the
+          // generated prompt alongside it would put two different things both
+          // called "Coach Prompt" on the same screen.
+          if (teamPrompt != null) ...[
+            _buildTeamPromptCard(teamPrompt!),
+            const SizedBox(height: AppSpacing.md),
+          ] else ...[
+            _buildTile(
+              icon: Icons.auto_awesome_rounded,
+              color: AppColors.primary,
+              title: 'Coach Prompt',
+              subtitle: 'Personalized to your goals & mood',
+              onTap: onCoachPrompt,
+              animationDelay: 0,
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
           _buildTile(
             icon: Icons.edit_note_rounded,
             color: AppColors.secondary,
@@ -438,6 +497,76 @@ class _PromptChoiceStep extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// The coach's assignment for today, pinned above the standard choices.
+  Widget _buildTeamPromptCard(TeamDailyPrompt prompt) {
+    return GestureDetector(
+      onTap: onTeamPrompt,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: AppColors.primaryContainer,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+          boxShadow: const [
+            BoxShadow(color: AppColors.primaryGlow, blurRadius: 24),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.15),
+                    borderRadius:
+                        BorderRadius.circular(AppSpacing.radiusSm),
+                  ),
+                  child: const Icon(Icons.groups_rounded,
+                      size: 18, color: AppColors.primary),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(AppStrings.teamPromptLabel,
+                          style: AppTextStyles.headlineSmall),
+                      Text(
+                        AppStrings.teamPromptSubtitle,
+                        style: AppTextStyles.bodySmall
+                            .copyWith(color: AppColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded,
+                    color: AppColors.textMuted),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              prompt.promptText,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.bodyLarge.copyWith(
+                color: AppColors.primary,
+                fontStyle: FontStyle.italic,
+                height: 1.6,
+              ),
+            ),
+          ],
+        ),
+      ),
+    )
+        .animate()
+        .fadeIn(duration: 400.ms)
+        .slideY(begin: 0.15, duration: 400.ms, curve: Curves.easeOut);
   }
 
   Widget _buildTile({

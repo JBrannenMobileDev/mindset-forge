@@ -3740,3 +3740,24 @@ export {
   triggerBlogDeploy,
   onBlogPostPublished,
 } from './blog';
+
+export {
+  getCoachContext,
+  initializeCoachAccount,
+  createPlayerInvites,
+  getTeamInviteInfo,
+  acceptTeamInvite,
+  generateTeamPrompts,
+  addManualPrompt,
+  deletePrompt,
+  assignTeamPrompt,
+  unassignTeamPrompt,
+  removePlayer,
+  updateTeamSettings,
+} from './coach';
+
+export {
+  onJournalEntryCreated,
+  weeklyTeamReport,
+  generateTeamReport,
+} from './team_insights';

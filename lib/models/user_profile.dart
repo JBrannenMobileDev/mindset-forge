@@ -35,6 +35,11 @@ class UserProfile {
   /// this is in the future the account is treated as having an active
   /// subscription (see [hasActiveSubscription]). Null for everyone else.
   final String? premiumUntil;
+
+  /// Id of the sports team this account belongs to, set server-side when the
+  /// player accepts a coach invite. Null for every self-serve account, which is
+  /// the single gate for all team behavior in the app.
+  final String? teamId;
   final int onboardingStep;
   final MindsetBlueprint mindsetBlueprint;
   final MindsetBlueprint originalMindsetBaseline;
@@ -168,6 +173,7 @@ class UserProfile {
     this.subscriptionStatus = 'free',
     this.subscriptionExpiresAt,
     this.premiumUntil,
+    this.teamId,
     this.onboardingStep = 0,
     required this.mindsetBlueprint,
     required this.originalMindsetBaseline,
@@ -435,6 +441,7 @@ class UserProfile {
     String? subscriptionStatus,
     DateTime? subscriptionExpiresAt,
     String? premiumUntil,
+    String? teamId,
     int? onboardingStep,
     MindsetBlueprint? mindsetBlueprint,
     MindsetBlueprint? originalMindsetBaseline,
@@ -511,6 +518,7 @@ class UserProfile {
       subscriptionExpiresAt:
           subscriptionExpiresAt ?? this.subscriptionExpiresAt,
       premiumUntil: premiumUntil ?? this.premiumUntil,
+      teamId: teamId ?? this.teamId,
       onboardingStep: onboardingStep ?? this.onboardingStep,
       mindsetBlueprint: mindsetBlueprint ?? this.mindsetBlueprint,
       originalMindsetBaseline:
@@ -620,6 +628,7 @@ class UserProfile {
       subscriptionExpiresAt:
           DateTime.tryParse(json['subscriptionExpiresAt'] as String? ?? ''),
       premiumUntil: json['premiumUntil'] as String?,
+      teamId: json['teamId'] as String?,
       onboardingStep: (json['onboardingStep'] as num?)?.toInt() ?? 0,
       mindsetBlueprint: json['mindsetBlueprint'] != null
           ? MindsetBlueprint.fromJson(
@@ -817,6 +826,9 @@ class UserProfile {
         'subscriptionStatus': subscriptionStatus,
         'subscriptionExpiresAt': subscriptionExpiresAt?.toIso8601String(),
         'premiumUntil': premiumUntil,
+        // Omitted when null so a merge write from a client that predates the
+        // server setting this field can never clear a player's team.
+        if (teamId != null) 'teamId': teamId,
         'onboardingStep': onboardingStep,
         'mindsetBlueprint': mindsetBlueprint.toJson(),
         'originalMindsetBaseline': originalMindsetBaseline.toJson(),

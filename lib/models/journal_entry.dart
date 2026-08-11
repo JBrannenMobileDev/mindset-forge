@@ -7,6 +7,10 @@ class JournalEntry {
   final String content;
   final List<String> limitingBeliefsShifted;
   final List<String> fearsOutwitted;
+
+  /// Id of the coach-assigned team prompt this entry was written from, so team
+  /// summaries can attribute it. Null for every self-directed entry.
+  final String? teamPromptId;
   final DateTime createdAt;
 
   const JournalEntry({
@@ -18,6 +22,7 @@ class JournalEntry {
     required this.content,
     this.limitingBeliefsShifted = const [],
     this.fearsOutwitted = const [],
+    this.teamPromptId,
     required this.createdAt,
   });
 
@@ -30,6 +35,7 @@ class JournalEntry {
     String? content,
     List<String>? limitingBeliefsShifted,
     List<String>? fearsOutwitted,
+    String? teamPromptId,
     DateTime? createdAt,
   }) {
     return JournalEntry(
@@ -41,6 +47,7 @@ class JournalEntry {
       content: content ?? this.content,
       limitingBeliefsShifted: limitingBeliefsShifted ?? this.limitingBeliefsShifted,
       fearsOutwitted: fearsOutwitted ?? this.fearsOutwitted,
+      teamPromptId: teamPromptId ?? this.teamPromptId,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -59,6 +66,7 @@ class JournalEntry {
       fearsOutwitted: List<String>.from(
         json['fearsOutwitted'] as List<dynamic>? ?? [],
       ),
+      teamPromptId: json['teamPromptId'] as String?,
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
     );
   }
@@ -72,6 +80,7 @@ class JournalEntry {
         'content': content,
         'limitingBeliefsShifted': limitingBeliefsShifted,
         'fearsOutwitted': fearsOutwitted,
+        if (teamPromptId != null) 'teamPromptId': teamPromptId,
         'createdAt': createdAt.toIso8601String(),
       };
 }

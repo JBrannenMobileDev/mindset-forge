@@ -35,14 +35,38 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // App config is read-restricted per document, and every doc is written only
+    // via the Firebase console / admin scripts. Each doc gets an explicit match
+    // block so that any config doc added later is denied by default instead of
+    // inheriting a public read.
+
+    // Analyst allowlist + coach signup codes. Never client-readable: a leaked
+    // signup code would let anyone mint a free coach account on the public
+    // signup page, and the analyst allowlist should not be enumerable. Cloud
+    // Functions use the Admin SDK and the rule helpers below use get(), both of
+    // which bypass this rule, so denying reads costs us nothing.
+    match /app_config/roles {
+      allow read, write: if false;
+    }
+
+    // Blog CMS admin allowlist — read by the signed-in admin portal only.
+    match /app_config/blog {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     // App version gate config — read by every client (including signed-out
     // and pre-update users) at startup to detect forced/feature update
-    // requirements. Written only via the Firebase console / admin scripts.
-    match /app_config/{docId} {
-      allow read: if docId == 'blog'
-        ? request.auth != null
-        : true;
+    // requirements, so this one stays publicly readable.
+    match /app_config/version {
+      allow read: if true;
       allow write: if false;
+    }
+
+    // Every other config doc (mindset_progress, callback, …) is read
+    // server-side with the Admin SDK, so clients get nothing.
+    match /app_config/{docId} {
+      allow read, write: if false;
     }
 
     function isBlogAdmin() {
@@ -55,6 +79,103 @@ service cloud.firestore {
     match /blog_posts/{slug} {
       allow read, write: if isBlogAdmin();
       allow create: if isBlogAdmin();
+    }
+
+    // Blog topic seed inbox — admin-only queue for draft generation.
+    match /blog_seeds/{seedId} {
+      allow read, write, create: if isBlogAdmin();
+    }
+
+    // ---------------------------------------------------------------------
+    // Coach team portal
+    //
+    // Every write below is `if false`. All team mutations go through the coach
+    // callables (initializeCoachAccount, createPlayerInvites, acceptTeamInvite,
+    // assignTeamPrompt, …) and the journal-summary trigger, which use the Admin
+    // SDK and bypass these rules entirely. Reads are split so that a player can
+    // see their team and the daily prompt but nothing about their teammates,
+    // and a coach can never reach raw journal text: `journals` stays owner-only
+    // and `team_entry_summaries` has no content field by contract.
+    // ---------------------------------------------------------------------
+
+    // Super-admin analyst: full read access to every team.
+    function isAnalyst() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/app_config/roles) &&
+        request.auth.uid in get(/databases/$(database)/documents/app_config/roles).data.analystUids;
+    }
+
+    function isTeamCoach(teamId) {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/teams/$(teamId)) &&
+        get(/databases/$(database)/documents/teams/$(teamId)).data.coachUid == request.auth.uid;
+    }
+
+    function isTeamMember(teamId) {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/teams/$(teamId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.memberUids;
+    }
+
+    // Team doc: staff only.
+    //
+    // Players deliberately have NO read access here. The original plan gave
+    // members read access so the app could read `promptMode`, but that field is
+    // gone (the app never forces a player onto the coach's prompt), and the app
+    // now reads nothing but the schedule doc below. Leaving member reads in
+    // place would expose `memberUids` (every teammate's uid) and
+    // `guidance.notes` (free text the coach writes for the prompt generator,
+    // which can easily be about a specific player) to the whole roster.
+    // `isTeamMember` is still used by the schedule rule; rule get() calls
+    // bypass these read rules, so denying the doc costs the app nothing.
+    match /teams/{teamId} {
+      allow read: if isTeamCoach(teamId) || isAnalyst();
+      allow write: if false;
+    }
+
+    // Prompt bank — staff only. Players only ever see the assigned prompt.
+    match /teams/{teamId}/prompts/{promptId} {
+      allow read: if isTeamCoach(teamId) || isAnalyst();
+      allow write: if false;
+    }
+
+    // Daily schedule — players read this; it is the assigned journal prompt.
+    match /teams/{teamId}/schedule/{date} {
+      allow read: if isTeamCoach(teamId) || isAnalyst() || isTeamMember(teamId);
+      allow write: if false;
+    }
+
+    // Roster holds other players' names, emails and invite ids — staff only.
+    match /teams/{teamId}/roster/{playerId} {
+      allow read: if isTeamCoach(teamId) || isAnalyst();
+      allow write: if false;
+    }
+
+    // AI weekly roll-ups — staff only.
+    match /teams/{teamId}/reports/{period} {
+      allow read: if isTeamCoach(teamId) || isAnalyst();
+      allow write: if false;
+    }
+
+    // AI summaries of player entries. Never contains raw journal text. Scoped
+    // by the summary's own teamId so a coach can only ever see their own team.
+    // Does NOT carry concernLevel (that lives in team_entry_signals).
+    match /team_entry_summaries/{entryId} {
+      allow read: if isTeamCoach(resource.data.teamId) || isAnalyst();
+      allow write: if false;
+    }
+
+    // Concern signals (watch/flag). Analyst only. Coaches must not be able to
+    // read these even via DevTools; that is why they are not on the summary doc.
+    match /team_entry_signals/{entryId} {
+      allow read: if isAnalyst();
+      allow write: if false;
+    }
+
+    // Team invites — fully locked to clients, mirroring partner_invites. The
+    // join page reads them through getTeamInviteInfo / acceptTeamInvite.
+    match /team_invites/{inviteId} {
+      allow read, write: if false;
     }
   }
 }

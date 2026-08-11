@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme {
+  /* Background stack (order of elevation) */
+  --color-background: #0a0a0f;
+  --color-surface: #13131a;
+  --color-surface-elevated: #1c1c27;
+  --color-surface-highest: #252535;
+
+  /* Borders */
+  --color-border: #2a2a3a;
+  --color-border-subtle: #1e1e2e;
+
+  /* Primary palette */
+  --color-primary: #9b40ff;
+  --color-primary-container: rgba(155, 64, 255, 0.1);
+
+  /* Secondary */
+  --color-secondary: #00e5ff;
+  --color-secondary-container: rgba(0, 229, 255, 0.1);
+
+  /* Semantic */
+  --color-warning: #ffb547;
+  --color-error: #ff5e6c;
+  --color-success: #4caf7d;
+
+  /* Text */
+  --color-text-primary: #f0eff8;
+  --color-text-secondary: #8b8ba0;
+  --color-text-muted: #4a4a60;
+  --color-text-disabled: #333345;
+
+  /* Fonts */
+  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 100px;
+
+  /* Glow shadows */
+  --shadow-glow: 0 0 32px rgba(155, 64, 255, 0.35);
+  --shadow-glow-sm: 0 0 20px rgba(155, 64, 255, 0.25);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background-color: rgba(155, 64, 255, 0.3);
+  color: #f0eff8;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0a0f;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2a3a;
+  border-radius: 100px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a4a;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}

@@ -620,6 +620,10 @@ abstract final class AppStrings {
   static const String limitingBeliefsShifted = 'Limiting beliefs shifted';
   static const String saveEntry = 'Save Entry';
 
+  // Team prompt (the prompt the player's coach assigned for today)
+  static const String teamPromptLabel = 'Coach Prompt';
+  static const String teamPromptSubtitle = 'Today\'s prompt from your coach';
+
   // Chat
   static const String chatTitle = 'Chat';
   static const String back = 'Back';
