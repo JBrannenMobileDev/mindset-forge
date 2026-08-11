@@ -52,6 +52,9 @@ const anthropicKey = defineSecret('ANTHROPIC_API_KEY');
 
 const db = admin.firestore();
 
+/** Keeps coach callables under the us-central1 CPU quota on deploy. */
+const COACH_MAX_INSTANCES = 5;
+
 // ─── Small shared helpers ──────────────────────────────────────────────────
 
 /**
@@ -241,7 +244,9 @@ async function computeRosterCounts(
 }
 
 /** Returns the caller's role and every team they can see (all teams for an analyst). */
-export const getCoachContext = onCall({ invoker: 'public' }, async (request) => {
+export const getCoachContext = onCall(
+  { invoker: 'public', maxInstances: COACH_MAX_INSTANCES },
+  async (request) => {
   const uid = request.auth?.uid;
   if (!uid) {
     throw new HttpsError('unauthenticated', 'Must be signed in.');
@@ -301,7 +306,7 @@ export const getCoachContext = onCall({ invoker: 'public' }, async (request) => 
  * never appears in logs.
  */
 export const initializeCoachAccount = onCall(
-  { invoker: 'public' },
+  { invoker: 'public', maxInstances: COACH_MAX_INSTANCES },
   async (request): Promise<InitializeCoachAccountResponse> => {
     const uid = request.auth?.uid;
     if (!uid) {
@@ -397,7 +402,9 @@ const MAX_PLAYER_INVITES_PER_CALL = 60;
  * players submitted — see the report for why this is additive, not a break
  * of the frozen `invites` shape.
  */
-export const createPlayerInvites = onCall({ invoker: 'public' }, async (request) => {
+export const createPlayerInvites = onCall(
+  { invoker: 'public', maxInstances: COACH_MAX_INSTANCES },
+  async (request) => {
   const data = (request.data ?? {}) as Partial<CreatePlayerInvitesRequest>;
   const teamId = data.teamId;
   if (!teamId || typeof teamId !== 'string') {
@@ -510,7 +517,9 @@ export const createPlayerInvites = onCall({ invoker: 'public' }, async (request)
 // ─── getTeamInviteInfo / acceptTeamInvite ───────────────────────────────────
 
 /** Public: called before the player has an account, so it returns the bare minimum. */
-export const getTeamInviteInfo = onCall({ invoker: 'public' }, async (request) => {
+export const getTeamInviteInfo = onCall(
+  { invoker: 'public', maxInstances: COACH_MAX_INSTANCES },
+  async (request) => {
   const data = (request.data ?? {}) as Partial<GetTeamInviteInfoRequest>;
   const inviteId = data.inviteId;
   if (!inviteId || typeof inviteId !== 'string') {
@@ -541,7 +550,7 @@ export const getTeamInviteInfo = onCall({ invoker: 'public' }, async (request) =
  * access, or vice versa.
  */
 export const acceptTeamInvite = onCall(
-  { invoker: 'public' },
+  { invoker: 'public', maxInstances: COACH_MAX_INSTANCES },
   async (request): Promise<AcceptTeamInviteResponse> => {
     const uid = request.auth?.uid;
     if (!uid) {
@@ -648,7 +657,12 @@ function clampPromptCount(value: unknown): number {
  * how blog.ts handles AI JSON.
  */
 export const generateTeamPrompts = onCall(
-  { invoker: 'public', secrets: [anthropicKey], timeoutSeconds: 120 },
+  {
+    invoker: 'public',
+    secrets: [anthropicKey],
+    timeoutSeconds: 120,
+    maxInstances: COACH_MAX_INSTANCES,
+  },
   async (request) => {
     const data = (request.data ?? {}) as Partial<GenerateTeamPromptsRequest>;
     const teamId = data.teamId;
@@ -720,7 +734,9 @@ export const generateTeamPrompts = onCall(
 
 const MAX_MANUAL_PROMPT_LENGTH = 500;
 
-export const addManualPrompt = onCall({ invoker: 'public' }, async (request) => {
+export const addManualPrompt = onCall(
+  { invoker: 'public', maxInstances: COACH_MAX_INSTANCES },
+  async (request) => {
   const data = (request.data ?? {}) as Partial<AddManualPromptRequest>;
   const teamId = data.teamId;
   if (!teamId || typeof teamId !== 'string') {
@@ -757,7 +773,9 @@ export const addManualPrompt = onCall({ invoker: 'public' }, async (request) => 
   return response;
 });
 
-export const deletePrompt = onCall({ invoker: 'public' }, async (request) => {
+export const deletePrompt = onCall(
+  { invoker: 'public', maxInstances: COACH_MAX_INSTANCES },
+  async (request) => {
   const data = (request.data ?? {}) as Partial<DeletePromptRequest>;
   const teamId = data.teamId;
   if (!teamId || typeof teamId !== 'string') {
@@ -787,7 +805,9 @@ export const deletePrompt = onCall({ invoker: 'public' }, async (request) => {
  * contract. `promptText` is denormalized here (not read at request time by
  * the app) so the Flutter app needs only one document read per day.
  */
-export const assignTeamPrompt = onCall({ invoker: 'public' }, async (request) => {
+export const assignTeamPrompt = onCall(
+  { invoker: 'public', maxInstances: COACH_MAX_INSTANCES },
+  async (request) => {
   const data = (request.data ?? {}) as Partial<AssignTeamPromptRequest>;
   const teamId = data.teamId;
   if (!teamId || typeof teamId !== 'string') {
@@ -837,7 +857,9 @@ export const assignTeamPrompt = onCall({ invoker: 'public' }, async (request) =>
   return { ok: true };
 });
 
-export const unassignTeamPrompt = onCall({ invoker: 'public' }, async (request) => {
+export const unassignTeamPrompt = onCall(
+  { invoker: 'public', maxInstances: COACH_MAX_INSTANCES },
+  async (request) => {
   const data = (request.data ?? {}) as Partial<UnassignTeamPromptRequest>;
   const teamId = data.teamId;
   if (!teamId || typeof teamId !== 'string') {
@@ -883,7 +905,9 @@ export const unassignTeamPrompt = onCall({ invoker: 'public' }, async (request) 
  * field firestore.rules checks for team/schedule reads, so leaving it in
  * place would keep granting the removed player access.
  */
-export const removePlayer = onCall({ invoker: 'public' }, async (request) => {
+export const removePlayer = onCall(
+  { invoker: 'public', maxInstances: COACH_MAX_INSTANCES },
+  async (request) => {
   const data = (request.data ?? {}) as Partial<RemovePlayerRequest>;
   const teamId = data.teamId;
   if (!teamId || typeof teamId !== 'string') {
@@ -934,7 +958,9 @@ export const removePlayer = onCall({ invoker: 'public' }, async (request) => {
 
 // ─── Team settings ──────────────────────────────────────────────────────────
 
-export const updateTeamSettings = onCall({ invoker: 'public' }, async (request) => {
+export const updateTeamSettings = onCall(
+  { invoker: 'public', maxInstances: COACH_MAX_INSTANCES },
+  async (request) => {
   const data = (request.data ?? {}) as Partial<UpdateTeamSettingsRequest>;
   const teamId = data.teamId;
   if (!teamId || typeof teamId !== 'string') {

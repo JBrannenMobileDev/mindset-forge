@@ -15,6 +15,7 @@ import { createPlayerInvitesCallable, db, removePlayerCallable } from "@/lib/fir
 import { formatDayKey } from "@/lib/date-utils";
 import { formatCallableError } from "@/lib/errors";
 import type { CreatedPlayerInvite, CreatePlayerInvitesResponse, RosterStatus, TeamRosterDoc } from "@/lib/types";
+import { teamInviteLink } from "@/lib/types";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -469,6 +470,7 @@ function RosterPageContent() {
                 <TableHeaderCell>Email</TableHeaderCell>
                 <TableHeaderCell>Status</TableHeaderCell>
                 <TableHeaderCell>Last entry</TableHeaderCell>
+                <TableHeaderCell>Invite link</TableHeaderCell>
                 <TableHeaderCell>{null}</TableHeaderCell>
               </TableRow>
             </TableHead>
@@ -482,6 +484,21 @@ function RosterPageContent() {
                   </TableCell>
                   <TableCell className="text-text-secondary">
                     {formatDayKey(player.lastEntryAt, "No entries yet")}
+                  </TableCell>
+                  <TableCell>
+                    {player.status === "invited" ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() =>
+                          copyToClipboard(`roster-${player.playerId}`, teamInviteLink(player.inviteId))
+                        }
+                      >
+                        {copiedKey === `roster-${player.playerId}` ? "Copied!" : "Copy"}
+                      </Button>
+                    ) : (
+                      <span className="text-text-muted">—</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     {player.status !== "removed" && (
