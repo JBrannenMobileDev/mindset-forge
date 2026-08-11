@@ -195,7 +195,24 @@ async function daysSinceLastDraft(): Promise<number | null> {
   return (Date.now() - createdMs) / (1000 * 60 * 60 * 24);
 }
 
-function pickTopicSeed(existingTitles: string[]): (typeof BLOG_TOPIC_SEEDS)[number] {
+type TopicSeed = {
+  theme: string;
+  keywords: string[];
+  angle: string;
+};
+
+type PickedTopic = {
+  topic: TopicSeed;
+  inboxNotes?: string;
+  seedId?: string;
+};
+
+type DraftGenerationResult = {
+  post: BlogPostDoc;
+  consumedSeedId?: string;
+};
+
+function pickTopicSeed(existingTitles: string[]): TopicSeed {
   const lowerTitles = existingTitles.map((t) => t.toLowerCase());
   const unused = BLOG_TOPIC_SEEDS.filter(
     (seed) =>
@@ -209,12 +226,64 @@ function pickTopicSeed(existingTitles: string[]): (typeof BLOG_TOPIC_SEEDS)[numb
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+async function pickNextSeed(existingTitles: string[]): Promise<PickedTopic> {
+  const pendingSnap = await db
+    .collection('blog_seeds')
+    .where('status', '==', 'pending')
+    .orderBy('createdAt', 'asc')
+    .limit(1)
+    .get();
+
+  if (!pendingSnap.empty) {
+    const doc = pendingSnap.docs[0];
+    const data = doc.data();
+    const theme =
+      typeof data.theme === 'string' ? data.theme.trim() : '';
+    if (theme) {
+      const notes =
+        typeof data.notes === 'string' ? data.notes.trim() : undefined;
+      return {
+        topic: {
+          theme,
+          keywords: [],
+          angle: `Write a practical, honest post about ${theme}`,
+        },
+        inboxNotes: notes || undefined,
+        seedId: doc.id,
+      };
+    }
+  }
+
+  return { topic: pickTopicSeed(existingTitles) };
+}
+
+function mergeSeedNotes(
+  inboxNotes?: string,
+  callerNotes?: string,
+): string | undefined {
+  const parts = [inboxNotes?.trim(), callerNotes?.trim()].filter(Boolean);
+  return parts.length > 0 ? parts.join('\n\n') : undefined;
+}
+
+async function markSeedUsed(seedId: string, postSlug: string): Promise<void> {
+  await db.collection('blog_seeds').doc(seedId).update({
+    status: 'used',
+    usedAt: new Date().toISOString(),
+    usedForPostSlug: postSlug,
+  });
+}
+
 async function generateBlogDraftInternal(
   apiKey: string,
   seedNotes?: string,
-): Promise<BlogPostDoc> {
+  options?: { skipInbox?: boolean },
+): Promise<DraftGenerationResult> {
   const existingTitles = await listExistingBlogTitles();
-  const topic = pickTopicSeed(existingTitles);
+  const picked = options?.skipInbox
+    ? { topic: pickTopicSeed(existingTitles) }
+    : await pickNextSeed(existingTitles);
+  const topic = picked.topic;
+  const mergedNotes = mergeSeedNotes(picked.inboxNotes, seedNotes);
 
   const ideaPrompt =
     `Pick ONE blog post topic for MindsetForge that would help with SEO and AI search visibility.\n`
@@ -249,8 +318,8 @@ async function generateBlogDraftInternal(
     // Fall back to seed topic if idea JSON fails.
   }
 
-  const seedBlock = seedNotes?.trim()
-    ? `\nREAL EXPERIENCE TO WEAVE IN (priority, use specifically):\n${seedNotes.trim()}\n`
+  const seedBlock = mergedNotes
+    ? `\nREAL EXPERIENCE TO WEAVE IN (priority, use specifically):\n${mergedNotes}\n`
     : '';
 
   const draftPrompt =
@@ -284,7 +353,7 @@ async function generateBlogDraftInternal(
 
   const slug = await uniqueSlugForTitle(parsed.title);
   const now = new Date().toISOString();
-  return {
+  const post: BlogPostDoc = {
     slug,
     title: parsed.title,
     metaDescription: parsed.metaDescription,
@@ -298,16 +367,37 @@ async function generateBlogDraftInternal(
     faq: parsed.faq,
     heroImagePrompt: parsed.heroImagePrompt,
     status: 'draft',
-    seedNotes: seedNotes?.trim() || undefined,
+    seedNotes: mergedNotes || undefined,
     editedByHuman: false,
     generatedByModel: BLOG_GENERATION_MODEL,
     createdAt: now,
     updatedAt: now,
   };
+
+  return {
+    post,
+    consumedSeedId: picked.seedId,
+  };
+}
+
+/** Firestore rejects explicit undefined field values. */
+function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
+  const cleaned = { ...obj };
+  for (const key of Object.keys(cleaned)) {
+    if (cleaned[key] === undefined) {
+      delete cleaned[key];
+    }
+  }
+  return cleaned;
 }
 
 async function saveBlogDraft(post: BlogPostDoc): Promise<void> {
-  await db.collection('blog_posts').doc(post.slug).set(post, { merge: false });
+  await db
+    .collection('blog_posts')
+    .doc(post.slug)
+    .set(stripUndefined(post as unknown as Record<string, unknown>), {
+      merge: false,
+    });
 }
 
 async function dispatchBlogPublish(slug: string, token: string): Promise<void> {
@@ -372,8 +462,11 @@ export const generateBlogDraft = onSchedule(
 
     try {
       const apiKey = anthropicKey.value().trim();
-      const post = await generateBlogDraftInternal(apiKey);
+      const { post, consumedSeedId } = await generateBlogDraftInternal(apiKey);
       await saveBlogDraft(post);
+      if (consumedSeedId) {
+        await markSeedUsed(consumedSeedId, post.slug);
+      }
       console.log(`generateBlogDraft: created draft "${post.slug}"`);
     } catch (err) {
       console.error('generateBlogDraft failed:', err);
@@ -381,9 +474,16 @@ export const generateBlogDraft = onSchedule(
   },
 );
 
+const BLOG_CALLABLE_OPTIONS = {
+  secrets: [anthropicKey],
+  invoker: 'public' as const,
+  timeoutSeconds: 300,
+  memory: '512MiB' as const,
+};
+
 /** Admin callable: manually generate a draft, optionally with seed notes. */
 export const createBlogDraft = onCall(
-  { secrets: [anthropicKey], invoker: 'public' },
+  BLOG_CALLABLE_OPTIONS,
   async (request) => {
     await assertBlogAdmin(request.auth?.uid);
 
@@ -394,8 +494,14 @@ export const createBlogDraft = onCall(
 
     try {
       const apiKey = anthropicKey.value().trim();
-      const post = await generateBlogDraftInternal(apiKey, seedNotes);
+      const { post, consumedSeedId } = await generateBlogDraftInternal(
+        apiKey,
+        seedNotes,
+      );
       await saveBlogDraft(post);
+      if (consumedSeedId) {
+        await markSeedUsed(consumedSeedId, post.slug);
+      }
       return { slug: post.slug, title: post.title };
     } catch (err) {
       console.error('createBlogDraft failed:', err);
@@ -406,7 +512,7 @@ export const createBlogDraft = onCall(
 
 /** Admin callable: re-run generation for an existing draft slug. */
 export const regenerateBlogDraft = onCall(
-  { secrets: [anthropicKey], invoker: 'public' },
+  BLOG_CALLABLE_OPTIONS,
   async (request) => {
     await assertBlogAdmin(request.auth?.uid);
 
@@ -433,7 +539,11 @@ export const regenerateBlogDraft = onCall(
     const notes = seedNotes ?? data.seedNotes;
     try {
       const apiKey = anthropicKey.value().trim();
-      const generated = await generateBlogDraftInternal(apiKey, notes);
+      const { post: generated } = await generateBlogDraftInternal(
+        apiKey,
+        notes,
+        { skipInbox: true },
+      );
       const now = new Date().toISOString();
       const updated: BlogPostDoc = {
         ...generated,
@@ -444,7 +554,12 @@ export const regenerateBlogDraft = onCall(
         createdAt: data.createdAt,
         updatedAt: now,
       };
-      await db.collection('blog_posts').doc(slug).set(updated, { merge: false });
+      await db
+        .collection('blog_posts')
+        .doc(slug)
+        .set(stripUndefined(updated as unknown as Record<string, unknown>), {
+          merge: false,
+        });
       return { slug, title: updated.title };
     } catch (err) {
       console.error('regenerateBlogDraft failed:', err);
