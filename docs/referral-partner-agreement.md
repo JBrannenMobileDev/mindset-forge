@@ -8,7 +8,7 @@ until a qualified lawyer in the governing jurisdiction has reviewed and revised 
 legal or tax advice to either party.
 
 **Parties:** Jonathan Brannen, operating MindsetForge (the "Founder" or "Company") and
-[PARTNER LEGAL NAME], publicly known as [PARTNER HANDLE / DISPLAY NAME] (the "Partner").
+[PARTNER LEGAL NAME], publicly known as Wes Lowery (the "Partner").
 
 **Effective date:** [EFFECTIVE DATE]
 
@@ -192,7 +192,7 @@ so does not change the principle in 4.1.
 5.1 **Definition of Referred Subscriber.** A user is a Referred Subscriber if **either** of the
 following is true:
 
-(a) the user selects [PARTNER HANDLE / DISPLAY NAME] in response to the in-app "Who sent you?"
+(a) the user selects "Wes Lowery" in response to the in-app "Who sent you?"
 question shown during onboarding; **or**
 
 (b) the Google Play Install Referrer data for that install identifies the Partner's campaign.
@@ -583,7 +583,7 @@ Date: ______________________
 **Partner**
 
 Name: [PARTNER LEGAL NAME]
-Publicly known as: [PARTNER HANDLE / DISPLAY NAME]
+Publicly known as: Wes Lowery
 Signature: ______________________
 Date: ______________________
 
@@ -595,8 +595,7 @@ Every item below must be resolved before signature.
 
 | Placeholder | What is needed |
 |---|---|
-| `[PARTNER LEGAL NAME]` | Partner's full legal name, or the name of the entity that will contract and be paid |
-| `[PARTNER HANDLE / DISPLAY NAME]` | The handle or display name shown in the in-app "Who sent you?" list, so clause 5.1 matches what users actually see |
+| `[PARTNER LEGAL NAME]` | Wes Lowery's full legal name, or the name of the entity that will contract and be paid. Left open because influencers frequently contract through an LLC, and the W-9 in clause 13 must match whoever is actually paid |
 | `[EFFECTIVE DATE]` | Date the agreement takes effect |
 | `[GOVERNING LAW JURISDICTION]` | State or country whose law governs, used in clauses 17.1 and 17.2 |
 | `[MINIMUM PAYOUT THRESHOLD]` | Dollar amount below which commission carries forward instead of being paid (clause 7.3) |
