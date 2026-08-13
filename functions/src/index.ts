@@ -18,6 +18,7 @@ import {
   recordReferralCommission,
   type RevenueCatEvent,
 } from './referrals';
+import { SCHEDULED_MAX_INSTANCES } from './runtime';
 
 admin.initializeApp();
 
@@ -983,7 +984,7 @@ export const revenueCatWebhook = onRequest(
  * this is safe to re-run.
  */
 export const referralStatementRollup = onSchedule(
-  { schedule: '0 9 3 * *', timeZone: 'UTC' },
+  { schedule: '0 9 3 * *', timeZone: 'UTC', maxInstances: SCHEDULED_MAX_INSTANCES },
   async () => {
     const month = previousMonthKey();
     try {
@@ -2472,7 +2473,12 @@ async function maybeRecalculateBlueprint(
 }
 
 export const weeklyInsightDelivery = onSchedule(
-  { schedule: '0 * * * *', secrets: [anthropicKey], timeoutSeconds: 540 },
+  {
+    schedule: '0 * * * *',
+    secrets: [anthropicKey],
+    timeoutSeconds: 540,
+    maxInstances: SCHEDULED_MAX_INSTANCES,
+  },
   async () => {
     const now = new Date();
     const apiKey = anthropicKey.value().trim();
@@ -2610,7 +2616,12 @@ function lifecycleTierForDays(days: number): number {
  * per tier (day 3/7/14/30), never daily spam.
  */
 export const lowActivityAlert = onSchedule(
-  { schedule: '0 10 * * *', secrets: [anthropicKey], timeoutSeconds: 540 },
+  {
+    schedule: '0 10 * * *',
+    secrets: [anthropicKey],
+    timeoutSeconds: 540,
+    maxInstances: SCHEDULED_MAX_INSTANCES,
+  },
   async () => {
     const now = Date.now();
     const threeDaysAgo = new Date(now - 3 * 86400000).toISOString();
@@ -2702,7 +2713,7 @@ Make it personal, not generic. No guilt-tripping. Just a warm reminder of who th
 const STREAK_MILESTONES = [7, 14, 30, 50, 100, 200, 365];
 
 export const partnerAccountabilityDaily = onSchedule(
-  { schedule: '0 1 * * *', timeoutSeconds: 540 },
+  { schedule: '0 1 * * *', timeoutSeconds: 540, maxInstances: SCHEDULED_MAX_INSTANCES },
   async () => {
     const now = new Date();
     const nowMs = now.getTime();
@@ -2829,7 +2840,7 @@ async function notifyPartners(
  * loop without daily pings.
  */
 export const weeklyPartnerDigest = onSchedule(
-  { schedule: '0 16 * * 0', timeoutSeconds: 540 },
+  { schedule: '0 16 * * 0', timeoutSeconds: 540, maxInstances: SCHEDULED_MAX_INSTANCES },
   async () => {
     const nowMs = Date.now();
 
@@ -3566,7 +3577,12 @@ function callbackCooldownElapsed(
  * user's daily AI limit.
  */
 export const callbackDelivery = onSchedule(
-  { schedule: '0 * * * *', secrets: [anthropicKey], timeoutSeconds: 540 },
+  {
+    schedule: '0 * * * *',
+    secrets: [anthropicKey],
+    timeoutSeconds: 540,
+    maxInstances: SCHEDULED_MAX_INSTANCES,
+  },
   async () => {
     const now = new Date();
     const nowMs = now.getTime();

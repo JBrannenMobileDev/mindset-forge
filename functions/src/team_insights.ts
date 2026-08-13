@@ -52,6 +52,7 @@ import {
   type TeamReportWatchItem,
   type TeamRosterDoc,
 } from './coach_types';
+import { SCHEDULED_MAX_INSTANCES } from './runtime';
 
 const anthropicKey = defineSecret('ANTHROPIC_API_KEY');
 
@@ -1064,7 +1065,12 @@ function isTeamActive(team: TeamDoc, nowMs: number): boolean {
  * report, matching `weeklyInsightDelivery` and `weeklyPartnerDigest`.
  */
 export const weeklyTeamReport = onSchedule(
-  { schedule: '0 18 * * 0', secrets: [anthropicKey], timeoutSeconds: 540 },
+  {
+    schedule: '0 18 * * 0',
+    secrets: [anthropicKey],
+    timeoutSeconds: 540,
+    maxInstances: SCHEDULED_MAX_INSTANCES,
+  },
   async () => {
     const now = new Date();
     const nowMs = now.getTime();

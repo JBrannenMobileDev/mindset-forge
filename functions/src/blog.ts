@@ -13,6 +13,7 @@ import {
   GITHUB_BLOG_DISPATCH_EVENT,
   GITHUB_BLOG_REPO,
 } from './blog_config';
+import { SCHEDULED_MAX_INSTANCES } from './runtime';
 
 const anthropicKey = defineSecret('ANTHROPIC_API_KEY');
 const githubDispatchToken = defineSecret('GITHUB_DISPATCH_TOKEN');
@@ -432,6 +433,7 @@ export const generateBlogDraft = onSchedule(
     timeZone: 'America/Los_Angeles',
     secrets: [anthropicKey],
     timeoutSeconds: 540,
+    maxInstances: SCHEDULED_MAX_INSTANCES,
   },
   async () => {
     if (Math.random() > BLOG_DRAFT_PROBABILITY) {
