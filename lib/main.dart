@@ -24,6 +24,7 @@ import 'core/services/consent_service.dart';
 import 'core/services/deep_link_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/pending_invite_store.dart';
+import 'core/services/pending_referral_store.dart';
 import 'core/services/widget_sync_service.dart';
 import 'core/theme/app_system_chrome.dart';
 import 'core/theme/app_theme.dart';
@@ -206,6 +207,9 @@ class _InitAppState extends State<_InitApp> {
     // on auth itself. Failures are logged (and forwarded to Crashlytics) so the
     // offending step is identifiable instead of silently hanging.
     await _guardStartupStep('pendingInvite', PendingInviteStore.load);
+    // Must precede the RevenueCat step, which forwards any resolved source on
+    // as a subscriber attribute.
+    await _guardStartupStep('pendingReferral', _loadPendingReferral);
     await _guardStartupStep('consent', ConsentService.load);
     await _guardStartupStep(
       'appVersionGate',
@@ -246,6 +250,11 @@ class _InitAppState extends State<_InitApp> {
     }
   }
 
+  Future<void> _loadPendingReferral() async {
+    await PendingReferralStore.load();
+    await PendingReferralStore.resolveInstallReferrer();
+  }
+
   Future<void> _initRevenueCat() async {
     if (kIsWeb) return; // RevenueCat doesn't support web
     final apiKey = Platform.isIOS ? _revenueCatApiKeyIos : _revenueCatApiKeyAndroid;
@@ -260,6 +269,13 @@ class _InitAppState extends State<_InitApp> {
       // Collect Apple Search Ads install attribution token (AdServices API) and
       // send to RevenueCat. Standard attribution does not require ATT consent.
       await Purchases.enableAdServicesAttributionTokenCollection();
+      // Forward a deterministic Android install referrer immediately, so
+      // partner attribution rides into purchase webhooks even if the user
+      // never reaches the onboarding question.
+      final pendingSource = PendingReferralStore.source;
+      if (pendingSource != null && pendingSource.isNotEmpty) {
+        await Purchases.setAttributes({'referral_source': pendingSource});
+      }
       _syncRevenueCatIdentity();
       // Reconcile Firestore whenever RevenueCat's view of the customer changes
       // (purchase, restore, renewal, expiration, app foreground). Keeps the

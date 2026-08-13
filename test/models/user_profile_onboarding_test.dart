@@ -36,8 +36,23 @@ void main() {
       expect(profile(onboardingStep: 6).hasCompletedOnboarding, isFalse);
     });
 
-    test('new user finishing with step 7 is complete', () {
-      expect(profile(onboardingStep: 7).hasCompletedOnboarding, isTrue);
+    test('legacy completed user with step 7 and summary is complete', () {
+      expect(
+        profile(onboardingStep: 7, mindsetBlueprintSummary: 'summary')
+            .hasCompletedOnboarding,
+        isTrue,
+      );
+    });
+
+    // Regression: the 8-step flow saves step 7 on *arriving* at the AI summary
+    // screen. Reading that as complete would let the router bounce the user to
+    // the dashboard before they ever finished onboarding.
+    test('new user mid-flow on step 7 without summary is incomplete', () {
+      expect(profile(onboardingStep: 7).hasCompletedOnboarding, isFalse);
+    });
+
+    test('new user finishing with step 8 is complete', () {
+      expect(profile(onboardingStep: 8).hasCompletedOnboarding, isTrue);
     });
   });
 }

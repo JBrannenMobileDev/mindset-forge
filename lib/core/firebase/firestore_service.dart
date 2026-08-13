@@ -4,6 +4,7 @@ import '../../models/journal_entry.dart';
 import '../../models/chat_session.dart';
 import '../../models/chat_message.dart';
 import '../../models/app_version_config.dart';
+import '../../models/attribution_source.dart';
 import '../../models/team_daily_prompt.dart';
 
 class FirestoreService {
@@ -134,5 +135,26 @@ class FirestoreService {
     final snap = await _db.collection('app_config').doc('version').get();
     if (!snap.exists || snap.data() == null) return const AppVersionConfig();
     return AppVersionConfig.fromJson(snap.data()!);
+  }
+
+  // ─── AttributionSource ────────────────────────────────────────────────────
+
+  /// Reads the onboarding attribution options from
+  /// `app_config/attribution_sources`, shaped as `{ sources: [{id, label}] }`.
+  ///
+  /// Returns an empty list when the doc is missing, malformed, or unreadable so
+  /// the caller can fall back to the built-in defaults. This must never throw
+  /// or block: attribution is nice to have, and onboarding has to proceed
+  /// regardless.
+  Future<List<AttributionSource>> getAttributionSources() async {
+    final snap =
+        await _db.collection('app_config').doc('attribution_sources').get();
+    final raw = snap.data()?['sources'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(AttributionSource.fromJson)
+        .where((s) => s.isValid)
+        .toList();
   }
 }

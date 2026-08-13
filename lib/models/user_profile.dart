@@ -40,6 +40,25 @@ class UserProfile {
   /// player accepts a coach invite. Null for every self-serve account, which is
   /// the single gate for all team behavior in the app.
   final String? teamId;
+
+  /// Marketing attribution: which source the user says brought them here,
+  /// captured by the single-tap question during onboarding. Matches an id from
+  /// the `attribution_sources` config (e.g. `partner_john`, `instagram`).
+  ///
+  /// The app stores sever the link between a marketing click and the install,
+  /// so this is self-reported on iOS and therefore undercounts. On Android the
+  /// Play Install Referrer supplies it deterministically instead.
+  final String? referralSource;
+
+  /// Raw Play Install Referrer string when Android supplied one. Kept verbatim
+  /// alongside [referralSource] so a disagreement between the deterministic
+  /// referrer and the user's self-report stays visible rather than being
+  /// silently overwritten.
+  final String? referralSourceDetail;
+
+  /// ISO timestamp of when [referralSource] was first recorded.
+  final String? referredAt;
+
   final int onboardingStep;
   final MindsetBlueprint mindsetBlueprint;
   final MindsetBlueprint originalMindsetBaseline;
@@ -174,6 +193,9 @@ class UserProfile {
     this.subscriptionExpiresAt,
     this.premiumUntil,
     this.teamId,
+    this.referralSource,
+    this.referralSourceDetail,
+    this.referredAt,
     this.onboardingStep = 0,
     required this.mindsetBlueprint,
     required this.originalMindsetBaseline,
@@ -332,19 +354,28 @@ class UserProfile {
     return null;
   }
 
-  /// Onboarding has 7 steps (0–6): Welcome, Goals Select, Goals Focus,
-  /// Identity, AI Consent, Blocker, AI Analysis. It is only complete once
-  /// [onboardingStep] reaches the total set on the final step. Deferred
+  /// Onboarding has 8 steps (0–7): Welcome, Attribution, Goals Select, Goals
+  /// Focus, Identity, AI Consent, Blocker, AI Analysis. It is only complete
+  /// once [onboardingStep] reaches the total set on the final step. Deferred
   /// mindset data (blueprint, toughness, fears) is collected in-app afterwards
   /// and tracked separately via [blueprintCompleted].
   ///
-  /// Legacy 5-step onboarding (pre-consent-step) stored completion as
-  /// [onboardingStep] == 5 with a populated [mindsetBlueprintSummary]. The
-  /// current flow also saves step index 6 mid-flow on the AI summary screen,
-  /// but those users lack a summary until they finish.
+  /// Two legacy shapes are still honoured, both disambiguated by a populated
+  /// [mindsetBlueprintSummary] (written only on successful completion):
+  ///
+  /// - The 5-step flow (pre-consent-step) stored completion as step 5.
+  /// - The 7-step flow (pre-attribution-step) stored completion as step 7.
+  ///
+  /// The summary guard matters because the current 8-step flow also *saves*
+  /// step 7 mid-flow when the user lands on the AI summary screen. Without it,
+  /// reaching that screen would read as complete and the router would eject
+  /// the user to the dashboard before they finished.
   bool get hasCompletedOnboarding {
-    if (onboardingStep >= 7) return true;
-    if (onboardingStep == 5 && mindsetBlueprintSummary.isNotEmpty) return true;
+    if (onboardingStep >= 8) return true;
+    if ((onboardingStep == 7 || onboardingStep == 5) &&
+        mindsetBlueprintSummary.isNotEmpty) {
+      return true;
+    }
     return false;
   }
 
@@ -442,6 +473,9 @@ class UserProfile {
     DateTime? subscriptionExpiresAt,
     String? premiumUntil,
     String? teamId,
+    String? referralSource,
+    String? referralSourceDetail,
+    String? referredAt,
     int? onboardingStep,
     MindsetBlueprint? mindsetBlueprint,
     MindsetBlueprint? originalMindsetBaseline,
@@ -519,6 +553,9 @@ class UserProfile {
           subscriptionExpiresAt ?? this.subscriptionExpiresAt,
       premiumUntil: premiumUntil ?? this.premiumUntil,
       teamId: teamId ?? this.teamId,
+      referralSource: referralSource ?? this.referralSource,
+      referralSourceDetail: referralSourceDetail ?? this.referralSourceDetail,
+      referredAt: referredAt ?? this.referredAt,
       onboardingStep: onboardingStep ?? this.onboardingStep,
       mindsetBlueprint: mindsetBlueprint ?? this.mindsetBlueprint,
       originalMindsetBaseline:
@@ -629,6 +666,9 @@ class UserProfile {
           DateTime.tryParse(json['subscriptionExpiresAt'] as String? ?? ''),
       premiumUntil: json['premiumUntil'] as String?,
       teamId: json['teamId'] as String?,
+      referralSource: json['referralSource'] as String?,
+      referralSourceDetail: json['referralSourceDetail'] as String?,
+      referredAt: json['referredAt'] as String?,
       onboardingStep: (json['onboardingStep'] as num?)?.toInt() ?? 0,
       mindsetBlueprint: json['mindsetBlueprint'] != null
           ? MindsetBlueprint.fromJson(
@@ -829,6 +869,12 @@ class UserProfile {
         // Omitted when null so a merge write from a client that predates the
         // server setting this field can never clear a player's team.
         if (teamId != null) 'teamId': teamId,
+        // Write-once attribution. Omitted when null for the same reason as
+        // teamId: a full-profile merge must never blank out a recorded source.
+        if (referralSource != null) 'referralSource': referralSource,
+        if (referralSourceDetail != null)
+          'referralSourceDetail': referralSourceDetail,
+        if (referredAt != null) 'referredAt': referredAt,
         'onboardingStep': onboardingStep,
         'mindsetBlueprint': mindsetBlueprint.toJson(),
         'originalMindsetBaseline': originalMindsetBaseline.toJson(),

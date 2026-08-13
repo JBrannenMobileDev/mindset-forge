@@ -316,6 +316,22 @@ abstract final class AppStrings {
   static const String onboardingBlockerLoading = 'Reading your profile...';
   static const String onboardingBlockerCustomHint = 'Add your own...';
 
+  // Onboarding — attribution ("who sent you", single tap)
+  static const String onboardingAttributionTitle = 'How did you hear about us?';
+  static const String onboardingAttributionSubtitle =
+      'One tap, and we know which recommendations are actually reaching people.';
+
+  // Default attribution options. The live list is served from
+  // `app_config/attribution_sources` so partners can be added without an app
+  // release; these are the offline fallback.
+  static const String attributionSourceInstagram = 'Instagram';
+  static const String attributionSourceTiktok = 'TikTok';
+  static const String attributionSourceYoutube = 'YouTube';
+  static const String attributionSourcePodcast = 'A podcast';
+  static const String attributionSourceFriend = 'A friend or family member';
+  static const String attributionSourceSearch = 'App Store search';
+  static const String attributionSourceOther = 'Somewhere else';
+
   // Onboarding — wide-screen companion panel recap
   static const String onboardingRecapGoalsLabel = 'YOUR GOALS';
   static const String onboardingRecapIdentityLabel = 'WHO YOU\'RE BECOMING';

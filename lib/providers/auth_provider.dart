@@ -47,21 +47,30 @@ Future<void> migrateBlueprintCalibrationStart(
   }
 }
 
-/// One-time silent migration: legacy completed users stored [onboardingStep] 5
-/// under the old 5-step flow. Bump to 7 (current total step count) so
-/// Firestore matches the new schema and [UserProfile.hasCompletedOnboarding]
-/// continues to read them as complete. These users already completed
-/// onboarding under the account-creation-time Terms/Privacy agreement, so
-/// they are not retroactively routed through the new AI consent step.
+/// One-time silent migration: completed users from earlier onboarding flows
+/// stored [onboardingStep] 5 (5-step flow) or 7 (7-step flow, pre-attribution).
+/// Bump both to 8 (current total step count) so Firestore matches the schema
+/// and [UserProfile.hasCompletedOnboarding] keeps reading them as complete
+/// without relying on the legacy fallbacks. These users already completed
+/// onboarding under the account-creation-time Terms/Privacy agreement, so they
+/// are not retroactively routed through the AI consent or attribution steps.
+///
+/// A populated [mindsetBlueprintSummary] is the completion marker: it is
+/// written only when onboarding finishes. That guard is what keeps this from
+/// catching a current-flow user who has merely *reached* step 7 (the AI summary
+/// screen) but not yet finished it.
+const _kOnboardingTotalSteps = 8;
+
 Future<void> migrateLegacyOnboardingStep(
   FirestoreService firestore,
   UserProfile profile,
   String uid,
 ) async {
-  if (profile.onboardingStep != 5) return;
+  if (profile.onboardingStep != 5 && profile.onboardingStep != 7) return;
   if (profile.mindsetBlueprintSummary.isEmpty) return;
   try {
-    await firestore.updateUserField(uid, {'onboardingStep': 7});
+    await firestore
+        .updateUserField(uid, {'onboardingStep': _kOnboardingTotalSteps});
   } catch (e) {
     debugPrint('migrateLegacyOnboardingStep failed: $e');
   }

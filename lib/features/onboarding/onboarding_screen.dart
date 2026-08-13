@@ -17,6 +17,7 @@ import '../../providers/auth_notifier.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/notification_provider.dart';
 import '../../providers/invite_prompt_provider.dart';
+import '../../core/services/pending_referral_store.dart';
 import '../../core/utils/breakpoints.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/brand_backdrop.dart';
@@ -24,6 +25,7 @@ import '../../core/widgets/glass_pane.dart';
 import '../../core/widgets/widget_education_sheet.dart';
 import 'widgets/onboarding_companion_panel.dart';
 import 'steps/step_welcome.dart';
+import 'steps/step_attribution.dart';
 import 'steps/step_goals_select.dart';
 import 'steps/step_goals_focus.dart';
 import 'steps/step_identity.dart';
@@ -41,14 +43,22 @@ import 'steps/step_ai_summary.dart';
 /// The AI Consent step sits before Blocker (the first step that calls the AI
 /// provider) so explicit consent is always obtained before any user data is
 /// sent to our third-party AI provider (Anthropic).
+///
+/// Attribution sits second, while the user still remembers what brought them
+/// here and before they have invested any effort worth interrupting.
+///
+/// Changing this order is not free: [UserProfile.hasCompletedOnboarding],
+/// [AnalyticsService] step names and [OnboardingCompanionPanel] all index off
+/// these values and must be updated in lockstep.
 const _kStepWelcome = 0;
-const _kStepGoalsSelect = 1;
-const _kStepGoalsFocus = 2;
-const _kStepIdentity = 3;
-const _kStepAiConsent = 4;
-const _kStepBlocker = 5;
-const _kStepAiAnalysis = 6;
-const _kTotalSteps = 7;
+const _kStepAttribution = 1;
+const _kStepGoalsSelect = 2;
+const _kStepGoalsFocus = 3;
+const _kStepIdentity = 4;
+const _kStepAiConsent = 5;
+const _kStepBlocker = 6;
+const _kStepAiAnalysis = 7;
+const _kTotalSteps = 8;
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -74,6 +84,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   List<String> _limitingBeliefs = [];
   final List<String> _fearsDrift = [];
   String _mindsetBlueprintSummary = '';
+  String? _referralSource;
+
+  /// Deterministic attribution resolved before signup (Android Play Install
+  /// Referrer). Pre-selects the attribution step and is persisted verbatim so
+  /// a self-report that contradicts it stays visible.
+  String? _pendingReferralDetail;
 
   @override
   void initState() {
@@ -105,6 +121,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     _identityQualities = List.from(profile.identityQualities);
     _limitingBeliefs = List.from(profile.limitingBeliefs);
     _identityStatement = profile.identityStatement;
+    // An answer already given wins over the install referrer, so a user
+    // returning mid-flow sees their own choice rather than having it reset.
+    _referralSource = profile.referralSource ?? PendingReferralStore.source;
+    _pendingReferralDetail =
+        profile.referralSourceDetail ?? PendingReferralStore.detail;
 
     if (profile.onboardingStep > 0) {
       final step = profile.onboardingStep.clamp(0, _kTotalSteps - 1);
@@ -313,19 +334,30 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         physics: const NeverScrollableScrollPhysics(),
         children: [
           // Step 0 — Welcome
-          StepWelcome(onNext: () => _goToStep(_kStepGoalsSelect)),
+          StepWelcome(onNext: () => _goToStep(_kStepAttribution)),
 
-          // Step 1 — Goals: select
+          // Step 1 — Attribution ("how did you hear about us")
+          StepAttribution(
+            initialSourceId: _referralSource,
+            sourceDetail: _pendingReferralDetail,
+            onNext: (sourceId) {
+              _referralSource = sourceId;
+              _goToStep(_kStepGoalsSelect);
+            },
+            onBack: () => _goToStep(_kStepWelcome),
+          ),
+
+          // Step 2 — Goals: select
           StepGoalsSelect(
             initial: _goals,
             onNext: (goals) {
               _goals = goals;
               _goToStep(_kStepGoalsFocus);
             },
-            onBack: () => _goToStep(_kStepWelcome),
+            onBack: () => _goToStep(_kStepAttribution),
           ),
 
-          // Step 2 — Goals: focus (#1 + why)
+          // Step 3 — Goals: focus (#1 + why)
           StepGoalsFocus(
             goals: _goals,
             initialPrimaryGoalId: _primaryGoalId,
@@ -338,7 +370,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             onChangeGoals: () => _goToStep(_kStepGoalsSelect),
           ),
 
-          // Step 3 — Identity inputs (situation + qualities)
+          // Step 4 — Identity inputs (situation + qualities)
           StepIdentity(
             initialSituation: _identitySituation,
             initialQualities: _identityQualities,
@@ -350,14 +382,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             onBack: () => _goToStep(_kStepGoalsFocus),
           ),
 
-          // Step 4 — Explicit AI data-sharing consent, required before the
+          // Step 5 — Explicit AI data-sharing consent, required before the
           // first AI call (Blocker, next).
           StepAiConsent(
             onNext: _acceptAiConsentAndContinue,
             onBack: () => _goToStep(_kStepIdentity),
           ),
 
-          // Step 5 — Blocker (AI-inferred limiting beliefs)
+          // Step 6 — Blocker (AI-inferred limiting beliefs)
           StepBlocker(
             identitySituation: _identitySituation,
             identityQualities: _identityQualities,
@@ -370,7 +402,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             onBack: () => _goToStep(_kStepAiConsent),
           ),
 
-          // Step 6 — Merged reveal (identity statement + analysis)
+          // Step 7 — Merged reveal (identity statement + analysis)
           StepAiSummary(
             blueprint: _blueprint,
             limitingBeliefs: _limitingBeliefs,
