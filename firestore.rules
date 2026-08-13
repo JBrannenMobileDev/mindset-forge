@@ -63,6 +63,21 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Referral commission ledger, partner rate config, and payout statements.
+    // Entirely server-side: written by the RevenueCat webhook and the monthly
+    // rollup via the Admin SDK, which bypasses these rules. Clients get nothing.
+    // Partner rates in particular decide real payments, so letting a client
+    // write them would turn a self-reported attribution answer into money.
+    match /referral_commissions/{docId} {
+      allow read, write: if false;
+    }
+    match /referral_partners/{partnerId} {
+      allow read, write: if false;
+    }
+    match /referral_payouts/{docId} {
+      allow read, write: if false;
+    }
+
     // Onboarding attribution options ("How did you hear about us?"). Read by
     // signed-in users during onboarding. Write stays server-only so the
     // partner list cannot be tampered with from a client. Nothing sensitive

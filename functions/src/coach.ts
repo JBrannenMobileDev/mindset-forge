@@ -375,7 +375,12 @@ export const initializeCoachAccount = onCall(
       displayName: coachName,
       userType: 'coach',
       teamId,
-      onboardingStep: 7,
+      // Marks onboarding as already complete so coaches land straight in the
+      // portal. Must equal the Flutter app's total step count, which
+      // UserProfile.hasCompletedOnboarding checks with `>= 8`. Coach docs have
+      // no mindsetBlueprintSummary, so a stale lower value would fail the
+      // legacy fallbacks and trap them in the onboarding flow.
+      onboardingStep: 8,
       subscriptionStatus: 'free',
       createdAt: now,
     };

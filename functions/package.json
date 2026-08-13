@@ -4,7 +4,8 @@
     "build": "tsc",
     "serve": "npm run build && firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
-    "lint": "eslint --ext .js,.ts ."
+    "lint": "eslint --ext .js,.ts .",
+    "verify:referrals": "npm run build && node scripts/verify_referrals.js"
   },
   "engines": {
     "node": "22"

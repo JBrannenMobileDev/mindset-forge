@@ -12,6 +12,12 @@ import {
   MINDSET_PROGRESS_DEFAULTS,
   type MindsetProgressConfig,
 } from './mindset_progress';
+import {
+  buildMonthlyStatements,
+  previousMonthKey,
+  recordReferralCommission,
+  type RevenueCatEvent,
+} from './referrals';
 
 admin.initializeApp();
 
@@ -60,6 +66,16 @@ const DAILY_AI_CALL_LIMIT_SUBSCRIBER = 300;
 // they accept an invite. Long enough to build a daily habit before the limited
 // tier kicks in.
 const PARTNER_GIFT_PREMIUM_DAYS = 14;
+
+// Minimum onboarding step before a user is eligible for scheduled coaching
+// outreach (weekly insights, digests, callbacks). Set to the Blocker step, so
+// everyone included has goals, identity inputs and limiting beliefs on file.
+//
+// This indexes off the step order in the Flutter app's onboarding_screen.dart.
+// Bump it if steps are ever reordered again: the value silently changes meaning
+// rather than failing, which is how it drifted when the attribution step was
+// inserted and pushed every later step up by one.
+const MIN_ONBOARDING_STEP_FOR_OUTREACH = 6;
 
 function dailyAiLimitForUser(data: {
   subscriptionStatus?: string;
@@ -843,17 +859,13 @@ export const revenueCatWebhook = onRequest(
     return;
   }
 
-  const event = req.body.event as {
+  const event = req.body.event as (RevenueCatEvent & {
     type: string;
     app_user_id: string;
-    period_type?: string;
     expiration_at_ms?: number;
     is_trial_conversion?: boolean;
-    product_id?: string;
-    price?: number;
-    store?: string;
     renewal_number?: number;
-  } | undefined;
+  }) | undefined;
 
   if (!event?.app_user_id) {
     res.status(400).send('Missing event data');
@@ -885,7 +897,12 @@ export const revenueCatWebhook = onRequest(
     // downgraded by a stray RevenueCat event. Read first and bail out if so.
     const existingSnap = await userRef.get();
     const existing = existingSnap.data() as
-      | { subscriptionStatus?: string; userType?: string }
+      | {
+          subscriptionStatus?: string;
+          userType?: string;
+          referralSource?: string;
+          referredAt?: string;
+        }
       | undefined;
     if (
       existing?.subscriptionStatus === 'lifetime' ||
@@ -919,6 +936,19 @@ export const revenueCatWebhook = onRequest(
 
     await userRef.update(update);
 
+    // Ledger any referral commission this event earns. Deliberately not
+    // wrapped in its own try/catch: a failure here propagates to the 500 below
+    // so RevenueCat retries. That is safe because the status update above is
+    // idempotent and the ledger write is keyed on the event id, so a redelivery
+    // cannot double-pay.
+    const commission = await recordReferralCommission(db, event, existing);
+    if (commission.recorded) {
+      console.log(
+        `Referral commission ${commission.commissionUsdCents}c for ` +
+          `${commission.partnerId} on event ${event.id}`,
+      );
+    }
+
     if (event.type === 'RENEWAL' && event.is_trial_conversion === true) {
       await trackMixpanelEvent(uid, 'trial_converted', {
         plan: event.product_id ?? 'unknown',
@@ -942,6 +972,40 @@ export const revenueCatWebhook = onRequest(
     res.status(500).send('Internal error');
   }
 });
+
+/**
+ * referralStatementRollup — builds the previous month's draft payout statement
+ * for every referral partner.
+ *
+ * Runs on the 3rd rather than the 1st so late-arriving renewals and refunds
+ * from the tail of the month have settled into the ledger first. Statements are
+ * written as drafts and are never overwritten once marked reviewed or paid, so
+ * this is safe to re-run.
+ */
+export const referralStatementRollup = onSchedule(
+  { schedule: '0 9 3 * *', timeZone: 'UTC' },
+  async () => {
+    const month = previousMonthKey();
+    try {
+      const statements = await buildMonthlyStatements(db, month);
+      if (statements.length === 0) {
+        console.log(`referralStatementRollup: no commissions for ${month}`);
+        return;
+      }
+      for (const s of statements) {
+        console.log(
+          `referralStatementRollup ${month} ${s.partnerId}: ` +
+            `${s.subscriberCount} subscribers, ${s.eventCount} events, ` +
+            `${s.commissionUsdCents}c payable ` +
+            `(${s.estimatedRowCount} rows used estimated store percentages)`,
+        );
+      }
+    } catch (err) {
+      console.error(`referralStatementRollup failed for ${month}:`, err);
+      throw err;
+    }
+  },
+);
 
 // ─── Partner invite functions ──────────────────────────────────────────────
 
@@ -2414,7 +2478,7 @@ export const weeklyInsightDelivery = onSchedule(
     const apiKey = anthropicKey.value().trim();
     const usersQuery = db
       .collection('users')
-      .where('onboardingStep', '>=', 5)
+      .where('onboardingStep', '>=', MIN_ONBOARDING_STEP_FOR_OUTREACH)
       .orderBy('onboardingStep');
 
     await forEachDocPaged(usersQuery, 200, async (userDoc) => {
@@ -2554,7 +2618,7 @@ export const lowActivityAlert = onSchedule(
 
     const usersQuery = db
       .collection('users')
-      .where('onboardingStep', '>=', 5)
+      .where('onboardingStep', '>=', MIN_ONBOARDING_STEP_FOR_OUTREACH)
       .where('lastActiveAt', '<', threeDaysAgo)
       .orderBy('onboardingStep')
       .orderBy('lastActiveAt');
@@ -2646,7 +2710,7 @@ export const partnerAccountabilityDaily = onSchedule(
 
     const usersQuery = db
       .collection('users')
-      .where('onboardingStep', '>=', 5)
+      .where('onboardingStep', '>=', MIN_ONBOARDING_STEP_FOR_OUTREACH)
       .orderBy('onboardingStep');
 
     await forEachDocPaged(usersQuery, 300, async (primaryDoc) => {
@@ -2771,7 +2835,7 @@ export const weeklyPartnerDigest = onSchedule(
 
     const usersQuery = db
       .collection('users')
-      .where('onboardingStep', '>=', 5)
+      .where('onboardingStep', '>=', MIN_ONBOARDING_STEP_FOR_OUTREACH)
       .orderBy('onboardingStep');
 
     await forEachDocPaged(usersQuery, 300, async (primaryDoc) => {
@@ -3512,7 +3576,7 @@ export const callbackDelivery = onSchedule(
 
     const usersQuery = db
       .collection('users')
-      .where('onboardingStep', '>=', 5)
+      .where('onboardingStep', '>=', MIN_ONBOARDING_STEP_FOR_OUTREACH)
       .orderBy('onboardingStep');
 
     await forEachDocPaged(usersQuery, 200, async (userDoc) => {
